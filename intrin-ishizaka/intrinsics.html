@@ -1,0 +1,615 @@
+<h3>5.3.2.7. Vector Transfer Instructions</h3>
+<table border=1>
+<tr><th>Instruction</th><th>Function</th><th>asm</th><th>Description</th></tr>
+<tr>
+<td rowspan=1>VLD</td>
+<td>__vr _ve_vld(void* sz, int sy)</td><td>vld</td><td></td></tr>
+<tr>
+<td rowspan=1>VLDU</td>
+<td>__vr _ve_vldu(void* sz, int sy)</td><td>vldu</td><td></td></tr>
+<tr>
+<td rowspan=1>VLDL</td>
+<td>__vr _ve_vldl(void* sz, int sy)</td><td>vldl</td><td></td></tr>
+<tr>
+<td rowspan=1>VLD2D</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VLDU2D</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VLDL2D</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VST</td>
+<td>void _ve_vst(void* sz, __vr vx, int sy)</td><td>vst</td><td></td></tr>
+<tr>
+<td rowspan=1>VSTU</td>
+<td>void _ve_vstu(void* sz, __vr vx, int sy)</td><td>vstu</td><td></td></tr>
+<tr>
+<td rowspan=1>VSTL</td>
+<td>void _ve_vstl(void* sz, __vr vx, int sy)</td><td>vstl</td><td></td></tr>
+<tr>
+<td rowspan=1>VST2D</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VSTU2D</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VSTL2D</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>PFCHV</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>LSV</td>
+<td>__vr _ve_lsv_vvss(__vr vx, unsigned int sy, unsigned long int sz)</td><td>lsv</td><td></td></tr>
+<tr>
+<td rowspan=1>LVS</td>
+<td>unsigned long int _ve_lvs_svs(__vr vx, unsigned int sy)</td><td>lvs</td><td></td></tr>
+<tr>
+<td rowspan=1>LVM</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>SVM</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=7>VBRD</td>
+<td>__vr _ve_vbrd_vs_f64(double sy)</td><td>vbrd</td><td>vx[:] = sy</td></tr>
+<tr>
+<td>__vr _ve_vbrd_vs_i64(long int sy)</td><td>vbrd</td><td>vx[:] = sy</td></tr>
+<tr>
+<td>__vr _ve_vbrd_vI(unsigned long int I)</td><td>vbrd</td><td>vx[:] = I</td></tr>
+<tr>
+<td>__vr _ve_vbrdu_vs(float sy)</td><td>vbrdu</td><td>vx[:] = sy</td></tr>
+<tr>
+<td>__vr _ve_vbrdl_vs(int sy)</td><td>vbrdl</td><td>vx[:] = sy</td></tr>
+<tr>
+<td>__vr _ve_vbrdl_vI(unsigned long int I)</td><td>vbrdl</td><td>vx[:] = I</td></tr>
+<tr>
+<td>__vr _ve_pvbrd_vs(unsigned long int sy)</td><td>pvbrd</td><td>vx[:] = sy</td></tr>
+<tr>
+<td rowspan=1>VMV</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+</table>
+<h3>5.3.2.8. Vector Fixed-Point Arithmetic Operation Instructions</h3>
+<table border=1>
+<tr><th>Instruction</th><th>Function</th><th>asm</th><th>Description</th></tr>
+<tr>
+<td rowspan=8>VADD</td>
+<td>__vr _ve_vaddul_vvv(__vr vy, __vr vz)</td><td>vaddu.l</td><td>vx[:] = vy[:] + vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vaddul_vsv(unsigned long int sy, __vr vz)</td><td>vaddu.l</td><td>vx[:] = sy + vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vaddul_vIv(unsigned long int I, __vr vz)</td><td>vaddu.l</td><td>vx[:] = I + vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vadduw_vvv(__vr vy, __vr vz)</td><td>vaddu.w</td><td>vx[:] = vy[:] + vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vadduw_vsv(unsigned int sy, __vr vz)</td><td>vaddu.w</td><td>vx[:] = sy + vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vadduw_vIv(unsigned long int I, __vr vz)</td><td>vaddu.w</td><td>vx[:] = I + vz[:]</td></tr>
+<tr>
+<td>__vr _ve_pvaddu_vvv(__vr vy, __vr vz)</td><td>pvaddu</td><td>vx[:] = vy[:] + vz[:]</td></tr>
+<tr>
+<td>__vr _ve_pvaddu_vsv(unsigned int sy, __vr vz)</td><td>pvaddu</td><td>vx[:] = sy + vz[:]</td></tr>
+<tr>
+<td rowspan=8>VADS</td>
+<td>__vr _ve_vaddsw_sx_vvv(__vr vy, __vr vz)</td><td>vadds.w.sx</td><td>vx[:] = vy[:] + vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vaddsw_sx_vsv(int sy, __vr vz)</td><td>vadds.w.sx</td><td>vx[:] = sy + vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vaddsw_sx_vIv(unsigned long int I, __vr vz)</td><td>vadds.w.sx</td><td>vx[:] = I + vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vaddsw_zx_vvv(__vr vy, __vr vz)</td><td>vadds.w.zx</td><td>vx[:] = vy[:] + vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vaddsw_zx_vsv(int sy, __vr vz)</td><td>vadds.w.zx</td><td>vx[:] = sy + vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vaddsw_zx_vIv(unsigned long int I, __vr vz)</td><td>vadds.w.zx</td><td>vx[:] = I + vz[:]</td></tr>
+<tr>
+<td>__vr _ve_pvadds_vvv(__vr vy, __vr vz)</td><td>pvadds</td><td>vx[:] = vy[:] + vz[:]</td></tr>
+<tr>
+<td>__vr _ve_pvadds_vsv(int sy, __vr vz)</td><td>pvadds</td><td>vx[:] = sy + vz[:]</td></tr>
+<tr>
+<td rowspan=3>VADX</td>
+<td>__vr _ve_vaddsl_vvv(__vr vy, __vr vz)</td><td>vadds.l</td><td>vx[:] = vy[:] + vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vaddsl_vsv(long int sy, __vr vz)</td><td>vadds.l</td><td>vx[:] = sy + vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vaddsl_vIv(unsigned long int I, __vr vz)</td><td>vadds.l</td><td>vx[:] = I + vz[:]</td></tr>
+<tr>
+<td rowspan=8>VSUB</td>
+<td>__vr _ve_vsubul_vvv(__vr vy, __vr vz)</td><td>vsubu.l</td><td>vx[:] = vy[:] - vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vsubul_vsv(unsigned long int sy, __vr vz)</td><td>vsubu.l</td><td>vx[:] = sy - vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vsubul_vIv(unsigned long int I, __vr vz)</td><td>vsubu.l</td><td>vx[:] = I - vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vsubuw_vvv(__vr vy, __vr vz)</td><td>vsubu.w</td><td>vx[:] = vy[:] - vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vsubuw_vsv(unsigned int sy, __vr vz)</td><td>vsubu.w</td><td>vx[:] = sy - vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vsubuw_vIv(unsigned long int I, __vr vz)</td><td>vsubu.w</td><td>vx[:] = I - vz[:]</td></tr>
+<tr>
+<td>__vr _ve_pvsubu_vvv(__vr vy, __vr vz)</td><td>pvsubu</td><td>vx[:] = vy[:] - vz[:]</td></tr>
+<tr>
+<td>__vr _ve_pvsubu_vsv(unsigned int sy, __vr vz)</td><td>pvsubu</td><td>vx[:] = sy - vz[:]</td></tr>
+<tr>
+<td rowspan=8>VSBS</td>
+<td>__vr _ve_vsubsw_sx_vvv(__vr vy, __vr vz)</td><td>vsubs.w.sx</td><td>vx[:] = vy[:] - vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vsubsw_sx_vsv(int sy, __vr vz)</td><td>vsubs.w.sx</td><td>vx[:] = sy - vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vsubsw_sx_vIv(unsigned long int I, __vr vz)</td><td>vsubs.w.sx</td><td>vx[:] = I - vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vsubsw_zx_vvv(__vr vy, __vr vz)</td><td>vsubs.w.zx</td><td>vx[:] = vy[:] - vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vsubsw_zx_vsv(int sy, __vr vz)</td><td>vsubs.w.zx</td><td>vx[:] = sy - vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vsubsw_zx_vIv(unsigned long int I, __vr vz)</td><td>vsubs.w.zx</td><td>vx[:] = I - vz[:]</td></tr>
+<tr>
+<td>__vr _ve_pvsubs_vvv(__vr vy, __vr vz)</td><td>pvsubs</td><td>vx[:] = vy[:] - vz[:]</td></tr>
+<tr>
+<td>__vr _ve_pvsubs_vsv(int sy, __vr vz)</td><td>pvsubs</td><td>vx[:] = sy - vz[:]</td></tr>
+<tr>
+<td rowspan=3>VSBX</td>
+<td>__vr _ve_vsubsl_vvv(__vr vy, __vr vz)</td><td>vsubs.l</td><td>vx[:] = vy[:] - vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vsubsl_vsv(long int sy, __vr vz)</td><td>vsubs.l</td><td>vx[:] = sy - vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vsubsl_vIv(unsigned long int I, __vr vz)</td><td>vsubs.l</td><td>vx[:] = I - vz[:]</td></tr>
+<tr>
+<td rowspan=6>VMPY</td>
+<td>__vr _ve_vmulul_vvv(__vr vy, __vr vz)</td><td>vmulu.l</td><td>vx[:] = vy[:] * vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vmulul_vsv(unsigned long int sy, __vr vz)</td><td>vmulu.l</td><td>vx[:] = sy * vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vmulul_vIv(unsigned long int I, __vr vz)</td><td>vmulu.l</td><td>vx[:] = I * vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vmuluw_vvv(__vr vy, __vr vz)</td><td>vmulu.w</td><td>vx[:] = vy[:] * vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vmuluw_vsv(unsigned int sy, __vr vz)</td><td>vmulu.w</td><td>vx[:] = sy * vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vmuluw_vIv(unsigned long int I, __vr vz)</td><td>vmulu.w</td><td>vx[:] = I * vz[:]</td></tr>
+<tr>
+<td rowspan=6>VMPS</td>
+<td>__vr _ve_vmulsw_sx_vvv(__vr vy, __vr vz)</td><td>vmuls.w.sx</td><td>vx[:] = vy[:] * vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vmulsw_sx_vsv(int sy, __vr vz)</td><td>vmuls.w.sx</td><td>vx[:] = sy * vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vmulsw_sx_vIv(unsigned long int I, __vr vz)</td><td>vmuls.w.sx</td><td>vx[:] = I * vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vmulsw_zx_vvv(__vr vy, __vr vz)</td><td>vmuls.w.zx</td><td>vx[:] = vy[:] * vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vmulsw_zx_vsv(int sy, __vr vz)</td><td>vmuls.w.zx</td><td>vx[:] = sy * vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vmulsw_zx_vIv(unsigned long int I, __vr vz)</td><td>vmuls.w.zx</td><td>vx[:] = I * vz[:]</td></tr>
+<tr>
+<td rowspan=3>VMPX</td>
+<td>__vr _ve_vmulsl_vvv(__vr vy, __vr vz)</td><td>vmuls.l</td><td>vx[:] = vy[:] * vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vmulsl_vsv(long int sy, __vr vz)</td><td>vmuls.l</td><td>vx[:] = sy * vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vmulsl_vIv(unsigned long int I, __vr vz)</td><td>vmuls.l</td><td>vx[:] = I * vz[:]</td></tr>
+<tr>
+<td rowspan=3>VMPD</td>
+<td>__vr _ve_vmulslw_vvv(__vr vy, __vr vz)</td><td>vmuls.l.w</td><td>vx[:] = vy[:] * vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vmulslw_vsv(int sy, __vr vz)</td><td>vmuls.l.w</td><td>vx[:] = sy * vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vmulslw_vIv(unsigned long int I, __vr vz)</td><td>vmuls.l.w</td><td>vx[:] = I * vz[:]</td></tr>
+<tr>
+<td rowspan=1>VDIV</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VDVS</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VDVX</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VCMP</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VCPS</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VCPX</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VCMS</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VCMX</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+</table>
+<h3>5.3.2.9. Vector Logical Arithmetic Operation Instructions</h3>
+<table border=1>
+<tr><th>Instruction</th><th>Function</th><th>asm</th><th>Description</th></tr>
+<tr>
+<td rowspan=4>VAND</td>
+<td>__vr _ve_vand_vvv(__vr vy, __vr vz)</td><td>vand</td><td>vx[:] = vy[:] & vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vand_vsv(unsigned long int sy, __vr vz)</td><td>vand</td><td>vx[:] = sy & vz[:]</td></tr>
+<tr>
+<td>__vr _ve_pvand_vvv(__vr vy, __vr vz)</td><td>pvand</td><td>vx[:] = vy[:] & vz[:]</td></tr>
+<tr>
+<td>__vr _ve_pvand_vsv(unsigned long int sy, __vr vz)</td><td>pvand</td><td>vx[:] = sy & vz[:]</td></tr>
+<tr>
+<td rowspan=4>VOR</td>
+<td>__vr _ve_vor_vvv(__vr vy, __vr vz)</td><td>vor</td><td>vx[:] = vy[:] | vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vor_vsv(unsigned long int sy, __vr vz)</td><td>vor</td><td>vx[:] = sy | vz[:]</td></tr>
+<tr>
+<td>__vr _ve_pvor_vvv(__vr vy, __vr vz)</td><td>pvor</td><td>vx[:] = vy[:] | vz[:]</td></tr>
+<tr>
+<td>__vr _ve_pvor_vsv(unsigned long int sy, __vr vz)</td><td>pvor</td><td>vx[:] = sy | vz[:]</td></tr>
+<tr>
+<td rowspan=4>VXOR</td>
+<td>__vr _ve_vxor_vvv(__vr vy, __vr vz)</td><td>vxor</td><td>vx[:] = vy[:] ^ vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vxor_vsv(unsigned long int sy, __vr vz)</td><td>vxor</td><td>vx[:] = sy ^ vz[:]</td></tr>
+<tr>
+<td>__vr _ve_pvxor_vvv(__vr vy, __vr vz)</td><td>pvxor</td><td>vx[:] = vy[:] ^ vz[:]</td></tr>
+<tr>
+<td>__vr _ve_pvxor_vsv(unsigned long int sy, __vr vz)</td><td>pvxor</td><td>vx[:] = sy ^ vz[:]</td></tr>
+<tr>
+<td rowspan=4>VEQV</td>
+<td>__vr _ve_veqv_vvv(__vr vy, __vr vz)</td><td>veqv</td><td>vx[:] = ~(vy[:] ^ vz[:])</td></tr>
+<tr>
+<td>__vr _ve_veqv_vsv(unsigned long int sy, __vr vz)</td><td>veqv</td><td>vx[:] = ~(sy ^ vz[:])</td></tr>
+<tr>
+<td>__vr _ve_pveqv_vvv(__vr vy, __vr vz)</td><td>pveqv</td><td>vx[:] = ~(vy[:] ^ vz[:])</td></tr>
+<tr>
+<td>__vr _ve_pveqv_vsv(unsigned long int sy, __vr vz)</td><td>pveqv</td><td>vx[:] = ~(sy ^ vz[:])</td></tr>
+<tr>
+<td rowspan=1>VLDZ</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VPCNT</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VBRV</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VSEQ</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+</table>
+<h3>5.3.2.10. Vector Shift Instructions</h3>
+<table border=1>
+<tr><th>Instruction</th><th>Function</th><th>asm</th><th>Description</th></tr>
+<tr>
+<td rowspan=5>VSLL</td>
+<td>__vr _ve_vsll_vvv(__vr vz, __vr vy)</td><td>vsll</td><td>vx[:] = vz[:] << (vy[:] & 0x3f)</td></tr>
+<tr>
+<td>__vr _ve_vsll_vvs(__vr vz, unsigned long int sy)</td><td>vsll</td><td>vx[:] = vz[:] << (sy & 0x3f)</td></tr>
+<tr>
+<td>__vr _ve_vsll_vvN(__vr vz, unsigned long int sy)</td><td>vsll</td><td>vx[:] = vz[:] << (sy & 0x3f)</td></tr>
+<tr>
+<td>__vr _ve_pvsll_vvv(__vr vz, __vr vy)</td><td>pvsll</td><td>vx[:] = vz[:] << (vy[:] & 0x1f)</td></tr>
+<tr>
+<td>__vr _ve_pvsll_vvs(__vr vz, unsigned long int sy)</td><td>pvsll</td><td>vx[:] = vz[:] << (sy & 0x1f)</td></tr>
+<tr>
+<td rowspan=1>VSLD</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=5>VSRL</td>
+<td>__vr _ve_vsrl_vvv(__vr vz, __vr vy)</td><td>vsrl</td><td>vx[:] = vz[:] >> (vy[:] & 0x3f)</td></tr>
+<tr>
+<td>__vr _ve_vsrl_vvs(__vr vz, unsigned long int sy)</td><td>vsrl</td><td>vx[:] = vz[:] >> (sy & 0x3f)</td></tr>
+<tr>
+<td>__vr _ve_vsrl_vvN(__vr vz, unsigned long int sy)</td><td>vsrl</td><td>vx[:] = vz[:] >> (sy & 0x3f)</td></tr>
+<tr>
+<td>__vr _ve_pvsrl_vvv(__vr vz, __vr vy)</td><td>pvsrl</td><td>vx[:] = vz[:] >> (vy[:] & 0x1f)</td></tr>
+<tr>
+<td>__vr _ve_pvsrl_vvs(__vr vz, unsigned long int sy)</td><td>pvsrl</td><td>vx[:] = vz[:] >> (sy & 0x1f)</td></tr>
+<tr>
+<td rowspan=1>VSRD</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VSLA</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VSLAX</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VSRA</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VSRAX</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=2>VSFA</td>
+<td>__vr _ve_vsfa_vvss(__vr vz, unsigned long int sy, unsigned long int sz)</td><td>vsfa</td><td>vx[:] = (vz[:] << sy) + sz</td></tr>
+<tr>
+<td>__vr _ve_vsfa_vvIs(__vr vz, unsigned long int I, unsigned long int sz)</td><td>vsfa</td><td>vx[:] = (vz[:] << I) + sz</td></tr>
+</table>
+<h3>5.3.2.11. Vector Floating-Point Operation Instructions</h3>
+<table border=1>
+<tr><th>Instruction</th><th>Function</th><th>asm</th><th>Description</th></tr>
+<tr>
+<td rowspan=7>VFAD</td>
+<td>__vr _ve_vfaddd_vvv(__vr vy, __vr vz)</td><td>vfadd.d</td><td>vx[:] = vy[:] + vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vfaddd_vsv(double sy, __vr vz)</td><td>vfadd.d</td><td>vx[:] = sy + vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vfaddd_vvvmv(__vr vy, __vr vz, __vm vm, __vr vd)</td><td>vfadd.d</td><td>vx[:] = vm[:] ? vy[:] + vz[:] : vd[:]</td></tr>
+<tr>
+<td>__vr _ve_vfadds_vvv(__vr vy, __vr vz)</td><td>vfadd.s</td><td>vx[:] = vy[:] + vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vfadds_vsv(float sy, __vr vz)</td><td>vfadd.s</td><td>vx[:] = sy + vz[:]</td></tr>
+<tr>
+<td>__vr _ve_pvfadd_vvv(__vr vy, __vr vz)</td><td>pvfadd</td><td>vx[:] = vy[:] + vz[:]</td></tr>
+<tr>
+<td>__vr _ve_pvfadd_vsv(unsigned long int sy, __vr vz)</td><td>pvfadd</td><td>vx[:] = sy + vz[:]</td></tr>
+<tr>
+<td rowspan=7>VFSB</td>
+<td>__vr _ve_vfsubd_vvv(__vr vy, __vr vz)</td><td>vfsub.d</td><td>vx[:] = vy[:] - vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vfsubd_vsv(double sy, __vr vz)</td><td>vfsub.d</td><td>vx[:] = sy - vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vfsubd_vvvmv(__vr vy, __vr vz, __vm vm, __vr vd)</td><td>vfsub.d</td><td>vx[:] = vm[:] ? vy[:] - vz[:] : vd[:]</td></tr>
+<tr>
+<td>__vr _ve_vfsubs_vvv(__vr vy, __vr vz)</td><td>vfsub.s</td><td>vx[:] = vy[:] - vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vfsubs_vsv(float sy, __vr vz)</td><td>vfsub.s</td><td>vx[:] = sy - vz[:]</td></tr>
+<tr>
+<td>__vr _ve_pvfsub_vvv(__vr vy, __vr vz)</td><td>pvfsub</td><td>vx[:] = vy[:] - vz[:]</td></tr>
+<tr>
+<td>__vr _ve_pvfsub_vsv(unsigned long int sy, __vr vz)</td><td>pvfsub</td><td>vx[:] = sy - vz[:]</td></tr>
+<tr>
+<td rowspan=7>VFMP</td>
+<td>__vr _ve_vfmuld_vvv(__vr vy, __vr vz)</td><td>vfmul.d</td><td>vx[:] = vy[:] * vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vfmuld_vsv(double sy, __vr vz)</td><td>vfmul.d</td><td>vx[:] = sy * vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vfmuld_vvvmv(__vr vy, __vr vz, __vm vm, __vr vd)</td><td>vfmul.d</td><td>vx[:] = vm[:] ? vy[:] * vz[:] : vd[:]</td></tr>
+<tr>
+<td>__vr _ve_vfmuls_vvv(__vr vy, __vr vz)</td><td>vfmul.s</td><td>vx[:] = vy[:] * vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vfmuls_vsv(float sy, __vr vz)</td><td>vfmul.s</td><td>vx[:] = sy * vz[:]</td></tr>
+<tr>
+<td>__vr _ve_pvfmul_vvv(__vr vy, __vr vz)</td><td>pvfmul</td><td>vx[:] = vy[:] * vz[:]</td></tr>
+<tr>
+<td>__vr _ve_pvfmul_vsv(unsigned long int sy, __vr vz)</td><td>pvfmul</td><td>vx[:] = sy * vz[:]</td></tr>
+<tr>
+<td rowspan=5>VFDV</td>
+<td>__vr _ve_vfdivd_vvv(__vr vy, __vr vz)</td><td>vfdiv.d</td><td>vx[:] = vy[:] / vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vfdivd_vsv(double sy, __vr vz)</td><td>vfdiv.d</td><td>vx[:] = sy / vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vfdivd_vvvmv(__vr vy, __vr vz, __vm vm, __vr vd)</td><td>vfdiv.d</td><td>vx[:] = vm[:] ? vy[:] / vz[:] : vd[:]</td></tr>
+<tr>
+<td>__vr _ve_vfdivs_vvv(__vr vy, __vr vz)</td><td>vfdiv.s</td><td>vx[:] = vy[:] / vz[:]</td></tr>
+<tr>
+<td>__vr _ve_vfdivs_vsv(float sy, __vr vz)</td><td>vfdiv.s</td><td>vx[:] = sy / vz[:]</td></tr>
+<tr>
+<td rowspan=1>VFSQRT</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VFCP</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VFCM</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=6>VFMAD</td>
+<td>__vr _ve_vfmadd_vvvv(__vr vy, __vr vz, __vr vw)</td><td>vfmad.d</td><td>vx[:] = vz[:] * vw[:] + vy[:]</td></tr>
+<tr>
+<td>__vr _ve_vfmadd_vsvv(double sy, __vr vz, __vr vw)</td><td>vfmad.d</td><td>vx[:] = vz[:] * vw[:] + sy</td></tr>
+<tr>
+<td>__vr _ve_vfmadd_vvsv(__vr vy, double sy, __vr vw)</td><td>vfmad.d</td><td>vx[:] = sy * vw[:] + vy[:]</td></tr>
+<tr>
+<td>__vr _ve_vfmads_vvvv(__vr vy, __vr vz, __vr vw)</td><td>vfmad.s</td><td>vx[:] = vz[:] * vw[:] + vy[:]</td></tr>
+<tr>
+<td>__vr _ve_vfmads_vsvv(float sy, __vr vz, __vr vw)</td><td>vfmad.s</td><td>vx[:] = vz[:] * vw[:] + sy</td></tr>
+<tr>
+<td>__vr _ve_vfmads_vvsv(__vr vy, float sy, __vr vw)</td><td>vfmad.s</td><td>vx[:] = sy * vw[:] + vy[:]</td></tr>
+<tr>
+<td rowspan=6>VFMAD</td>
+<td>__vr _ve_pvfmad_vvvv(__vr vy, __vr vz, __vr vw)</td><td>pvfmad</td><td>vx[:] = vz[:] * vw[:] + vy[:]</td></tr>
+<tr>
+<td>__vr _ve_pvfmad_vsvv(unsigned long int sy, __vr vz, __vr vw)</td><td>pvfmad</td><td>vx[:] = vz[:] * vw[:] + sy</td></tr>
+<tr>
+<td>__vr _ve_pvfmad_vvsv(__vr vy, unsigned long int sy, __vr vw)</td><td>pvfmad</td><td>vx[:] = sy * vw[:] + vy[:]</td></tr>
+<tr>
+<td>__vr _ve_vfmsbd_vvvv(__vr vy, __vr vz, __vr vw)</td><td>vfmsb.d</td><td>vx[:] = vz[:] * vw[:] - vy[:]</td></tr>
+<tr>
+<td>__vr _ve_vfmsbd_vsvv(double sy, __vr vz, __vr vw)</td><td>vfmsb.d</td><td>vx[:] = vz[:] * vw[:] - sy</td></tr>
+<tr>
+<td>__vr _ve_vfmsbd_vvsv(__vr vy, double sy, __vr vw)</td><td>vfmsb.d</td><td>vx[:] = sy * vw[:] - vy[:]</td></tr>
+<tr>
+<td rowspan=6>VFMSB</td>
+<td>__vr _ve_vfmsbs_vvvv(__vr vy, __vr vz, __vr vw)</td><td>vfmsb.s</td><td>vx[:] = vz[:] * vw[:] - vy[:]</td></tr>
+<tr>
+<td>__vr _ve_vfmsbs_vsvv(float sy, __vr vz, __vr vw)</td><td>vfmsb.s</td><td>vx[:] = vz[:] * vw[:] - sy</td></tr>
+<tr>
+<td>__vr _ve_vfmsbs_vvsv(__vr vy, float sy, __vr vw)</td><td>vfmsb.s</td><td>vx[:] = sy * vw[:] - vy[:]</td></tr>
+<tr>
+<td>__vr _ve_pvfmsb_vvvv(__vr vy, __vr vz, __vr vw)</td><td>pvfmsb</td><td>vx[:] = vz[:] * vw[:] - vy[:]</td></tr>
+<tr>
+<td>__vr _ve_pvfmsb_vsvv(unsigned long int sy, __vr vz, __vr vw)</td><td>pvfmsb</td><td>vx[:] = vz[:] * vw[:] - sy</td></tr>
+<tr>
+<td>__vr _ve_pvfmsb_vvsv(__vr vy, unsigned long int sy, __vr vw)</td><td>pvfmsb</td><td>vx[:] = sy * vw[:] - vy[:]</td></tr>
+<tr>
+<td rowspan=6>VFNMAD</td>
+<td>__vr _ve_vfnmadd_vvvv(__vr vy, __vr vz, __vr vw)</td><td>vfnmad.d</td><td>vx[:] =  - (vz[:] * vw[:] + vy[:])</td></tr>
+<tr>
+<td>__vr _ve_vfnmadd_vsvv(double sy, __vr vz, __vr vw)</td><td>vfnmad.d</td><td>vx[:] =  - (vz[:] * vw[:] + sy)</td></tr>
+<tr>
+<td>__vr _ve_vfnmadd_vvsv(__vr vy, double sy, __vr vw)</td><td>vfnmad.d</td><td>vx[:] =  - (sy * vw[:] + vy[:])</td></tr>
+<tr>
+<td>__vr _ve_vfnmads_vvvv(__vr vy, __vr vz, __vr vw)</td><td>vfnmad.s</td><td>vx[:] =  - (vz[:] * vw[:] + vy[:])</td></tr>
+<tr>
+<td>__vr _ve_vfnmads_vsvv(float sy, __vr vz, __vr vw)</td><td>vfnmad.s</td><td>vx[:] =  - (vz[:] * vw[:] + sy)</td></tr>
+<tr>
+<td>__vr _ve_vfnmads_vvsv(__vr vy, float sy, __vr vw)</td><td>vfnmad.s</td><td>vx[:] =  - (sy * vw[:] + vy[:])</td></tr>
+<tr>
+<td rowspan=6>VFNMAD</td>
+<td>__vr _ve_pvfnmad_vvvv(__vr vy, __vr vz, __vr vw)</td><td>pvfnmad</td><td>vx[:] =  - (vz[:] * vw[:] + vy[:])</td></tr>
+<tr>
+<td>__vr _ve_pvfnmad_vsvv(unsigned long int sy, __vr vz, __vr vw)</td><td>pvfnmad</td><td>vx[:] =  - (vz[:] * vw[:] + sy)</td></tr>
+<tr>
+<td>__vr _ve_pvfnmad_vvsv(__vr vy, unsigned long int sy, __vr vw)</td><td>pvfnmad</td><td>vx[:] =  - (sy * vw[:] + vy[:])</td></tr>
+<tr>
+<td>__vr _ve_vfnmsbd_vvvv(__vr vy, __vr vz, __vr vw)</td><td>vfnmsb.d</td><td>vx[:] =  - (vz[:] * vw[:] - vy[:])</td></tr>
+<tr>
+<td>__vr _ve_vfnmsbd_vsvv(double sy, __vr vz, __vr vw)</td><td>vfnmsb.d</td><td>vx[:] =  - (vz[:] * vw[:] - sy)</td></tr>
+<tr>
+<td>__vr _ve_vfnmsbd_vvsv(__vr vy, double sy, __vr vw)</td><td>vfnmsb.d</td><td>vx[:] =  - (sy * vw[:] - vy[:])</td></tr>
+<tr>
+<td rowspan=6>VFNMSB</td>
+<td>__vr _ve_vfnmsbs_vvvv(__vr vy, __vr vz, __vr vw)</td><td>vfnmsb.s</td><td>vx[:] =  - (vz[:] * vw[:] - vy[:])</td></tr>
+<tr>
+<td>__vr _ve_vfnmsbs_vsvv(float sy, __vr vz, __vr vw)</td><td>vfnmsb.s</td><td>vx[:] =  - (vz[:] * vw[:] - sy)</td></tr>
+<tr>
+<td>__vr _ve_vfnmsbs_vvsv(__vr vy, float sy, __vr vw)</td><td>vfnmsb.s</td><td>vx[:] =  - (sy * vw[:] - vy[:])</td></tr>
+<tr>
+<td>__vr _ve_pvfnmsb_vvvv(__vr vy, __vr vz, __vr vw)</td><td>pvfnmsb</td><td>vx[:] =  - (vz[:] * vw[:] - vy[:])</td></tr>
+<tr>
+<td>__vr _ve_pvfnmsb_vsvv(unsigned long int sy, __vr vz, __vr vw)</td><td>pvfnmsb</td><td>vx[:] =  - (vz[:] * vw[:] - sy)</td></tr>
+<tr>
+<td>__vr _ve_pvfnmsb_vvsv(__vr vy, unsigned long int sy, __vr vw)</td><td>pvfnmsb</td><td>vx[:] =  - (sy * vw[:] - vy[:])</td></tr>
+<tr>
+<td rowspan=1>VRCP</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VRSQRT</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VFIX</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VFIXX</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VFLT</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VFLTX</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VCVD</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VCVS</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+</table>
+<h3>5.3.2.12. Vector Mask Arithmetic Instructions</h3>
+<table border=1>
+<tr><th>Instruction</th><th>Function</th><th>asm</th><th>Description</th></tr>
+<tr>
+<td rowspan=1>VMGR</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VSHF</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VCP</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VEX</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VFMK</td>
+<td>__vm _ve_vfmkl_mcv(int cc, __vr vz)</td><td>vfmk.l</td><td></td></tr>
+<tr>
+<td rowspan=1>VFMS</td>
+<td>__vm _ve_vfmkw_mcv(int cc, __vr vz)</td><td>vfmk.w</td><td></td></tr>
+<tr>
+<td rowspan=3>VFMF</td>
+<td>__vm _ve_vfmkd_mcv(int cc, __vr vz)</td><td>vfmk.d</td><td></td></tr>
+<tr>
+<td>__vm _ve_pvfmksup_mcv(int cc, __vr vz)</td><td>pvfmk.s.up</td><td></td></tr>
+<tr>
+<td>__vm _ve_pvfmkslo_mcv(int cc, __vr vz)</td><td>pvfmk.s.lo</td><td></td></tr>
+</table>
+<h3>5.3.2.13. Vector Recursive Relation Instructions</h3>
+<table border=1>
+<tr><th>Instruction</th><th>Function</th><th>asm</th><th>Description</th></tr>
+<tr>
+<td rowspan=2>VSUMS</td>
+<td>__vr _ve_vsumw_sx_vv(__vr vy)</td><td>vsumw.sx</td><td></td></tr>
+<tr>
+<td>__vr _ve_vsumw_zx_vv(__vr vy)</td><td>vsumw.zx</td><td></td></tr>
+<tr>
+<td rowspan=1>VSUMX</td>
+<td>__vr _ve_vsuml_vv(__vr vy)</td><td>vsuml</td><td></td></tr>
+<tr>
+<td rowspan=2>VFSUM</td>
+<td>__vr _ve_vfsumd_vv(__vr vy)</td><td>vfsumd</td><td></td></tr>
+<tr>
+<td>__vr _ve_vfsums_vv(__vr vy)</td><td>vfsums</td><td></td></tr>
+<tr>
+<td rowspan=1>...</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+</table>
+<h3>5.3.2.14. Vector Gatering/Scattering Instructions</h3>
+<table border=1>
+<tr><th>Instruction</th><th>Function</th><th>asm</th><th>Description</th></tr>
+<tr>
+<td rowspan=1>VGT</td>
+<td>__vr _ve_vgt_vv(__vr vy)</td><td>vgt</td><td>vx[:] = *vy[:]</td></tr>
+<tr>
+<td rowspan=1>VGTU</td>
+<td>__vr _ve_vgtu_vv(__vr vy)</td><td>vgtu</td><td>vx[:] = *vy[:]</td></tr>
+<tr>
+<td rowspan=2>VGTL</td>
+<td>__vr _ve_vgtl_sx_vv(__vr vy)</td><td>vgtl.sx</td><td>vx[:] = *vy[:]</td></tr>
+<tr>
+<td>__vr _ve_vgtl_zx_vv(__vr vy)</td><td>vgtl.zx</td><td>vx[:] = *vy[:]</td></tr>
+<tr>
+<td rowspan=1>VSC</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VSCU</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>VSCL</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+</table>
+<h3>5.3.2.15. Vector Mask Register Instructions</h3>
+<table border=1>
+<tr><th>Instruction</th><th>Function</th><th>asm</th><th>Description</th></tr>
+<tr>
+<td rowspan=1>ANDM</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>ORM</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>XORM</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>EQVM</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>NNDM</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>NEGM</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>PCVM</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>LZVM</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>TOVM</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+</table>
+<h3>5.3.2.16. Vector Control Instructions</h3>
+<table border=1>
+<tr><th>Instruction</th><th>Function</th><th>asm</th><th>Description</th></tr>
+<tr>
+<td rowspan=1>LVL</td>
+<td>void _ve_lvl(int vl)</td><td>lvl</td><td></td></tr>
+<tr>
+<td rowspan=1>SVL</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>SVML</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+<tr>
+<td rowspan=1>LVIX</td>
+<td>not yet implemented</td><td></td><td></td></tr>
+</table>
