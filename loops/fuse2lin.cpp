@@ -13,6 +13,7 @@
 #include <iostream>
 #include <iomanip>
 #include <sstream>
+#include <algorithm>	// nc++ has std::max here
 
 #include <cstring>
 #include <cstddef>
@@ -427,6 +428,8 @@ int main(int argc,char**argv){
             ++a; // one extra arg was used up
         }
     }
+    if(opt_h) return 0;
+
     if(argc > a+1) vl = atof(argv[a+1]);
     if(argc > a+2) ii = atof(argv[a+2]);
     if(argc > a+3) jj = atof(argv[a+3]);

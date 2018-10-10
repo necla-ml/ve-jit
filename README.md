@@ -1,5 +1,7 @@
 === Consolidat various Aurora/jit/assembler codes...
 
+==== remember to git set user.name "..." and git set user.email "..."
+
 - Some approaches are from low-level asm side:
   - cpp macro hackery
   - pretty-print .S file from C+ code (or from C via macros)
