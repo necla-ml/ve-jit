@@ -156,7 +156,7 @@ class SymScopeUid {
           , stales(), staleSco()
     {
         begin_scope();
-        assert( maxidSco = 1U );
+        assert( maxidSco == 1U );
         assert( this->scope() == 1U );
     }
     /** return symbol scope (possibly stale), or zero if \c symId unknown */

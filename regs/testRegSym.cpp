@@ -244,13 +244,19 @@ struct DemoSymbStates : public Counters {
         // More complex behaviour might maintain a map: RegId --> {SymIds}
         //
         symids.clear();
-        for(s: psyms)
+#if 1
+        for(auto& s: psyms)
             if(s.second.regId() == r)
                 symids.push_back(s.first);
+#else // c++17, but not supported by nc++
+        for(auto&& [symId,psym]: psyms) // c++17 "structured binding declaration"
+            if( psym.regId() == r )
+                symids.push_back(symId);
+#endif
     }
     void syms_active(ve::RegId const r, std::vector<unsigned>& symids){
         symids.clear();
-        for(s: psyms){
+        for(auto& s: psyms){
             auto const& sObj = s.second;
             if(sObj.regId() == r && sObj.getActive())
                 symids.push_back( /*symId*/s.first );
@@ -258,7 +264,7 @@ struct DemoSymbStates : public Counters {
     }
     void syms_activeREG(ve::RegId const r, std::vector<unsigned>& symids){
         symids.clear();
-        for(s: psyms){
+        for(auto& s: psyms){
             auto const& sObj = s.second;
             if(sObj.regId() == r && sObj.getActive() && sObj.getREG())
                 symids.push_back( /*symId*/s.first );
@@ -277,20 +283,20 @@ struct DemoSymbStates : public Counters {
 #endif
     DemoSymbStates& tRead(std::initializer_list<unsigned const> symids){
         auto tk = nextTick();
-        for(auto sym: symids) psym(sym).tRead(tk);
+        for(auto const sym: symids) psym(sym).tRead(tk);
         return *this;
     }
     DemoSymbStates& tWrite(std::initializer_list<unsigned const> symids){
         auto tk = nextTick();
-        for(auto sym: symids) psym(sym).tWrite(tk);
+        for(auto const sym: symids) psym(sym).tWrite(tk);
         return *this;
     }
     void wr(std::initializer_list<unsigned const> w,
             std::initializer_list<unsigned const> r
             = std::initializer_list<unsigned const>() ){
         auto tk = nextTick();
-        for(auto rsym: r) psym(rsym).tRead(tk);
-        for(auto wsym: w) psym(wsym).tWrite(tk);
+        for(auto const rsym: r) psym(rsym).tRead(tk);
+        for(auto const wsym: w) psym(wsym).tWrite(tk);
     }
     ///@}
     /** return a single 'best' [easiest,lru] candidate register to spill.
@@ -324,8 +330,8 @@ struct DemoSymbStates : public Counters {
         // more complicated: break sObj.tSym() ties by sObj.tDecl()
         std::map<uint64_t,unsigned> tSyms;
         std::map<uint64_t,unsigned> tEasy;
-        cout<<" s1:"; for(s: psyms) cout<<(s.second.getREG()? "R": "r")<<(s.second.getMEM()? "M": "m");
-        for(s: psyms){
+        cout<<" s1:"; for(auto const& s: psyms) cout<<(s.second.getREG()? "R": "r")<<(s.second.getMEM()? "M": "m");
+        for(auto const& s: psyms){
             unsigned const sId = s.first;
             Psym const& sObj = s.second;
             if( !sObj.getActive() ) continue;
@@ -367,8 +373,8 @@ struct DemoSymbStates : public Counters {
         }
         if(verbose){
             cout<<" Spillone..."<<endl;
-            cout<<"   Easy{"; for(auto x: tEasy) cout<<" "<<x.first<<":"<<x.second; cout<<"}"<<endl;
-            cout<<"   Syms{"; for(auto x: tSyms) cout<<" "<<x.first<<":"<<x.second; cout<<"}"<<endl;
+            cout<<"   Easy{"; for(auto const& x: tEasy) cout<<" "<<x.first<<":"<<x.second; cout<<"}"<<endl;
+            cout<<"   Syms{"; for(auto const& x: tSyms) cout<<" "<<x.first<<":"<<x.second; cout<<"}"<<endl;
         }
         if( !tEasy.empty() ) return tEasy.begin()->second;
         if( !tSyms.empty() ) return tSyms.begin()->second;
@@ -379,11 +385,11 @@ struct DemoSymbStates : public Counters {
     unsigned spillOne(int const verbose=0) const{
         // find registers covering ALL symbols and punt to worker SpillOne
         std::unordered_set<RegId> symbolRegs;
-        for(s:psyms)
+        for(auto const& s:psyms)
             symbolRegs.insert(s.second.regId());
         std::vector<RegId> vecRegs;
         vecRegs.reserve(symbolRegs.size());
-        for(s:symbolRegs)
+        for(auto const& s:symbolRegs)
             vecRegs.push_back(s);
         return spillOne(vecRegs,verbose);
     }
@@ -404,7 +410,7 @@ struct DemoSymbStates : public Counters {
     unsigned/*SymId*/ spillOne(std::vector<RegId> regIds, int const verbose=0) const{
         if(verbose){
             cout<<" s1:";
-            for(s: psyms) cout<<(s.second.getREG()? "R": "r")
+            for(auto const& s: psyms) cout<<(s.second.getREG()? "R": "r")
                 <<(s.second.getMEM()? "M": "m");
         }
         std::map<unsigned, std::vector<unsigned>> r2s;
@@ -417,7 +423,7 @@ struct DemoSymbStates : public Counters {
         }
         // NOTE: would be better if cycled through the pool (round-robin "state")
         //std::map<unsigned,unsigned> points(regIds.size());
-        //for(r: regIds) { points[r] = 0U; }
+        //for(auto& r: regIds) { points[r] = 0U; }
         //
         // Method:
         //
@@ -435,7 +441,7 @@ struct DemoSymbStates : public Counters {
         int constexpr fANY=0, fLRUsed=1, fLRDecl=2, fMEMstale=4 /*, fRRobin=8*/;
         int ties = fLRUsed | fLRDecl | fANY;
         if(someRegs.empty()){ // trivial case: regs w/ no mapped syms
-            for(r: regIds){
+            for(auto const r: regIds){
                 auto const& syms = r2s[r];
                 if( syms.empty() ){
                     if(verbose) cout<<" r"<<r<<"(no syms)";
@@ -447,10 +453,10 @@ struct DemoSymbStates : public Counters {
             if(!someRegs.empty() && verbose) cout<<"[no syms]"<<endl;
         }
         if(someRegs.empty()){   // regs w/ no active syms
-            for(r: regIds){
+            for(auto const r: regIds){
                 auto & syms = r2s[r];
                 someSyms.clear();
-                for(s: syms)
+                for(auto& s: syms)
                     if(psym(s).getActive())
                         someSyms.push_back(s);  // cond : active?
                 if( someSyms.empty() )          // no syms satisfy cond?
@@ -460,10 +466,10 @@ struct DemoSymbStates : public Counters {
             if(!someRegs.empty() && verbose) cout<<"[no active]"<<endl;
         }
         if(someRegs.empty()){ // no active syms inREG? (~ "free register")
-            for(r: regIds){
+            for(auto const r: regIds){
                 auto & syms = r2s[r];
                 someSyms.clear();
-                for(s: syms){
+                for(auto& s: syms){
                     auto const& ps = psym(s);
                     assert( ps.getActive() );
                     if(ps.getREG()){
@@ -471,7 +477,7 @@ struct DemoSymbStates : public Counters {
                         someSyms.push_back(s);          // cond : [active and] inREG
                     }
                 }
-                if(verbose){cout<<"REG"<<r<<":";for(s:someSyms)cout<<" "<<s;}
+                if(verbose){cout<<"REG"<<r<<":";for(auto& s:someSyms)cout<<" "<<s;}
                 if( someSyms.empty() )                  // no syms satisfy cond?
                     someRegs.push_back(r);              //    i.e. all syms for reg spilled to MEM
                 else{
@@ -486,10 +492,10 @@ struct DemoSymbStates : public Counters {
             // These syms might be in REG and/or MEM (or in REG with stale MEM)
             // Some regs are "easy" to re-use, in that they have REG=MEM value still OK
             // (You could create such regs by forcibly spilling something)
-            for(r: regIds){                    // all trivially-spillable? (old tEasy)
+            for(auto const r: regIds){                    // all trivially-spillable? (old tEasy)
                 auto & syms = r2s[r];           // (in REG && MEM, and MEM up to date)
                 someSyms.clear();
-                for(s: syms){
+                for(auto const& s: syms){
                     auto const& ps = psym(s);
                     assert( ps.getActive() );
                     if(ps.getREG() && ps.getMEM() && !ps.getStale() ){  // REG==MEM (spill is no-op)
@@ -506,10 +512,10 @@ struct DemoSymbStates : public Counters {
         }
 #if 0 // all inMEM?
         if(someRegs.empty()){
-            for(r: regIds){                    // all inMEM?
+            for(auto const r: regIds){                    // all inMEM?
                 auto & syms = r2s[r];
                 someSyms.clear();
-                for(s: syms){
+                for(auto const& s: syms){
                     auto const& ps = psym(s);
                     assert( ps.getActive() );
                     if(ps.getMEM()){  // 
@@ -527,16 +533,16 @@ struct DemoSymbStates : public Counters {
 #endif
         if(someRegs.empty()){
             if(verbose) cout<<"[def]"<<endl;
-            for(r: regIds)
+            for(auto const r: regIds)
                 someRegs.push_back(r);
         }
         // NO assert( ! someRegs.empty() );
         if(1){
             cout<<"SpillOne";
-            for(r: someRegs){
+            for(auto const& r: someRegs){
                 cout<<",R"<<r<<"{";
-                auto & syms = r2s[r];
-                for(s: syms) cout<<(s!=syms[0]?",":"")<<s;
+                auto const& syms = r2s[r];
+                for(auto const& s: syms) cout<<(s!=syms[0]?",":"")<<s;
                 cout<<"}";
             }
             cout<<" ties{"
@@ -562,11 +568,11 @@ struct DemoSymbStates : public Counters {
 #define MINREGS( GETTER, PSASSERT ) do{ \
     typedef decltype(((RegSymbol*)nullptr)->GETTER()) Tm; \
     auto tieTm = std::numeric_limits<Tm>::max(); \
-    for(r: someRegs){ \
+    for(auto const r: someRegs){ \
         auto const& syms = r2s[r]; \
         assert( !syms.empty() ); \
         auto minTm = std::numeric_limits<decltype(tieTm)>::max(); \
-        for(s:syms){ \
+        for(auto const& s:syms){ \
             auto const& ps = psym(s); \
             PSASSERT; /*assert( ps.getMEM() );*/ \
             minTm = std::min( minTm, ps.GETTER() ); \
@@ -598,8 +604,8 @@ struct DemoSymbStates : public Counters {
                 MINREGS(tDecl, );
             }
             if( !ok ){ // fANY
-                for(r: someRegs){
-                    auto & syms = r2s[r];
+                for(auto const r: someRegs){
+                    auto const& syms = r2s[r];
                     if( !syms.empty() ){
                         reg = syms[0];
                         ok = true; //sel = ve::invalidReg();
@@ -618,7 +624,7 @@ struct DemoSymbStates : public Counters {
                 if(verbose){
                     cout<<"\nFinal R"<<reg<<" syms{"; cout.flush();
                     assert( !r2s.empty() );
-                    for(s: r2s[reg]) cout<<" "<<s;
+                    for(auto const& s: r2s[reg]) cout<<" "<<s;
                     cout<<"}"<<endl;
                 }
                 assert( !r2s[reg].empty() );
@@ -962,7 +968,11 @@ void Tester::test1(){
         //    ssym.psym(symId).setReg( rid, ssym.nextTick() );
         //};
         // assigns a "next" register to a symbol.
+#if !defined(__ve)
 #define R5(varname) auto const varname __attribute__((unused)) = r5(#varname)
+#else
+#define R5(varname) auto const varname = r5(#varname)
+#endif
         R5(a); ssym.tWrite({a});       // asm::mov(a,1)
         R5(b); ssym.wr({b});           // asm::mov(b,2)
         R5(c); ssym.wr({c},{a,b});     // asm::add(c,a,b)
@@ -1422,7 +1432,7 @@ int main(int,char**){
     //Tester::test2();
     //cout<<"======== test3() ==========="<<endl;
     //Tester::test3();
-    for(s: randNames) delete[](s);
+    for(auto s: randNames) delete[](s);
     randNames.clear();
     cout<<"\nGoodbye - " __FILE__ " ran "<<testNum<<" tests"<<endl;
     return 0;

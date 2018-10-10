@@ -39,22 +39,27 @@ regStates.o: regStates.cpp regStates.hpp throw.hpp
 # test based on regSymbol.hpp
 testSpill3: testSpill3.cpp spill.o regStates.o spill-impl.hpp spill.hpp throw.hpp regDefs.hpp
 	#
-	# for(s: randNames) is c++11, but nc++ -std=c++11 does not accept it
+	# for(s: randNames) is non-standard (gnu?), so changed to official
+	# for(auto [const] [&] var: container) {...} form
 	#
-	$(CXX) -o $@ $(CXXFLAGS) -strd=c++14 $(filter %.cpp,$^) $(filter %.o,$^)
+	$(CXX) -o $@ $(CXXFLAGS) $(filter %.cpp,$^) $(filter %.o,$^)
 	ve_exec $@ >& $@.vg
 
 # test based on regSymbol.hpp, register name and register id operations
 testRegSym: testRegSym.cpp spill.o regStates.o spill-impl.hpp spill.hpp throw.hpp regDefs.hpp
-	$(CXX) -o $@ $(CXXFLAGS) $(filter %.cpp,$^) $(filter %.o,$^)
+	#
+	# This really is c++14 because of decltype(auto) which deduces the return type
+	# base on the return statement.
+	#
+	$(CXX) -o $@ $(CXXFLAGS) -std=c++17 $(filter %.cpp,$^) $(filter %.o,$^)
 	ve_exec $@ >& $@.vg
 
 symbStates.o: symbStates.cpp symbStates.hpp throw.hpp
 	$(CXX) -o $@ $(CXXFLAGS) -c $<
 reg-base.o: reg-base.cpp reg-base.hpp bitfield.hpp throw.hpp
-	$(CXX) -o $@ $(CXXFLAGS) -c $<
+	$(CXX) -o $@ $(CXXFLAGS) -std=c++14 -c $<
 testSymbStates: testSymbStates.cpp symbStates.o regStates.o reg-base.o spill.o symbStates.hpp spill.hpp throw.hpp
-	$(CXX) -o $@ $(CXXFLAGS) $^
+	$(CXX) -o $@ $(CXXFLAGS) -std=c++14 $(filter %.cpp,$^) $(filter %.o,$^)
 	ve_exec $@ >& $@.vg
 
 prt_regnames: prt_regnames.cpp reg-base.o reg-base.hpp bitfield.hpp throw.hpp
@@ -63,19 +68,19 @@ prt_regnames: prt_regnames.cpp reg-base.o reg-base.hpp bitfield.hpp throw.hpp
 	#   user-defined literal 0b111100111100000000
 	#   gives error: user-defined literal operator not found
 	# so ask for c++14
-	$(CXX) -o $@ $(CXXFLAGS) $(filter %.cpp,$^) $(filter %.o,$^)
+	$(CXX) -o $@ $(CXXFLAGS) -std=c++14 $(filter %.cpp,$^) $(filter %.o,$^)
 	ve_exec $@ >& $@.vg
 reg-aurora.o: reg-aurora.cpp reg-aurora.hpp reg-base.hpp bitfield.hpp throw.hpp
-	$(CXX) -o $@ -Wall -ggdb -O1 -std=gnu++17 -c $<
+	$(CXX) -o $@ $(CXXFLAGS) -std=c++14 -c $< # want binary literals
 testRegBase.asm: testRegBase
 	$(CXX) $(CXXFLAGS) -Wa,-adhln $^.cpp > $@
 testRegBase: testRegBase.cpp reg-base.o reg-aurora.o reg-base.hpp bitfield.hpp throw.hpp
-	$(CXX) -o $@ $(CXXFLAGS) $(filter %.cpp,$^) $(filter %.o,$^)
+	$(CXX) -o $@ $(CXXFLAGS) -std=c++14 $(filter %.cpp,$^) $(filter %.o,$^)
 	ve_exec $@ >& $@.vg
 
 .PRECIOUS: asm.o regStates.o symbStates.o
 clean:
-	rm -f *.o $(TARGETS) mk*.log bld*.log
+	rm -f *.o *.lo *.i $(TARGETS) mk*.log bld*.log
 realclean: clean
 	rm -f $(patsubst %,%.vg,$(TARGETS))
 #
