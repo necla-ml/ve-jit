@@ -1,0 +1,66 @@
+for(int i=0; i<4; ++i)
+   y[a+4*i] = x[b+8*i];
+
+i0: yOff = a; xOff = b;
+    y[yOff] = x[xOff];
+i1: palin:  yOff = a+4; xOff = b+8
+    induce: yOff += 4;  xOff += 8;
+    y[yOff] = x[xOff]
+etc. for unroll.
+######################################
+for(int i=0; i<N; ++i){
+  for(int j=0; j<8; ++j){
+    xOff = i - 5 + 2*j;
+    yOff = j;
+    y[yOff] = (xOff>0? x[xOff]: 0);
+  }
+}
+i=0: xOff=[-5,-3,-1,1,3,5,7,9]; yOff=[0--8];
+     mask=00011111b;
+     y[yOff...] = merge( zeros..., x[xOff...], mask
+i==1: plain: xoff=[-4,-2,0,2,4,6,8,10]; yOff=[0--8];
+             mask=00111111b;  (could induce by lsh, but mask shift ops N/A)
+      induce: xOff += bcst(2...)
+      y[yOff...] = merge( zeros..., x[xOff], [xOff>0?] );
+etc.
+######################################
+for(int kh=0; kh<4; ++kh)
+  for(int kw=0; kw<4; ++kw){
+   y[++off]=... }}
+suppose vector len 8 decomp of 2 lopos:
+for khw in {[0 0 0 1 0 2 0 3]  [1 0 1 1 1 2 1 3]  [2 0 2 1 2 2 2 3]  [3 0 3 1 3 2 3 3]}
+   y[++off]=... }}
+init: khw = [00010203]
+next: khw = [10111213] induce: khw += [10101010]
+Each loop does kh[0..3] = upper(khw); kw[0..3] = lower(khw);
+Now suppose vector len 6 decomp:
+for khw in {[000102], [031011], [121320], [212223], [303132], [33????]}
+   y[++off]=... }}
+  init: khw = [000102]
+  next: khw = [031011]   induce? khw+[030303] = [030405],
+                         then 4>3 spills and 5>3 spills ("carry" wrt max kw)
+  a = khw + [030303] = [030405]
+  m = lower(a) % 4   = [030001]
+  r=(a-m)/4            [000404]/4 = [000101]
+  r <<= 1            = [001010]
+  a+m                = [031011]
+ and this generalizes two packing in many values of 'kw' loop.
+ There is also a post-loop fixup
+Alt: keep separate vectors of kh, kw:
+init: kh=[000], kw=[012]
+next: kh=[011], kw=[301]  induce: kw=rotr(kw,1)-->[201]; kw+=[100]-->[301]
+next: kh=[112], kw=[230]  induce: kw=rotr(kw,1)-->[130]; kw+=[100]-->[230]
+next: kh=[112], kw=[123]  induce: kw=rotr(kw,1)-->[023]; kw+=[100]-->[123]
+next: kh=[112], kw=[012]  induce: kw=rotr(kw,1)-->[312]; kw+=[100]-->[412] kw%=4-->[012]
+kh=[000], kw=[012];  kw'=[301].  Now kh'=kh + (kw'+[111]-kw)%4
+... generalizes but should work out some more cases by hand ...
+Alternate induction (rotr for innermost is a kludge?)
+kw=[012] kh=[000]
+kw=[301] kh=[011] induce: kwA=kw+[333]-->[345] kwM=kwA%4=[301]  and.. kwD=kwA/4=[011]
+                  [301]<--kwM  [011]<--kh+khD, where khD = (kh + kwD)
+                  .. also khD is (kwA-kwM)/4, if exact div is easier
+      more general. rotr+add is just an optimization of divmod induction 
+####################################
+Work out more general cases with a test program, just for 2d loop vectorizations,
+packed into 256-long unsigned vector registers.
+

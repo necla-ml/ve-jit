@@ -1,5 +1,7 @@
 === Aurora register model
 
+This is development code, testing basic ideas, some of which might not be so good!
+
 - maintain state for scalar, vector, mask registers
 - declare scoped symbols
 - allocate registers to symbols
