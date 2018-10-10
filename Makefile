@@ -127,11 +127,12 @@ clean:
 	rm -f syscall_hello.o syscall_hello.asm syscall_hello.dis
 	rm -f asmkern0.asm asmkern0.dis
 	for f in *.bin; do b=`basename $$f .bin`; rm -f $$b.asm $$b.o $$b.dis $$b.dump; done
-	for f in tmp_kernel_*.S; do b=`basename $$f .S`; rm -f $$b.asm $$b.dis $$b.dump; done
+	for f in tmp_*.S; do b=`basename $$f .S`; rm -f $$b.asm $$b.dis $$b.dump; done
 	rm -f jitve_math.asm jitve_hello.asm jitve_hello.s jitve_hello.dis jitve*.dis
 realclean: clean
 	rm -f $(TARGETS)
 	rm -f msk msk0 msk1 msk2 msk3 msk4 syscall_hello smir jitve0
-	rm -f tmp_kernel_*.S *.bin
+	rm -f bld.log asmfmt.log jitpp_hello.log mk*.log bld*.log
+	rm -f tmp_*.S *.bin
 	rm -rf CMakeCache.txt CMakeFiles asmfmt asmfmt.txt jitve_hello.s
 #
