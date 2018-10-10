@@ -1,0 +1,15 @@
+*.o
+*.exe
+*.vg
+.*.sw?
+mk.log
+testSymbStates
+testSpill
+testSymScopeUid
+testSpill2
+testSpill3
+testRegSym
+testRegBase
+testSymbStates
+a.out
+

@@ -1,0 +1,94 @@
+all: testSpill testSymScopeUid testSpill2 testSpill3 testRegSym testSymbStates testRegBase
+
+asm.o: asm.cpp asm.hpp throw.hpp
+	g++ -o $@ -Wall -ggdb -O1 -std=gnu++1z -c $<
+
+testSpill: testSpill.cpp asm.o
+	g++ -o $@ -Wall -ggdb -O1 -std=gnu++1z $^
+	valgrind --leak-check=full --show-leak-kinds=all $@ > $@.vg 2>&1
+	@echo "gawking summary..."
+	gawk 'BEGIN{err=-1} /^==.*LEAK SUMMARY/{p=1;err=0} p==1&&/^[^=]/{p=0} p==1{print} END{exit err}' \
+		$@.vg || { echo "Ohoh: $@ did not terminate correcly"; \
+		echo "see $@.vg"; }
+
+testSymScopeUid: testSymScopeUid.cpp throw.hpp
+	g++ -o $@ -Wall -ggdb -O1 -std=gnu++1z $^
+	valgrind --leak-check=full --show-leak-kinds=all $@ > $@.vg 2>&1
+	@echo "gawking summary..."
+	gawk 'BEGIN{err=-1} /^==.*LEAK SUMMARY/{p=1;err=0} p==1&&/^[^=]/{p=0} p==1{print} END{exit err}' \
+		$@.vg || { echo "Ohoh: $@ did not terminate correcly"; \
+		echo "see $@.vg"; }
+
+spill.o: spill.cpp spill.hpp spill-impl.hpp symbStates.hpp throw.hpp regDefs.hpp
+	g++ -o $@ -Wall -ggdb -O1 -std=gnu++1z -c $<
+
+# test based on spillable-base.hpp
+testSpill2: testSpill2.cpp spill.cpp spill-impl.hpp spill.hpp throw.hpp regDefs.hpp
+	g++ -o $@ -Wall -ggdb -O1 -std=gnu++1z $(filter %.cpp,$^)
+	valgrind --leak-check=full --show-leak-kinds=all $@ > $@.vg 2>&1
+	@echo "gawking summary..."
+	gawk 'BEGIN{err=-1} /^==.*LEAK SUMMARY/{p=1;err=0} p==1&&/^[^=]/{p=0} p==1{print} END{exit err}' \
+		$@.vg || { echo "Ohoh: $@ did not terminate correcly"; \
+		echo "see $@.vg"; }
+
+regStates.o: regStates.cpp regStates.hpp throw.hpp
+	g++ -o $@ -Wall -ggdb -O1 -std=gnu++1z -c $<
+
+# test based on regSymbol.hpp
+testSpill3: testSpill3.cpp spill.o regStates.o spill-impl.hpp spill.hpp throw.hpp regDefs.hpp
+	g++ -o $@ -Wall -ggdb -O1 -std=gnu++1z $(filter %.cpp,$^) $(filter %.o,$^)
+	valgrind --leak-check=full --show-leak-kinds=all $@ > $@.vg 2>&1
+	@echo "gawking summary..."
+	gawk 'BEGIN{err=-1} /^==.*LEAK SUMMARY/{p=1;err=0} p==1&&/^[^=]/{p=0} p==1{print} END{exit err}' \
+		$@.vg || { echo "Ohoh: $@ did not terminate correcly"; \
+		echo "see $@.vg"; }
+
+# test based on regSymbol.hpp, register name and register id operations
+testRegSym: testRegSym.cpp spill.o regStates.o spill-impl.hpp spill.hpp throw.hpp regDefs.hpp
+	g++ -o $@ -Wall -ggdb -O1 -std=gnu++1z $(filter %.cpp,$^) $(filter %.o,$^)
+	valgrind --leak-check=full --show-leak-kinds=all $@ > $@.vg 2>&1
+	@echo "gawking summary..."
+	gawk 'BEGIN{err=-1} /^==.*LEAK SUMMARY/{p=1;err=0} p==1&&/^[^=]/{p=0} p==1{print} END{exit err}' \
+		$@.vg || { echo "Ohoh: $@ did not terminate correcly"; \
+		echo "see $@.vg"; }
+
+symbStates.o: symbStates.cpp symbStates.hpp throw.hpp
+	g++ -o $@ -Wall -ggdb -O1 -std=gnu++11 -c $<
+reg-base.o: reg-base.cpp reg-base.hpp bitfield.hpp throw.hpp
+	g++ -o $@ -Wall -ggdb -O1 -std=gnu++1z -c $<
+testSymbStates: testSymbStates.cpp symbStates.o regStates.o reg-base.o spill.o symbStates.hpp spill.hpp throw.hpp
+	g++ -o $@ -Wall -ggdb -O1 -std=gnu++1z $^
+	valgrind --leak-check=full --show-leak-kinds=all $@ > $@.vg 2>&1
+	@echo "gawking summary..."
+	gawk 'BEGIN{err=-1} /^==.*LEAK SUMMARY/{p=1;err=0} p==1&&/^[^=]/{p=0} p==1{print} END{exit err}' \
+		$@.vg || { echo "Ohoh: $@ did not terminate correcly"; \
+		echo "see $@.vg"; }
+
+prt_regnames: prt_regnames.cpp reg-base.o reg-base.hpp bitfield.hpp throw.hpp
+	g++ -o $@ -Wall -ggdb -O1 -std=gnu++1z $(filter %.cpp,$^) $(filter %.o,$^)
+reg-aurora.o: reg-aurora.cpp reg-aurora.hpp reg-base.hpp bitfield.hpp throw.hpp
+	g++ -o $@ -Wall -ggdb -O1 -std=gnu++17 -c $<
+testRegBase.asm: testRegBase
+	g++ -Wall -ggdb -O1 -std=gnu++1z -Wa,-adhln $^.cpp > $@
+testRegBase: testRegBase.cpp reg-base.o reg-aurora.o reg-base.hpp bitfield.hpp throw.hpp
+	g++ -o $@ -Wall -ggdb -O1 -std=gnu++1z $(filter %.cpp,$^) $(filter %.o,$^)
+	valgrind --leak-check=full --show-leak-kinds=all $@ > $@.vg 2>&1
+	@echo "gawking summary..."
+	gawk 'BEGIN{err=-1} /^==.*LEAK SUMMARY/{p=1;err=0} p==1&&/^[^=]/{p=0} p==1{print} END{exit err}' \
+		$@.vg || { echo "Ohoh: $@ did not terminate correcly"; \
+		echo "see $@.vg"; }
+
+.PRECIOUS: asm.o regStates.o symbStates.o
+clean:
+	rm -f asm.o regStates.o symbStates.o *.o \
+		prt_regNames \
+		testSpill testSpill.vg \
+		testSpill2 testSpill2.vg \
+		testSpill3 testSpill3.vg \
+		testSymScopeUid testSymScopeUid.vg \
+		testSymbStates testSymbStates.vg \
+		testRegSym testRegSym.vg \
+		prt_regnames \
+		testRegBase testRegBase.vg \
+		mk*.log bld*.log
+#
