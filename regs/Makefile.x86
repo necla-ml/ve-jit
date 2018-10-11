@@ -5,6 +5,21 @@
 # It compiles under g++-5.4.0 with -std=c++11 some gnu extensions.
 # For ncc, the same nice features need -std=c++14 or -std=c++17.
 #
+CC:=gcc
+CXX:=g++
+
+is_std_c14_ok := $(shell touch foo.c && $(CXX) -std=c++14 -c foo.c -o foo.o &> /dev/null && echo 'yes' || echo 'no'; rm -f foo.c foo.o)
+ifeq ($(is_std_c14_ok), no)
+$(info $(shell echo `$(CXX) --version`))
+$(error $(CXX) -std=c++14 is not supported)
+endif
+#    $(info is_fopenmp_simd_supported=$(is_fopenmp_simd_supported))
+#    GCC_VERSION:=$(shell $(CXX) -dumpversion) # oh, nc++ does not have dumpversion
+#    ifeq ($(shell expr $(GCC_VERSION) '<=' 5.4), 1)
+#    $(info $(shell echo `$(CXX) --version`))
+#    $(error gcc version may be too old -- need some c++14 auto features )
+#    endif
+
 all: testSpill testSymScopeUid testSpill2 testSpill3 testRegSym testSymbStates testRegBase
 C11X:=-std=gnu++1z
 #C11Y:=-std=gnu++17
@@ -15,6 +30,7 @@ C11Y:=-std=gnu++1z
 # Following is *not* enough.  g++-4.8 is too ancient.
 #C11X:=-std=gnu++11
 #C11Y:=-std=gnu++11
+# also OK, and more portable:
 C11X:=-std=c++14
 C11Y:=-std=c++14
 
@@ -109,4 +125,5 @@ clean:
 		prt_regnames \
 		testRegBase testRegBase.vg \
 		mk*.log bld*.log
+realclean: clean
 #

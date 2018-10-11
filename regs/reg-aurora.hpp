@@ -1,8 +1,7 @@
 #ifndef REG_AURORA_HPP
 #define REG_AURORA_HPP
 /** \file
- * implement standard register definition functions for Aurora.
- * Include this via reg-impl.hpp please.
+ * Implement standard register definition functions for Aurora.
  */
 
 // all chip impls should include reg-base.hpp first:
@@ -141,6 +140,7 @@ class ChipRegistersAurora : public ChipRegisters {
         static ChipRegistersAurora obj;
         return obj;
     }
+    // Note: RegBase::Misc is totally up to chipset to define
     enum Xmisc { reserve=1, preserve=2 }; ///< extra RegBase::Misc flags
     virtual ~ChipRegistersAurora() {}
     inline RegisterBase const& operator()(RegId r) const{ return regs[r]; }
@@ -197,11 +197,20 @@ inline constexpr RegisterBase::vlen_t maxVlen(RegisterBase::flags_t const r){
     // illegal type for constexpr:      return RegisterBase::Flags{r}.vlen;
     return RegisterBase::Flags::vlen_t{r};
 }
-
-inline constexpr int bytes(RegisterBase::flags_t const r){
-    return maxVlen(r) * SCALAR_BYTES;
+inline constexpr RegisterBase::vlen_t maxVlen(RegId const r){
+    return  maxVlen(defRegFlags(r));
 }
-constexpr int align(RegisterBase::flags_t const r){
+
+//inline constexpr int bytes(RegisterBase::flags_t const r){
+//    return maxVlen(r) * SCALAR_BYTES;
+//}
+inline constexpr int bytes(RegId const r){
+    return maxVlen(defRegFlags(r)) * SCALAR_BYTES;
+}
+//constexpr int align(RegisterBase::flags_t const r){
+//    return 8U;
+//}
+constexpr int align(RegId const r){
     return 8U;
 }
 constexpr RegisterBase::Use use(RegisterBase::flags_t const r){

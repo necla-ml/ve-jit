@@ -1,5 +1,9 @@
 TARGETS:=testSpill testSymScopeUid prt_regnames testSpill2 testSpill3 testRegSym testSymbStates testRegBase
-all: $(TARGETS)
+all: $(TARGETS) Goodbye
+PHONY: Goodbye
+Goodbye:
+	@echo 'All done, log files in *.vg'
+	@echo 'Goodbye'
 
 VG:=@\# NO-valgrind
 CXXFLAGS:=-g2 -O1 -std=c++11 -Wall
@@ -20,6 +24,12 @@ VE_EXEC:=ve_exec
 #
 C11X:=-std=c++14
 C11Y:=-std=c++14
+
+is_std_c14_ok := $(shell touch foo.c && $(CXX) -std=c++14 -c foo.c -o foo.o &> /dev/null && echo 'yes' || echo 'no'; rm -f foo.c foo.o)
+ifeq ($(is_std_c14_ok), no)
+$(info $(shell echo `$(CXX) --version`))
+$(error $(CXX) -std=c++14 is not supported)
+endif
 
 asm.o: asm.cpp asm.hpp throw.hpp
 	$(CXX) -o $@ $(CXXFLAGS) -c $<

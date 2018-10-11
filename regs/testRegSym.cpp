@@ -221,7 +221,8 @@ struct DemoSymbStates : public Counters {
     auto decl(Args&&... otherPsymArgs)
     // C++11 **should** deduce'auto' return type from return statements,
     // but nc++ needs -std=c++17, so... uglify by stating...
-    -> decltype(symidCnt)
+    //-> decltype(symidCnt)
+    -> decltype( nextSym() ) // better (still insulated vs changes)
     {
         auto const tick = nextTick();
         auto const symId = nextSym();
