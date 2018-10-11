@@ -15,6 +15,8 @@ C11Y:=-std=gnu++1z
 # Following is *not* enough.  g++-4.8 is too ancient.
 #C11X:=-std=gnu++11
 #C11Y:=-std=gnu++11
+C11X:=-std=c++14
+C11Y:=-std=c++14
 
 asm.o: asm.cpp asm.hpp throw.hpp
 	g++ -o $@ -Wall -ggdb -O1 $(C11X) -c $<
