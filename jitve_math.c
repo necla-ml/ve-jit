@@ -11,6 +11,21 @@
  *   - executes in caller stack frame
  *   - any args must be passed in registers only
  *   - code must be fully relocatble and need no external symbols
+ *
+ * - The incredibly important function we optimize is
+ *   adding and subtracting a uint64_t constant from a register,
+ *   producing \f$register \pm CONSTANT\f$ outputs.
+ *   - in general, this takes 4 ops
+ *     - 2 to load the constant into a register,
+ *     - 2 more to produce the sum and difference.
+ *   - but add and sub sometimes can use immediate operands
+ *     - there is some slight asymmetry here.
+ *   - and sometimes the load can be done in 1 op.
+ *   - and of course adding and subtractin zero is pretty easy.
+ *   - you can go wild and recognize some longer bti sequences
+ *     that are mathematically related to immediate constants
+ *     (ex. load some big constant via mul IMM,K or other arithmetic ops,
+ *      but such constants are likely pretty infrequent.)
  */
 #include "jitve_util.h"
 #include <stdio.h>

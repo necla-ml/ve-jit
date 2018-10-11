@@ -128,7 +128,8 @@ clean:
 	rm -f asmkern0.asm asmkern0.dis
 	for f in *.bin; do b=`basename $$f .bin`; rm -f $$b.asm $$b.o $$b.dis $$b.dump; done
 	for f in tmp_*.S; do b=`basename $$f .S`; rm -f $$b.asm $$b.dis $$b.dump; done
-	rm -f jitve_math.asm jitve_hello.asm jitve_hello.s jitve_hello.dis jitve*.dis
+	rm -f jitve_math.asm jitve_hello.asm jitve_hello.s jitve_hello.dis jitve*.dis \
+		jitpp_hello.asm
 realclean: clean
 	rm -f $(TARGETS)
 	rm -f msk msk0 msk1 msk2 msk3 msk4 syscall_hello smir jitve0
