@@ -3,6 +3,24 @@ all: $(TARGETS)
 
 VG:=@\# NO-valgrind
 CXXFLAGS:=-g2 -O1 -std=c++11 -Wall
+VE_EXEC:=ve_exec
+#
+# Original code for g++-5.4 was OK with gnu c++11 extensions.
+#
+# g++-5.4.0 has decent set of c++11 features for readable code,
+# but nc++ want -std==c++14 (or more) for some of them.
+#
+#
+# generic lambdas:   these are actually c++14, but yield **very** readable
+#                    code. Not removing these!
+#
+# auto return type deduction from the 'return' instead of requiring
+# '-> <trailing return type>' is only allowed for nc++ with -std=c++17.
+# But only 1 case, so addd the trailing return type.
+#
+C11X:=-std=c++14
+C11Y:=-std=c++14
+
 asm.o: asm.cpp asm.hpp throw.hpp
 	$(CXX) -o $@ $(CXXFLAGS) -c $<
 
@@ -17,7 +35,7 @@ testSpill: testSpill.cpp asm.o
 testSymScopeUid: testSymScopeUid.cpp throw.hpp
 	$(CXX) -o $@.i $(CXXFLAGS) -dD -E $<
 	$(CXX) -o $@ $(CXXFLAGS) $<
-	ve_exec $@ >& $@.vg
+	$(VE_EXEC) ./$@ >& $@.vg
 #	
 #valgrind --leak-check=full --show-leak-kinds=all $@ > $@.vg 2>&1
 #@echo "gawking summary..."
@@ -31,7 +49,7 @@ spill.o: spill.cpp spill.hpp spill-impl.hpp symbStates.hpp throw.hpp regDefs.hpp
 # test based on spillable-base.hpp
 testSpill2: testSpill2.cpp spill.cpp spill-impl.hpp spill.hpp throw.hpp regDefs.hpp
 	$(CXX) -o $@ $(CXXFLAGS) $(filter %.cpp,$^)
-	ve_exec $@ >& $@.vg
+	$(VE_EXEC) ./$@ >& $@.vg
 
 regStates.o: regStates.cpp regStates.hpp throw.hpp
 	$(CXX) -o $@ $(CXXFLAGS) -c $<
@@ -43,7 +61,7 @@ testSpill3: testSpill3.cpp spill.o regStates.o spill-impl.hpp spill.hpp throw.hp
 	# for(auto [const] [&] var: container) {...} form
 	#
 	$(CXX) -o $@ $(CXXFLAGS) $(filter %.cpp,$^) $(filter %.o,$^)
-	ve_exec $@ >& $@.vg
+	$(VE_EXEC) ./$@ >& $@.vg
 
 # test based on regSymbol.hpp, register name and register id operations
 testRegSym: testRegSym.cpp spill.o regStates.o spill-impl.hpp spill.hpp throw.hpp regDefs.hpp
@@ -51,16 +69,16 @@ testRegSym: testRegSym.cpp spill.o regStates.o spill-impl.hpp spill.hpp throw.hp
 	# This really is c++14 because of decltype(auto) which deduces the return type
 	# base on the return statement.
 	#
-	$(CXX) -o $@ $(CXXFLAGS) -std=c++17 $(filter %.cpp,$^) $(filter %.o,$^)
-	ve_exec $@ >& $@.vg
+	$(CXX) -o $@ $(CXXFLAGS) $(C11Y) $(filter %.cpp,$^) $(filter %.o,$^)
+	$(VE_EXEC) ./$@ >& $@.vg
 
 symbStates.o: symbStates.cpp symbStates.hpp throw.hpp
 	$(CXX) -o $@ $(CXXFLAGS) -c $<
 reg-base.o: reg-base.cpp reg-base.hpp bitfield.hpp throw.hpp
-	$(CXX) -o $@ $(CXXFLAGS) -std=c++14 -c $<
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) -c $<
 testSymbStates: testSymbStates.cpp symbStates.o regStates.o reg-base.o spill.o symbStates.hpp spill.hpp throw.hpp
-	$(CXX) -o $@ $(CXXFLAGS) -std=c++14 $(filter %.cpp,$^) $(filter %.o,$^)
-	ve_exec $@ >& $@.vg
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
+	$(VE_EXEC) ./$@ >& $@.vg
 
 prt_regnames: prt_regnames.cpp reg-base.o reg-base.hpp bitfield.hpp throw.hpp
 	#
@@ -68,15 +86,15 @@ prt_regnames: prt_regnames.cpp reg-base.o reg-base.hpp bitfield.hpp throw.hpp
 	#   user-defined literal 0b111100111100000000
 	#   gives error: user-defined literal operator not found
 	# so ask for c++14
-	$(CXX) -o $@ $(CXXFLAGS) -std=c++14 $(filter %.cpp,$^) $(filter %.o,$^)
-	ve_exec $@ >& $@.vg
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
+	$(VE_EXEC) ./$@ >& $@.vg
 reg-aurora.o: reg-aurora.cpp reg-aurora.hpp reg-base.hpp bitfield.hpp throw.hpp
-	$(CXX) -o $@ $(CXXFLAGS) -std=c++14 -c $< # want binary literals
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) -c $< # want binary literals
 testRegBase.asm: testRegBase
 	$(CXX) $(CXXFLAGS) -Wa,-adhln $^.cpp > $@
 testRegBase: testRegBase.cpp reg-base.o reg-aurora.o reg-base.hpp bitfield.hpp throw.hpp
-	$(CXX) -o $@ $(CXXFLAGS) -std=c++14 $(filter %.cpp,$^) $(filter %.o,$^)
-	ve_exec $@ >& $@.vg
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
+	$(VE_EXEC) ./$@ >& $@.vg
 
 .PRECIOUS: asm.o regStates.o symbStates.o
 clean:

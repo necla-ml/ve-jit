@@ -1,7 +1,5 @@
 === Consolidat various Aurora/jit/assembler codes...
 
-==== remember to git set user.name "..." and git set user.email "..."
-
 - Some approaches are from low-level asm side:
   - cpp macro hackery
   - pretty-print .S file from C+ code (or from C via macros)
@@ -35,3 +33,14 @@
 
 There are several pieces missing, before a full path from C++
 to generated jit kernels is available.
+
+==== remember to git set user.name "..." and git set user.email "..."
+
+<EM>set up ncc/nc++ environment</EM>
+
+some toy projects can be made as:
+```
+make >& mk.log && echo YAY; \
+(cd dev && make >& mk.log && echo YAY2); \
+(cd regs && make >& mk.log && echo YAY3);
+```

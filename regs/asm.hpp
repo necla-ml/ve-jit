@@ -331,7 +331,6 @@ class Regs {
 
     typedef struct { Sym *sym; unsigned scope_uid; } SymPtrInfo;
   private:
-    friend class SafeSym;
     std::unordered_set<int> active_scopes;
     std::unordered_map<unsigned,SymPtrInfo> active_symbols;
     unsigned scope_uid;

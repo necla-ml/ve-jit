@@ -198,7 +198,8 @@ struct DemoSymbStates : public Counters {
     }
 
     template<typename T, typename U>
-        decltype(auto)
+        typename std::pair<T,U>
+        // c++14 allows simpler: decltype(auto)
         make_pair_wrapper(T&& t, U&& u)
         {
                 return std::make_pair(std::forward<T>(t),
@@ -217,7 +218,11 @@ struct DemoSymbStates : public Counters {
      *   - symId also available via \c SpillableBase as \c psym(symId).uid
      */
     template<typename...Args>
-    auto decl(Args&&... otherPsymArgs){
+    auto decl(Args&&... otherPsymArgs)
+    // C++11 **should** deduce'auto' return type from return statements,
+    // but nc++ needs -std=c++17, so... uglify by stating...
+    -> decltype(symidCnt)
+    {
         auto const tick = nextTick();
         auto const symId = nextSym();
         assert( psyms.find(symId) == psyms.end() );
@@ -639,6 +644,7 @@ struct DemoSymbStates : public Counters {
         return static_cast<unsigned>
             (
                 std::count_if(psyms.begin(), psyms.end(),
+                    // generic lambdas are c++14
                     [](auto const& p){ auto const& sObj = p.second;
                     if(sObj.getActive() && sObj.getREG()) {
                     assert(ve::valid(sObj.regId())); return true;}

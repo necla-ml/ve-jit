@@ -1,43 +1,59 @@
+#
+## This WILL NOT compile with gcc-4.8.
+#
+# Code uses 'auto' keyword in places for very much better readability.
+# It compiles under g++-5.4.0 with -std=c++11 some gnu extensions.
+# For ncc, the same nice features need -std=c++14 or -std=c++17.
+#
 all: testSpill testSymScopeUid testSpill2 testSpill3 testRegSym testSymbStates testRegBase
+C11X:=-std=gnu++1z
+#C11Y:=-std=gnu++17
+# c++14 allows auto to deduce return type from 'return' statement.
+# one instance where this was nice was downgraded to harwire a return type.
+C11Y:=-std=gnu++1z
+#
+# Following is *not* enough.  g++-4.8 is too ancient.
+#C11X:=-std=gnu++11
+#C11Y:=-std=gnu++11
 
 asm.o: asm.cpp asm.hpp throw.hpp
-	g++ -o $@ -Wall -ggdb -O1 -std=gnu++1z -c $<
+	g++ -o $@ -Wall -ggdb -O1 $(C11X) -c $<
 
 testSpill: testSpill.cpp asm.o
-	g++ -o $@ -Wall -ggdb -O1 -std=gnu++1z $^
-	valgrind --leak-check=full --show-leak-kinds=all $@ > $@.vg 2>&1
+	g++ -o $@ -Wall -ggdb -O1 $(C11X) $^
+	valgrind --leak-check=full --show-leak-kinds=all ./$@ > $@.vg 2>&1
 	@echo "gawking summary..."
 	gawk 'BEGIN{err=-1} /^==.*LEAK SUMMARY/{p=1;err=0} p==1&&/^[^=]/{p=0} p==1{print} END{exit err}' \
 		$@.vg || { echo "Ohoh: $@ did not terminate correcly"; \
 		echo "see $@.vg"; }
 
 testSymScopeUid: testSymScopeUid.cpp throw.hpp
-	g++ -o $@ -Wall -ggdb -O1 -std=gnu++1z $^
-	valgrind --leak-check=full --show-leak-kinds=all $@ > $@.vg 2>&1
+	g++ -o $@ -Wall -ggdb -O1 $(C11X) $^
+	valgrind --leak-check=full --show-leak-kinds=all ./$@ > $@.vg 2>&1
 	@echo "gawking summary..."
 	gawk 'BEGIN{err=-1} /^==.*LEAK SUMMARY/{p=1;err=0} p==1&&/^[^=]/{p=0} p==1{print} END{exit err}' \
 		$@.vg || { echo "Ohoh: $@ did not terminate correcly"; \
 		echo "see $@.vg"; }
 
 spill.o: spill.cpp spill.hpp spill-impl.hpp symbStates.hpp throw.hpp regDefs.hpp
-	g++ -o $@ -Wall -ggdb -O1 -std=gnu++1z -c $<
+	g++ -o $@ -Wall -ggdb -O1 $(C11X) -c $<
 
 # test based on spillable-base.hpp
 testSpill2: testSpill2.cpp spill.cpp spill-impl.hpp spill.hpp throw.hpp regDefs.hpp
-	g++ -o $@ -Wall -ggdb -O1 -std=gnu++1z $(filter %.cpp,$^)
-	valgrind --leak-check=full --show-leak-kinds=all $@ > $@.vg 2>&1
+	g++ -o $@ -Wall -ggdb -O1 $(C11X) $(filter %.cpp,$^)
+	valgrind --leak-check=full --show-leak-kinds=all ./$@ > $@.vg 2>&1
 	@echo "gawking summary..."
 	gawk 'BEGIN{err=-1} /^==.*LEAK SUMMARY/{p=1;err=0} p==1&&/^[^=]/{p=0} p==1{print} END{exit err}' \
 		$@.vg || { echo "Ohoh: $@ did not terminate correcly"; \
 		echo "see $@.vg"; }
 
 regStates.o: regStates.cpp regStates.hpp throw.hpp
-	g++ -o $@ -Wall -ggdb -O1 -std=gnu++1z -c $<
+	g++ -o $@ -Wall -ggdb -O1 $(C11X) -c $<
 
 # test based on regSymbol.hpp
 testSpill3: testSpill3.cpp spill.o regStates.o spill-impl.hpp spill.hpp throw.hpp regDefs.hpp
-	g++ -o $@ -Wall -ggdb -O1 -std=gnu++1z $(filter %.cpp,$^) $(filter %.o,$^)
-	valgrind --leak-check=full --show-leak-kinds=all $@ > $@.vg 2>&1
+	g++ -o $@ -Wall -ggdb -O1 $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
+	valgrind --leak-check=full --show-leak-kinds=all ./$@ > $@.vg 2>&1
 	@echo "gawking summary..."
 	gawk 'BEGIN{err=-1} /^==.*LEAK SUMMARY/{p=1;err=0} p==1&&/^[^=]/{p=0} p==1{print} END{exit err}' \
 		$@.vg || { echo "Ohoh: $@ did not terminate correcly"; \
@@ -45,8 +61,8 @@ testSpill3: testSpill3.cpp spill.o regStates.o spill-impl.hpp spill.hpp throw.hp
 
 # test based on regSymbol.hpp, register name and register id operations
 testRegSym: testRegSym.cpp spill.o regStates.o spill-impl.hpp spill.hpp throw.hpp regDefs.hpp
-	g++ -o $@ -Wall -ggdb -O1 -std=gnu++1z $(filter %.cpp,$^) $(filter %.o,$^)
-	valgrind --leak-check=full --show-leak-kinds=all $@ > $@.vg 2>&1
+	g++ -o $@ -Wall -ggdb -O1 $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
+	valgrind --leak-check=full --show-leak-kinds=all ./$@ > $@.vg 2>&1
 	@echo "gawking summary..."
 	gawk 'BEGIN{err=-1} /^==.*LEAK SUMMARY/{p=1;err=0} p==1&&/^[^=]/{p=0} p==1{print} END{exit err}' \
 		$@.vg || { echo "Ohoh: $@ did not terminate correcly"; \
@@ -55,24 +71,24 @@ testRegSym: testRegSym.cpp spill.o regStates.o spill-impl.hpp spill.hpp throw.hp
 symbStates.o: symbStates.cpp symbStates.hpp throw.hpp
 	g++ -o $@ -Wall -ggdb -O1 -std=gnu++11 -c $<
 reg-base.o: reg-base.cpp reg-base.hpp bitfield.hpp throw.hpp
-	g++ -o $@ -Wall -ggdb -O1 -std=gnu++1z -c $<
+	g++ -o $@ -Wall -ggdb -O1 $(C11X) -c $<
 testSymbStates: testSymbStates.cpp symbStates.o regStates.o reg-base.o spill.o symbStates.hpp spill.hpp throw.hpp
-	g++ -o $@ -Wall -ggdb -O1 -std=gnu++1z $^
-	valgrind --leak-check=full --show-leak-kinds=all $@ > $@.vg 2>&1
+	g++ -o $@ -Wall -ggdb -O1 $(C11X) $^
+	valgrind --leak-check=full --show-leak-kinds=all ./$@ > $@.vg 2>&1
 	@echo "gawking summary..."
 	gawk 'BEGIN{err=-1} /^==.*LEAK SUMMARY/{p=1;err=0} p==1&&/^[^=]/{p=0} p==1{print} END{exit err}' \
 		$@.vg || { echo "Ohoh: $@ did not terminate correcly"; \
 		echo "see $@.vg"; }
 
 prt_regnames: prt_regnames.cpp reg-base.o reg-base.hpp bitfield.hpp throw.hpp
-	g++ -o $@ -Wall -ggdb -O1 -std=gnu++1z $(filter %.cpp,$^) $(filter %.o,$^)
+	g++ -o $@ -Wall -ggdb -O1 $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 reg-aurora.o: reg-aurora.cpp reg-aurora.hpp reg-base.hpp bitfield.hpp throw.hpp
-	g++ -o $@ -Wall -ggdb -O1 -std=gnu++17 -c $<
+	g++ -o $@ -Wall -ggdb -O1 $(C11Y) -c $<
 testRegBase.asm: testRegBase
-	g++ -Wall -ggdb -O1 -std=gnu++1z -Wa,-adhln $^.cpp > $@
+	g++ -Wall -ggdb -O1 $(C11X) -Wa,-adhln $^.cpp > $@
 testRegBase: testRegBase.cpp reg-base.o reg-aurora.o reg-base.hpp bitfield.hpp throw.hpp
-	g++ -o $@ -Wall -ggdb -O1 -std=gnu++1z $(filter %.cpp,$^) $(filter %.o,$^)
-	valgrind --leak-check=full --show-leak-kinds=all $@ > $@.vg 2>&1
+	g++ -o $@ -Wall -ggdb -O1 $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
+	valgrind --leak-check=full --show-leak-kinds=all ./$@ > $@.vg 2>&1
 	@echo "gawking summary..."
 	gawk 'BEGIN{err=-1} /^==.*LEAK SUMMARY/{p=1;err=0} p==1&&/^[^=]/{p=0} p==1{print} END{exit err}' \
 		$@.vg || { echo "Ohoh: $@ did not terminate correcly"; \
