@@ -1,9 +1,11 @@
 #ifndef REGDEFS_HPP
 #define REGDEFS_HPP
+/** \file
+ * \todo split regDefs.hpp into generic and processor-specific bits.  This has
+ *       begun in reg-base.hpp and reg-aurora.hpp (testRegBase.cpp)
+ */
 #include <iosfwd>
 #include <cstdint>
-
-// TODO: split regDefs.hpp into generic and processor-specific bits
 
 namespace ve {
 

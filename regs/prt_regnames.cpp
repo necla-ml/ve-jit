@@ -20,7 +20,7 @@ int main(int argc, char**argv){
         cout<<(i%5==0?"\n    ":" ");
 		if( exc < maxexc && i == altreg[exc] ){
 			cout<<" \"%"<<altnam[exc];
-			auto const n = 5 - strlen(altnam[exc]);
+			int n = 5 - strlen(altnam[exc]);
 			for(int z=0; z<n; ++z) cout<<"\\0";
                         cout<<"\"";
 			++exc;

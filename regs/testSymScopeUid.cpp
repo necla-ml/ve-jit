@@ -4,6 +4,35 @@
 #include <iostream>
 using namespace std;
 
+using namespace scope;
+using namespace scope::detail;
+
+#if 1
+namespace scope {
+
+// just for demo...
+inline std::string bogusname(unsigned const uid){
+    std::ostringstream oss;
+    oss<<uid;
+    return oss.str();
+}
+// interesting that this somewhat different-looking constructor can be supplied like
+// a specialization, out-of-class...
+template<class BASE>
+    template<typename... Arg>
+inline ParSymbol<BASE>::ParSymbol(/*Ssym *ssym,*/ unsigned uid, unsigned scope, Arg&&... arg)
+    : BASE(bogusname(uid).c_str(), std::forward<Arg>(arg)...)
+      , uid(uid), scope(scope), ssym(nullptr), active(true)
+{
+    int const verbose=1;
+    if(verbose){
+        std::cout<<" Par(id"<<uid<<",sc"<<scope<<")" // <<ssym@"<<(void*)ssym
+            <<"'"<<BASE::name<<"'"; std::cout.flush();
+    }
+}
+}//scope::
+#endif
+
 static int testNum=0;
 #define TEST(MSG) do{ \
     ++testNum; \
@@ -145,7 +174,7 @@ void test2(){
 }
 void test2b(){
     // the new ParSymbol<BASE> also has active(), getActive() and uid members...
-    typedef SymStates<ParSymbol<>> Sst;
+    typedef SymStates<ParSymbol<ExBaseSym>> Sst;
     TEST("Construct SymScopeUid");
     {
         Sst sst;
@@ -240,7 +269,7 @@ void test3(){
     TEST("Add 2 symbols to Global scope");
     {
         Ssym ssym;
-        ssym.prtCurrentSymbols();
+        cout<<"Init syms "; ssym.prtCurrentSymbols(); cout<<endl;
         assert( ssym.scope() == 1U );
         assert( ssym.nScopeSymbols() == 0U );
         assert( ssym.scopeOf(1U) == 0U );
@@ -255,8 +284,7 @@ void test3(){
         assert( ssym.scopeOf(y) == 1U );
         assert( ssym.active(x) == 1U );
         assert( ssym.active(y) == 1U );
-        cout<<endl; ssym.prtCurrentSymbols(); cout<<endl;
-        cout<<endl;
+        cout<<"\nFinal syms "; ssym.prtCurrentSymbols(); cout<<endl;
     }
     TEST("global scope");
     {
@@ -281,9 +309,10 @@ void test3(){
         assert( ssym.active(x) == 1U );
         assert( ssym.active(y) == 1U );
         assert( ssym.scopeOf(z) == 2U );
-        assert( ssym.active(z) == 2U ); // oops?
+        assert( ssym.active(z) == 2U );
+        cout<<"scope "<<ssym.scope(); ssym.prtCurrentSymbols(); cout<<endl;
         ssym.end_scope();
-        cout<<endl; ssym.prtCurrentSymbols(); cout<<endl;
+        cout<<"scope "<<ssym.scope(); ssym.prtCurrentSymbols(); cout<<endl;
         assert( ssym.scopeOf(x) == 1U );
         assert( ssym.scopeOf(y) == 1U );
         assert( ssym.active(x) == 1U );
@@ -314,4 +343,4 @@ int main(int,char**){
     cout<<"\nGoodbye - ran "<<testNum<<" tests"<<endl;
     return 0;
 }
-// vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,h.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
+// vim: ts=4 sw=4 et cindent cino=^l0,\:.5s,=-.5s,N-s,g.5s,h.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break syntax=cpp.doxygen

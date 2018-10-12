@@ -5,14 +5,28 @@
 # It compiles under g++-5.4.0 with -std=c++11 some gnu extensions.
 # For ncc, the same nice features need -std=c++14 or -std=c++17.
 #
+TARGETS:=testSpill-old testSymbStates-old \
+	testSpill2 testSpill3 testRegSym \
+	testRegBase prt_regnames testSymScopeUid testScopedSpill0
+all: $(TARGETS) Goodbye
+
+PHONY: Goodbye
+Goodbye:
+	@echo 'All done, log files in *.vg'
+	@echo 'Goodbye'
+
+CXXFLAGS:=-g2 -O1 -std=c++11 -Wall
+# Hmmm. maybe leave out the next lines
 CC:=gcc
 CXX:=g++
 
-is_std_c14_ok := $(shell touch foo.c && $(CXX) -std=c++14 -c foo.c -o foo.o &> /dev/null && echo 'yes' || echo 'no'; rm -f foo.c foo.o)
+$(info test for c++14 ...)
+is_std_c14_ok := $(shell touch foo.c && $(CXX) -std=c++14 -c foo.c -o foo.o 2>&1 > /dev/null && echo 'yes' || echo 'no'; rm -f foo.c foo.o)
 ifeq ($(is_std_c14_ok), no)
 $(info $(shell echo `$(CXX) --version`))
 $(error $(CXX) -std=c++14 is not supported)
 endif
+$(info $(CC) -std=c++14? $(is_std_c14_ok))
 
 #    $(info is_fopenmp_simd_supported=$(is_fopenmp_simd_supported))
 #    GCC_VERSION:=$(shell $(CXX) -dumpversion) # oh, nc++ does not have dumpversion
@@ -21,18 +35,21 @@ endif
 #    $(error gcc version may be too old -- need some c++14 auto features )
 #    endif
 
-is_valgrind_ok := $(shell touch foo.c && valgrind --help &> /dev/null && echo 'yes' || echo 'no'; rm -f foo.c foo.o)
+VE_EXEC:=
+is_valgrind_ok := $(shell touch foo.c && valgrind --help 2>&1 > /dev/null && echo 'yes' || echo 'no'; rm -f foo.c foo.o)
+$(info valgrind? $(is_valgrind_ok))
 ifeq ($(is_valgrind_ok), yes)
 vg = $(if $filter($(is_valgrind_ok),yes), \
-	valgrind --leak-check=full --show-leak-kinds=all ./$@ > $@.vg 2>&1 \
-	&& echo "gawking summary..." && \
-	{ gawk 'BEGIN{err=-1} /^==.*LEAK SUMMARY/{p=1;err=0} p==1&&/^[^=]/{p=0} p==1{print} END{exit err}' $@.vg; \
-	  || { echo "Ohoh: $@ did not terminate correcly"; echo "see $@.vg"; } }
+     valgrind --leak-check=full --show-leak-kinds=all ./$@ > $@.vg 2>&1 \
+     && { echo "gawking summary..." \
+          && gawk 'BEGIN{err=-1} /^==.*LEAK SUMMARY/{p=1;err=0} p==1&&/^[^=]/{p=0} p==1{print} END{exit err}' $@.vg; } \
+     || { echo "Ohoh: $@ did not terminate correcly"; echo "see $@.vg"; } \
+     , $(VE_EXEC) ./$@ > $@.vg)
 else
 vg = ./$@ > $@.vg
 endif
 
-all: testSpill testSymScopeUid testSpill2 testSpill3 testRegSym testSymbStates testRegBase
+
 C11X:=-std=gnu++1z
 #C11Y:=-std=gnu++17
 # c++14 allows auto to deduce return type from 'return' statement.
@@ -46,10 +63,12 @@ C11Y:=-std=gnu++1z
 C11X:=-std=c++14
 C11Y:=-std=c++14
 
-asm.o: asm.cpp asm.hpp throw.hpp
-	g++ -o $@ -Wall -ggdb -O1 $(C11X) -c $<
+asm-old.o: asm-old.cpp asm-old.hpp throw.hpp
+	$(CXX) -o $@ $(CXXFLAGS) -c $<
 
-testSpill: testSpill.cpp asm.o
+testSpill-old-old: testSpill-old-old.cpp asm-old.o
+	$(CXX) -o $@ $(CXXFLAGS) $^
+testSpill-old: testSpill-old.cpp asm-old.o
 	g++ -o $@ -Wall -ggdb -O1 $(C11X) $^
 	#valgrind --leak-check=full --show-leak-kinds=all ./$@ > $@.vg 2>&1
 	#@echo "gawking summary..."
@@ -61,8 +80,11 @@ testSpill: testSpill.cpp asm.o
 testSymScopeUid: testSymScopeUid.cpp throw.hpp
 	g++ -o $@ -Wall -ggdb -O1 $(C11X) $^
 	$(call vg)
+testScopeSpill0: testScopeSpill0.cpp symScopeUid.hpp scopedSpillableBase.hpp throw.hpp
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
+	$(call vg)
 
-spill.o: spill.cpp spill.hpp spill-impl.hpp symbStates.hpp throw.hpp regDefs.hpp
+spill.o: spill.cpp spill.hpp spill-impl.hpp symbStates-old.hpp throw.hpp regDefs.hpp
 	g++ -o $@ -Wall -ggdb -O1 $(C11X) -c $<
 
 # test based on spillable-base.hpp
@@ -83,11 +105,11 @@ testRegSym: testRegSym.cpp spill.o regStates.o spill-impl.hpp spill.hpp throw.hp
 	g++ -o $@ -Wall -ggdb -O1 $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
 
-symbStates.o: symbStates.cpp symbStates.hpp throw.hpp
+symbStates-old.o: symbStates-old.cpp symbStates-old.hpp throw.hpp
 	g++ -o $@ -Wall -ggdb -O1 -std=gnu++11 -c $<
 reg-base.o: reg-base.cpp reg-base.hpp bitfield.hpp throw.hpp
 	g++ -o $@ -Wall -ggdb -O1 $(C11X) -c $<
-testSymbStates: testSymbStates.cpp symbStates.o regStates.o reg-base.o spill.o symbStates.hpp spill.hpp throw.hpp
+testSymbStates-old: testSymbStates-old.cpp symbStates-old.o regStates.o reg-base.o spill.o symbStates-old.hpp spill.hpp throw.hpp
 	g++ -o $@ -Wall -ggdb -O1 $(C11X) $^
 	$(call vg)
 
@@ -101,18 +123,9 @@ testRegBase: testRegBase.cpp reg-base.o reg-aurora.o reg-base.hpp bitfield.hpp t
 	g++ -o $@ -Wall -ggdb -O1 $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
 
-.PRECIOUS: asm.o regStates.o symbStates.o
+.PRECIOUS: asm-old.o regStates.o symbStates-old.o
 clean:
-	rm -f asm.o regStates.o symbStates.o *.o \
-		prt_regNames \
-		testSpill testSpill.vg \
-		testSpill2 testSpill2.vg \
-		testSpill3 testSpill3.vg \
-		testSymScopeUid testSymScopeUid.vg \
-		testSymbStates testSymbStates.vg \
-		testRegSym testRegSym.vg \
-		prt_regnames \
-		testRegBase testRegBase.vg \
-		mk*.log bld*.log
+	rm -f *.o *.lo *.i $(TARGETS) mk*.log bld*.log
 realclean: clean
+	rm -f $(patsubst %,%.vg,$(TARGETS))
 #

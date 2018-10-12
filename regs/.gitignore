@@ -11,5 +11,9 @@ testSpill3
 testRegSym
 testRegBase
 testSymbStates
+prt_regnames
+testSpill-old
+testSymbStates-old
 a.out
+html
 

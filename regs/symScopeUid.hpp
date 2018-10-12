@@ -5,6 +5,12 @@
  *
  * TestBed : 1 basic data structure, and 2 approaches to add client-state
  *           data to symbols.
+ *
+ * Should eventually cooperate with regSymbol.hpp that has core symbol state,
+ * and a first stab at registers.
+ *
+ * \todo Register state should eventually be based on reg-aurora.hpp + reg-base.hpp
+ * w/ mkChipRegisters to set up basic register state,
  */
 
 #include "throw.hpp"
@@ -15,6 +21,27 @@
 #include <iostream>
 #include <cstring>
 
+namespace scope {
+
+/** Main scope function.  This is based on detail::SymScopeUid and ParSymbol.
+ * - begin_scope, newsym, end_scope are the main functions. */
+template<class BASE> class SymbStates;
+
+// version 3: simple user-supplied BASE for symbol state
+/** \c ParSymbol supplies the "state" functions required by \c SymbStates.
+ * - const uid  (symId)
+ * - const scope
+ * - active flag, getActive(), goes false via end_scope or delsym.
+ */
+template<class BASE> class ParSymbol;
+
+template<class BASE>
+std::ostream& operator<<(std::ostream& os, ParSymbol<BASE> const& x);
+
+
+/** Mainly provides \c SymScopeUid some other 'ideas' code for testing and finally
+ * a \c ParSymbol helper that adds 'name' as a symbol feature. */
+namespace detail {
 // version 0: basic uids, demo the scope and newsym mechanics.
 class SymScopeUid;
 
@@ -24,17 +51,20 @@ template<typename SYMBASE=BaseSymbolState> class SymStates; // fwd decl
 
 // version 2: CRTP impl
 
-// version 3: simple user-supplied BASE for symbol state
-class ExBaseSym;
-template<class BASE=ExBaseSym> class ParSymbol;
-template<class BASE=ExBaseSym> class SymbStates;
+class ExBaseSym; ///< an example BASE for SymbStates (ParSymbol)
+}//detail::
 
+/** for the demo class... */
+std::ostream& operator<<(std::ostream&, const detail::ExBaseSym&);
+
+namespace detail {
 /** simple symbol scopes.
  *
  * Scopes and symbols are represented as uids.
  *
- * We do not maintain any symbol state, so in practice
- * you may also want a mapping of symbol id --> symbol object
+ * This is a low-level class, used within more useful objects,
+ * \b Derived objects will add some sort of \em state tracking,
+ * \c adding some sort of <TT>symbol id --> symbol state tracking.
  *
  * - Active scopes form a stack representing nested scopes.
  *   - Basic ops:
@@ -49,6 +79,7 @@ template<class BASE=ExBaseSym> class SymbStates;
  *     - unsigned sym = \c newsym();
  *     - \c scopeof(symId) always returns this scope.
  *     - \c active(symId) returns this [until scope stale]
+ *
  *   - ?? hmmm...
  *     - SYMBASE [default is \c BaseSymbolState] is returned to user,
  *       where more state can be added in a derived class.
@@ -62,11 +93,24 @@ template<class BASE=ExBaseSym> class SymbStates;
  * it is up to the user to maintain proper nestedness, by
  * reactivating innermost scopes first.
  *
+ * <B>There are some levels of refinement:</B>
+ *
+ * 1. \c SymStates&lt;SYMBASE&gt; is a simple wrapper, providing a void* state.
+ *   - with some examples of what to do with SYMBASE to add some state.
+ *
+ * 2. The more complex <B>\c SymbStates&lt;BASE&gt;</B> internally wraps your BASE
+ *   class into a \c ParSymbol&lt;BASE&gt; data member.
+ *   - begin_scope..end_scope etc. work as here.
+ *   - add a \c psym(symId) -> ParSymbol<BASE> lookup function for state.
+ *   - \c newsym(Arg&&... arg) now accepts an arg pack that is forwarded to
+ *     - ParSymbol&lt;BASE&gt; constructor (with some simId and scope info),
+ *     - and then your BASE constructor.
+ *
  */
 class SymScopeUid {
   public:
     template<class SYMBASE> friend class SymStates;
-    template<class BASE> friend class SymbStates;
+    template<class BASE> friend class scope::SymbStates;
     typedef std::unordered_set<unsigned> HashSet;
   protected:
     unsigned maxidSym;
@@ -229,10 +273,10 @@ class SymScopeUid {
 };
 
 
-/** Maybe...
- * \tparm SYMSTATE is a class containing a setActive(bool) function.
- *
- * .. just an idea ..
+/** A low-level helper class allowing \c SymStates to add the \e active
+ * attribute to a symbol.  This is a default template class for
+ * SymStates<SYMBASE=BaseSymbolState>.  It allows SymStates to return
+ * an additional opaque \c state.
  */
 struct BaseSymbolState {
   public:
@@ -255,6 +299,53 @@ struct BaseSymbolState {
     bool active;
 };
 
+/** Wrap a \c SymScopeUid with a map of symbol id --> state.
+ *
+ * Allowed states must at least provide the functionality of SYMBASE, which
+ * might add user-defined state to a \c BaseSymbolState.
+ *
+ * Basic usage is:
+ *
+ * - <B>\c begin_scope</B>, Now you can inquire about:
+ *   - current \c scope() (some number)
+ *   - number of symbols in current scope \c nScopeSymbols()
+ *     - (or total symbols \c nSymbols)
+ *     - or you can \c prtCurrentSymbols
+ * - <B>auto x = \c newsym</B>,
+ *   - you can now asck for \c scopeOf(x)
+ *   - you now cat ask if \c active(x)
+ *     - \c x begins active, and remains so until a matching \c end_scope.
+ *       - unless you \c delsym(x) in this or any contained scope.
+ *         - you can only delsym(x) once.  Then !active(x).
+ * - \c stateOf(x).state = new MyState(...) [see below!],
+ *   - because I really know nothing about your grand plans for \c x.
+ *   - and I don't want to know anything about your grand plans for \c x.
+ * - \c end_scope
+ *   - Now the \em current scope becomes stale
+ *     - all contained variables are set to inactive
+ *
+ * - For 'linear' programs \c begin_scope -- \c end_scope is all you need!
+ * - You \em can \c activate_scope(stale scope id).
+ *   - To re-enter a sub-block during a loop construct, for example.
+ *     - re-using old symbols for induction, say.
+ * - It is important to reactivate in correct order, because what happens is
+ *   - the stale scope is \e moved from the list of stale scopes to become
+ *     the current active scope, as if we had done a \e begin_scope.
+ *     - internal state reactivated symbols is... Oh. That's your problem.
+ *
+ * Now back to \c stateOf(x).state = new MyState(...) 
+ *
+ * - Ex. 1
+ *   - Suppose you want to derive from \c BaseSymbolState
+ *     and insulate the user from every seeing that void *state.
+ *   - We provide an example in \c BaseSymbol<DERIVED>, where the
+ *     SYMBASE functionality is beefed up with the ability to cast
+ *     up to your own DERIVED class, such as the \c ExDerivedSym class
+ *     that allows you attach a character string ExDerivedSym::name
+ *     as an example of additional state.
+ * - Ex. 2
+ *   - \e Better. Use your client class as a base class, as in ParSymbol<BASE>
+ */
 template<class SYMBASE/*=BaseSymbolState*/>
 class SymStates{
   private:
@@ -419,8 +510,13 @@ class ExDerivedSym : public BaseSymbol<ExDerivedSym> {
     { this->name = name; }
 };
 
+}//detail::
+
 //===================================================================================//
 /** maybe simpler is to set up the client class as a base class.
+ * New symbols had better have support for a default 'undefined' state,
+ * or you can construct a new one with arg packs that gets passed to
+ * the BASE constructor -- you may have to roll your own ParSymbol constructors :(
  */
 template<class BASE>
 class ParSymbol : public BASE {
@@ -433,24 +529,28 @@ class ParSymbol : public BASE {
     template<typename... Arg>
         ParSymbol(Ssym *ssym, unsigned uid, unsigned scope, Arg&&... arg);
 
+    BASE const& base() const {return *this;}
+    BASE      & base()       {return *this;}
     bool getActive() const {return this->active;}
     unsigned const uid;
     unsigned const scope;
-    /** cast to DERIVED */
-    //void *state;              // arbitrary client state
+    //void *state;              // arbitrary client state? No. BASE "is" the state
   protected:
     //-----------------------------------------------
-    //    This section is just for demo purposes
-    template<class SYMSTATE> friend class SymStates;
+    //    This section is just for demo purposes, testSymScopeUid.cpp
+    template<class SYMSTATE> friend class detail::SymStates;
+    //-----------------------------------------------
+    /** Importantly, \c ParSymbol forwards \e unrecognized args to the BASE constructor.
+     * In this simple implementation, the BASE has \b no access to uid or scope, since we
+     * are not yet fully constructed.  (Can be worked around, if necessary). */
     template<typename... Arg>
         ParSymbol(/*Ssym *ssym,*/ unsigned uid, unsigned scope, Arg&&... arg);
-    //-----------------------------------------------
 
     //void setUid(unsigned const uid)           {this->uid = uid;}
     //void setScope(unsigned const scope)       {this->scope = scope;}
   private:
-    void setActive(bool const active)         {this->active = active;}
-    SymbStates<BASE> *ssym;
+    void setActive(bool const active)         {this->active = active; BASE::setActive(active); }
+    SymbStates<BASE> *ssym;             ///< back-ptr to our owner, optional
     bool active;
 };
 
@@ -467,12 +567,17 @@ inline ParSymbol<BASE>::ParSymbol(Ssym *ssym, unsigned uid, unsigned scope, Arg&
     }
 }
 
+#if 0
 // just for demo...
 inline std::string bogusname(unsigned const uid){
     std::ostringstream oss;
     oss<<uid;
     return oss.str();
 }
+
+// interesting that this somewhat different-looking constructor can be supplied like
+// a specialization, out-of-class...
+
 template<class BASE>
     template<typename... Arg>
 inline ParSymbol<BASE>::ParSymbol(/*Ssym *ssym,*/ unsigned uid, unsigned scope, Arg&&... arg)
@@ -485,8 +590,22 @@ inline ParSymbol<BASE>::ParSymbol(/*Ssym *ssym,*/ unsigned uid, unsigned scope, 
             <<"'"<<BASE::name<<"'"; std::cout.flush();
     }
 }
+#endif
 
-
+/** Main public interface for scoped symbols.
+ *
+ * \tparm BASE must provide a function
+ * ```
+ *   template<typename SymIdSet> void chk_different_name(SymIdSet const& ids) const;
+ * ```
+ * that throws if some duplicate symbol id (as per ParSymbol<BASE>::uid) is to be disallowed.
+ * (It can be empty if you don't care).
+ *
+ * Other than that, it can hold whatever: Ex. symbol name, creation tick, usage ticks, register
+ * assignment, memory location, ...  We will pass all "extra" constructor args in \c newsym()
+ * down to your BASE class, without interpreting them.
+ *
+ */
 template<class BASE/*=ExBaseSym*/>
 class SymbStates{
   public:
@@ -495,11 +614,15 @@ class SymbStates{
     typedef BASE Base;
     friend BASE;
   private:
-    SymScopeUid ssu;
+    detail::SymScopeUid ssu;
     /** symbol uid --> external symbol state.  This data structure \em owns all the
      * Psym objects. */
     std::unordered_map<unsigned/*symId*/,Psym> syms;
   public:
+    //
+    //  TODO expose getting list of active scopes from ssu.scopes (by checking ssu.activeSco[scope])
+    //       expose getting list of syms in a scope (from ssu.activeSco)
+    //       etc as needed.
     unsigned begin_scope() { return ssu.begin_scope(); }
     void end_scope() {
         ssu.end_scope();
@@ -528,8 +651,7 @@ class SymbStates{
         assert( ret == ssu.scopeOf(symId) );
         return ret;
     }
-    /** return \b scope of \c symId.
-     * Note: diff't from bool \c scopeOf(symId).getActive()
+    /** return \b scope of active \c symId, or 0.
      */
     unsigned active(unsigned const symId) const {
         unsigned ret = 0U;
@@ -549,6 +671,8 @@ class SymbStates{
     //    assert( !ssu.scopes.empty() );
     //    return ssu.scopes.front().syms;
     //}
+    /** psym(simId) for sure has at least a 'name()' function [from \c ParSymbol].
+     */
     Psym const& psym(unsigned const symId) const {
         auto const psym = syms.find(symId);
         if( psym == syms.end() ){
@@ -559,6 +683,7 @@ class SymbStates{
     }
     template<typename... Arg>
         unsigned newsym(Arg&&... arg) {
+            // get a new symbol id
             unsigned const symId = ssu.newsym();
             assert( ssu.active(symId) );
             assert( ssu.active(symId) == this->scope() );
@@ -568,6 +693,7 @@ class SymbStates{
             assert( syms.find(symId) == syms.end() );
             //syms.emplace( symId, Psym{symId,scope,arg}... ); // ???
             try{
+                // construct ParSymbol symbol+scope (and user's BASE state)
                 //std::cout<<" create Psym..."<<std::endl;
                 Psym psym{this,symId,scope,arg...};
                 //std::cout<<" chk_different_name..."<<std::endl;
@@ -614,10 +740,10 @@ class SymbStates{
     size_t nSymbols() { return syms.size(); }
     void prtCurrentSymbols() const{
         std::cout<<" CurrentScope"; std::cout.flush();
-        SymScopeUid::ScopeSymbols const& curScopeSymbols = ssu.scopes.front();
+        detail::SymScopeUid::ScopeSymbols const& curScopeSymbols = ssu.scopes.front();
         unsigned scope = curScopeSymbols.scope;
         std::cout<<scope; std::cout.flush();
-        SymScopeUid::HashSet const& curSyms = curScopeSymbols.syms;
+        detail::SymScopeUid::HashSet const& curSyms = curScopeSymbols.syms;
         char const* sep = "{";
         if(curSyms.empty()) std::cout<<sep;
         else for(auto const sym : curSyms ){
@@ -635,6 +761,15 @@ class SymbStates{
     }
 };//class SymbStates
 
+template<class BASE>
+std::ostream& operator<<(std::ostream& os, ParSymbol<BASE> const& x){
+    return os
+        <<" ParSymbol:u"<<x.uid
+        <<(x.getActive()?'+':'-')
+        <<"s"<<x.scope
+        <<"<"<<x.base()<<"> ";
+}
+
 #if 0
 inline void ExBaseSym::chk_name_unique_in_current_scope()
 {
@@ -650,6 +785,9 @@ inline void ExBaseSym::chk_name_unique_in_current_scope()
 
 // test class separation by putting the "USER CLASS" after everything else...
 
+
+namespace detail{
+
 /** This is an example base class.  In practice, many more features
  * would be provided automatically (including perhaps requiring a symbol "name").
  *
@@ -663,6 +801,7 @@ class ExBaseSym{
     typedef ParSymbol<ExBaseSym> Psym;
     friend Psym;
     friend Ssym;
+    friend std::ostream& scope::operator<<(std::ostream& os, ExBaseSym const& x);
 
     virtual ~ExBaseSym() {}
   protected:
@@ -672,7 +811,11 @@ class ExBaseSym{
     ExBaseSym(char const* name) : name(name) {
         //chk_name_unique_in_current_scope(); NO! parent is not fully initialized at this point!
     }
+    /** return the ParSymbol, which has scope+uid, and maybe a SymbStates ptr.
+     * For example our low-level symbol id is parent()->uid.
+     */
     Psym const *parent() const { return dynamic_cast<Psym const*>(this);}
+    /** might return null */
     Ssym const *symids() const { return (dynamic_cast<Psym const*>(this))->ssym;}
   private:
     /** throw on duplicate symbol name in scame scope.
@@ -682,6 +825,7 @@ class ExBaseSym{
     template<typename SymIdSet>
         void chk_different_name(SymIdSet const& ids) const;
 
+    void setActive(bool set=true) {} // nothing to do, but we were told about it.
     char const* name;
 };
 
@@ -701,5 +845,11 @@ void ExBaseSym::chk_different_name(SymIdSet const& ids) const
         }
     }
 }
+}//detail::
+std::ostream& operator<<(std::ostream& os, detail::ExBaseSym const& x){
+    return os<<"ExBaseSym{"<<x.name<<"}";
+}
+
+}//scope::
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,h.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
 #endif // SYMSCOPEUID_HPP

@@ -9,7 +9,7 @@ class RegSymbol; // SpillableBase + name, rtype and regId()
 /** Flesh out a \c SpillableBase symbol with \c name,
  * register type \c rtype [,and user-settable \c regId()].
  *
- * see symScopeUid.hpp  symbol<-->scope relation maintained separately
+ * see symScopeUid.hpp  symbol<-->scope relation will be maintained separately
  */
 class RegSymbol : protected SpillableBase
 {

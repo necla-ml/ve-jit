@@ -1,9 +1,13 @@
-
-#include "symbStates.hpp"
-//#include "regStates.hpp"
+/** \file
+ * intended to test scoped spillable symbols.
+ * i.e. scopedSpillableBase.hpp unified with symScopeUid.hpp,
+ * for orthogonal control of scope vs symbols with Locn flags (reg/mem)
+ */
+#include "scopedSpillableBase.hpp" // this also includes symScopeUid.hpp
 
 #include <iostream>
 using namespace std;
+using namespace scope;
 
 static int testNum=0;
 #define TEST(MSG) do{ \
@@ -14,7 +18,7 @@ static int testNum=0;
 }while(0)
 
 void test1(){
-    typedef SymbStates<ExBaseSym> Ssym;
+    typedef scope::SymbStates<ScopedSpillableBase> Ssym;
     TEST("Construct SymScopeUid");
     {
         Ssym ssym;
@@ -25,7 +29,7 @@ void test1(){
         assert( ssym.active(1U) == 0U );
         cout<<endl;
     }
-#if 1
+#if 0
     TEST("Add 2 symbols to Global scope");
     {
         Ssym ssym;
@@ -98,4 +102,4 @@ int main(int,char**){
     cout<<"\nGoodbye - ran "<<testNum<<" tests"<<endl;
     return 0;
 }
-// vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
+// vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break syntax=cpp.doxygen

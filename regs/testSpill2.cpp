@@ -54,7 +54,7 @@ class SpillableSym : public SpillableBase
 /** Spillable objects need a way to convert symbol Ids into SpillableSym */
 struct DemoSymbStates {
     typedef SpillableSym Psym;  // "parent" symbol class
-    map<unsigned,Psym> psyms;
+    map<unsigned,Psym> psyms;   // symId --> symbol info
 
     DemoSymbStates()
         : psyms(), spill(this) {}

@@ -1,5 +1,13 @@
 #ifndef SPILLABLE_BASE_HPP
 #define SPILLABLE_BASE_HPP
+/** \file
+ * Basic Spillable Symbol Info.
+ * \sa spill.hpp spill-impl.hpp regSymbol.hpp
+ * \sa testSpill2.cpp, testSpill3.cpp
+ *
+ * \sa scopedSpillableBase.hpp for a version that is supervised by scope::SymbStates, which
+ * means we don't need to worry about symbol ids, or maintaining an \c active flag.
+ */
 
 #include <iostream>
 #include <cassert>
@@ -157,5 +165,6 @@ std::ostream& operator<<(std::ostream& os, SpillableBase const& x){
     if(x.getMEM()) os<<(x.getStale()? "~M": "M");
     return os<<"}";
 }
+
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,h.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
 #endif // SPILLABLE_BASE_HPP
