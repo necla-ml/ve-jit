@@ -36,7 +36,12 @@ $(error $(CXX) -std=c++14 is not supported)
 endif
 $(info $(CC) -std=c++14? $(is_std_c14_ok))
 
-is_valgrind_ok := $(shell touch foo.c && valgrind --help 2>&1 > /dev/null && echo 'yes' || echo 'no'; rm -f foo.c foo.o)
+#
+# override for ve, your host may have a /usr/bin/valgrind that we do not want
+#
+#is_valgrind_ok := $(shell touch foo.c && valgrind --help 2>&1 > /dev/null && echo 'yes' || echo 'no'; rm -f foo.c foo.o)
+is_valgrind_ok := no
+
 $(info valgrind? $(is_valgrind_ok))
 ifeq ($(is_valgrind_ok), yes)
 vg = $(if $filter($(is_valgrind_ok),yes), \
@@ -46,7 +51,7 @@ vg = $(if $filter($(is_valgrind_ok),yes), \
      || { echo "Ohoh: $@ did not terminate correcly"; echo "see $@.vg"; } \
      , $(VE_EXEC) ./$@ > $@.vg)
 else
-vg = ./$@ > $@.vg
+vg = $(VE_EXEC) ./$@ > $@.vg
 endif
 
 asm-old.o: asm-old.cpp asm-old.hpp throw.hpp
@@ -54,6 +59,7 @@ asm-old.o: asm-old.cpp asm-old.hpp throw.hpp
 
 testSpill-old: testSpill-old.cpp asm-old.o
 	$(CXX) -o $@ $(CXXFLAGS) $^
+	$(call vg)
 
 testSymScopeUid: testSymScopeUid.cpp symScopeUid.hpp throw.hpp
 	$(CXX) -o $@.i $(CXXFLAGS) -dD -E $<
