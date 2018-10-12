@@ -68,7 +68,9 @@ class ScopedSpillableBase {
      * (We don't even have a 'name' field here)
      */
     template<typename SymIdSet>
-        void chk_different_name(SymIdSet const& ids) const;
+        void chk_different_name(SymIdSet const& ids) const {
+            // no-op, we don't have a name so assume no conflict
+        }
 
     ///@}
 
@@ -126,17 +128,20 @@ class ScopedSpillableBase {
      *   we \c setREG(false) and \c setMEM(false).   (Content is unknown)
      */
     ScopedSpillableBase& setActive(bool set=true) {
+        std::cout<<"Spillable::setActive("<<set<<") getActive="<<getActive()<<std::endl;
         setREG(false).setMEM(false);
+        std::cout<<"Spillable::setActive("<<set<<") deact REG and MEM"<<std::endl;
         // next line is done by parent, before coming here:
         //locn = static_cast<Where>( set? locn|ACTIVE: locn&~ACTIVE );
-        assert( !getActive() && !getREG() && !getMEM() );
+        assert( !getREG() && !getMEM() );
+        // !getActive() will happen real soon, in ParSymbol
         return *this;
     }
   public:
     /** call \c setREG(true) when the register value associated with this symbol is set or is changed,
      * and \c setREG(false) when the register is dissociated from this symbol. */
     ScopedSpillableBase& setREG(bool set=true) {
-        assert( this->getActive() );
+        assert( this->getActive() );  // when we are going false, we are already deactivated in ParSymbol!
         locn = static_cast<Where>( set? locn|REG: locn&~REG );
         if(set && getMEM()) incStale();
         //cout<<" setREG--->"<<*this<<" "; cout.flush();
@@ -175,11 +180,9 @@ class ScopedSpillableBase {
 };
 
 std::ostream& operator<<(std::ostream& os, ScopedSpillableBase const& x){
-    os<<"Sym{"<<x.symId()<<(x.getActive()?"+":"-")
-        <<"l"<<x.len<<"a"<<x.align<<"s"<<x.getStale();
-    // register changed without mem update --> "staleness"
-    //if(x.getREG()) os<<"R";
-    //if(x.wasREG()) os<<"~R";
+    //os<<"SpillableBae{"<<x.symId()<<(x.getActive()?"+":"-")
+    //    <<"l"<<x.len<<"a"<<x.align<<"s"<<x.getStale();
+    os<<"Spillable{l"<<x.len<<"a"<<x.align<<"s"<<x.getStale();
     os<<(x.getREG()? "R":"~R");
     if(x.getMEM()) os<<(x.getStale()? "~M": "M");
     return os<<"}";

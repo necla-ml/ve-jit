@@ -29,7 +29,6 @@ void test1(){
         assert( ssym.active(1U) == 0U );
         cout<<endl;
     }
-#if 0
     TEST("Add 2 symbols to Global scope");
     {
         Ssym ssym;
@@ -39,44 +38,56 @@ void test1(){
         assert( ssym.scopeOf(1U) == 0U );
         assert( ssym.active(1U) == 0U );
 
-        auto x = ssym.newsym("x");
+        //auto x = ssym.newsym("x"); Oh: ScopedSpillableBase(int const bytes, int const align)
+        //  maybe later can get these as default values from RegisterBase TODO
+        auto x = ssym.newsym(8,8);
         assert( x!=0U );
-        auto y = ssym.newsym("y");
+        auto y = ssym.newsym(8,8);
         assert( y!=0U );
         assert( y!=x );
         assert( ssym.scopeOf(x) == 1U );
         assert( ssym.scopeOf(y) == 1U );
         assert( ssym.active(x) == 1U );
         assert( ssym.active(y) == 1U );
-        cout<<endl; ssym.prtCurrentSymbols(); cout<<endl;
+        cout<<endl; ssym.prtCurrentSymbols(1/*verbose*/); cout<<endl;
         cout<<endl;
     }
+    // OK, this is pretty boring.  Let me do more with a NAMED base class.  In another test
     TEST("global scope");
     {
         Ssym ssym;
-        auto x = ssym.newsym("x");
-        auto y = ssym.newsym("y");
-        cout<<endl; ssym.prtCurrentSymbols(); cout<<endl;
+        auto x = ssym.newsym(1,8);
+        auto y = ssym.newsym(2,8);
+        cout<<endl; ssym.prtCurrentSymbols(1/*verbose*/); cout<<endl;
         auto zscope = ssym.begin_scope();
         cout<<"scope="<<zscope<<" "; cout.flush();
-        ssym.prtCurrentSymbols(); cout<<endl;
+        ssym.prtCurrentSymbols(1); cout<<endl;
         assert( ssym.scope() == 2U );
-        auto z = ssym.newsym("z");
+        auto z = ssym.newsym(4,8);
         cout<<"z="<<z<<endl; cout.flush();
-        ssym.prtCurrentSymbols(); cout<<endl; cout.flush();
+        ssym.prtCurrentSymbols(1); cout<<endl; cout.flush();
         cout.flush();
+        cout<<" ssym.active(z)="<<ssym.active(z)<<endl;
         cout<<" ssym.active(z)="<<ssym.active(z)<<endl;
         cout.flush();
         assert( ssym.active(z) );
+        cout<<"A"; cout.flush();
         assert( z > y );
+        cout<<"B"; cout.flush();
         assert( ssym.scopeOf(x) == 1U );
+        cout<<"C"; cout.flush();
         assert( ssym.scopeOf(y) == 1U );
+        cout<<"D"; cout.flush();
         assert( ssym.active(x) == 1U );
+        cout<<"E"; cout.flush();
         assert( ssym.active(y) == 1U );
+        cout<<"F"; cout.flush();
         assert( ssym.scopeOf(z) == 2U );
+        cout<<"G"; cout.flush();
         assert( ssym.active(z) == 2U ); // oops?
+        cout<<"H"; cout.flush();
         ssym.end_scope();
-        cout<<endl; ssym.prtCurrentSymbols(); cout<<endl;
+        cout<<endl; ssym.prtCurrentSymbols(1); cout<<endl;
         assert( ssym.scopeOf(x) == 1U );
         assert( ssym.scopeOf(y) == 1U );
         assert( ssym.active(x) == 1U );
@@ -85,6 +96,7 @@ void test1(){
         cout<<" ssym.active(z) = "<<ssym.active(z)<<endl;
         assert( ssym.active(z) == 0U ); // <---
 
+        cout<<" reactivating a stale scope (strange, but allowed)"<<endl;
         ssym.activate_scope(zscope);
         assert( ssym.scopeOf(z) == 2U );
         assert( ssym.active(z) == 2U );
@@ -93,7 +105,6 @@ void test1(){
         assert( ssym.active(z) == 0U );
 
     }
-#endif
 }
 
 int main(int,char**){

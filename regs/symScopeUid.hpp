@@ -549,7 +549,12 @@ class ParSymbol : public BASE {
     //void setUid(unsigned const uid)           {this->uid = uid;}
     //void setScope(unsigned const scope)       {this->scope = scope;}
   private:
-    void setActive(bool const active)         {this->active = active; BASE::setActive(active); }
+    void setActive(bool const active) {
+        //std::cout<<"ParSymbol::setActive("<<active<<")  "; std::cout.flush();
+        if(active) this->active = active;
+        BASE::setActive(active);        // order important, so BASE can check more invariants!
+        if(!active) this->active = active;
+    }
     SymbStates<BASE> *ssym;             ///< back-ptr to our owner, optional
     bool active;
 };
@@ -563,7 +568,7 @@ inline ParSymbol<BASE>::ParSymbol(Ssym *ssym, unsigned uid, unsigned scope, Arg&
     int const verbose=1;
     if(verbose){
         std::cout<<" Par(id"<<uid<<",sc"<<scope<<")" // <<ssym@"<<(void*)ssym
-            <<"'"<<BASE::name<<"'"; std::cout.flush();
+            <<"'"<<base()<<"'"; std::cout.flush();
     }
 }
 
@@ -625,6 +630,7 @@ class SymbStates{
     //       etc as needed.
     unsigned begin_scope() { return ssu.begin_scope(); }
     void end_scope() {
+#if 0 // reverse the order, so more invariants hold in base classes
         ssu.end_scope();
         for(auto symId: ssu.stales.front().syms){
             //assert(syms[symId].getActive() == true); // maybe can deactivate syms one-by-one??
@@ -632,6 +638,16 @@ class SymbStates{
             assert( psym != syms.end() );
             psym->second.setActive(false);
         }
+#else
+        for(auto symId: ssu.scopes.front().syms){ // from current scope
+            //assert(syms[symId].getActive() == true); // maybe can deactivate syms one-by-one??
+            auto const psym = syms.find(symId);
+            assert( psym != syms.end() );
+            std::cout<<" end"<<symId<<" "<<psym->second<<std::endl; std::cout.flush();
+            psym->second.setActive(false);
+        }
+        ssu.end_scope(); // NOW [after deactivating] move ssu current scope to ssu.stales
+#endif
     }
     void activate_scope(unsigned const stale) {
         ssu.activate_scope(stale);
@@ -722,7 +738,7 @@ class SymbStates{
                         oursym.chk_different_name(sc.syms);
                     }catch(...){
                         // turn this exception into a non-fatal warning
-                        std::cout<<" Warning: symbol "<<oursym.name<<" in scope "<<ssu.scope()
+                        std::cout<<" Warning: symbol id"<<symId<<" in scope "<<ssu.scope()
                             <<" hides one of same name in enclosing scope "<<sc.scope<<std::endl;
                     }
                 }
@@ -738,7 +754,7 @@ class SymbStates{
     unsigned scope() const { return ssu.scope(); }
     size_t nScopeSymbols() { return ssu.nScopeSymbols(); }
     size_t nSymbols() { return syms.size(); }
-    void prtCurrentSymbols() const{
+    void prtCurrentSymbols(int verbose=0) const{
         std::cout<<" CurrentScope"; std::cout.flush();
         detail::SymScopeUid::ScopeSymbols const& curScopeSymbols = ssu.scopes.front();
         unsigned scope = curScopeSymbols.scope;
@@ -748,13 +764,17 @@ class SymbStates{
         if(curSyms.empty()) std::cout<<sep;
         else for(auto const sym : curSyms ){
             std::cout<<sep<<sym; std::cout.flush();
+            // is it active right now?
             auto found = syms.find(sym);
             assert( found != syms.end() );
             assert( found->second.uid == sym );
             //assert( syms[sym].active == true );
             assert( found->second.scope == scope );
-            if( !found->second.active ) std::cout<<"!";
-            sep = ",";
+            if( verbose<=0 && !found->second.active ) std::cout<<"!";
+            //if(verbose>0) {std::cout<<found->second; std::cout.flush();}
+            //if(verbose>0) {std::cout<<"="<<found->second.base(); std::cout.flush();}
+            if(verbose>0) {std::cout<<"="<<found->second; std::cout.flush();}
+            sep = ", ";
         }
         std::cout<<"}";
         std::cout.flush();
@@ -764,10 +784,11 @@ class SymbStates{
 template<class BASE>
 std::ostream& operator<<(std::ostream& os, ParSymbol<BASE> const& x){
     return os
-        <<" ParSymbol:u"<<x.uid
+        <<"ParSymbol"
         <<(x.getActive()?'+':'-')
+        <<x.uid
         <<"s"<<x.scope
-        <<"<"<<x.base()<<"> ";
+        <<"<"<<x.base()<<">}";
 }
 
 #if 0

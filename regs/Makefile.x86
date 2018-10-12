@@ -37,7 +37,7 @@ $(info $(CC) -std=c++14? $(is_std_c14_ok))
 
 VE_EXEC:=
 is_valgrind_ok := $(shell touch foo.c && valgrind --help 2>&1 > /dev/null && echo 'yes' || echo 'no'; rm -f foo.c foo.o)
-$(info valgrind? $(is_valgrind_ok))
+$(info valgrind? <$(is_valgrind_ok)>)
 ifeq ($(is_valgrind_ok), yes)
 vg = $(if $filter($(is_valgrind_ok),yes), \
      valgrind --leak-check=full --show-leak-kinds=all ./$@ > $@.vg 2>&1 \
@@ -75,13 +75,13 @@ testSpill-old: testSpill-old.cpp asm-old.o
 	#gawk 'BEGIN{err=-1} /^==.*LEAK SUMMARY/{p=1;err=0} p==1&&/^[^=]/{p=0} p==1{print} END{exit err}' \
 	#	$@.vg || { echo "Ohoh: $@ did not terminate correcly"; \
 	#	echo "see $@.vg"; }
-	$(call vg)
+	$(call vg,$@)
 
 testSymScopeUid: testSymScopeUid.cpp throw.hpp
 	g++ -o $@ -Wall -ggdb -O1 $(C11X) $^
 	$(call vg)
-testScopeSpill0: testScopeSpill0.cpp symScopeUid.hpp scopedSpillableBase.hpp throw.hpp
-	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
+testScopedSpill0: testScopedSpill0.cpp symScopeUid.hpp scopedSpillableBase.hpp throw.hpp
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^) && echo YAY
 	$(call vg)
 
 spill.o: spill.cpp spill.hpp spill-impl.hpp symbStates-old.hpp throw.hpp regDefs.hpp

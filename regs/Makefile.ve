@@ -59,7 +59,7 @@ testSymScopeUid: testSymScopeUid.cpp symScopeUid.hpp throw.hpp
 	$(CXX) -o $@.i $(CXXFLAGS) -dD -E $<
 	$(CXX) -o $@ $(CXXFLAGS) $<
 	$(call vg)
-testScopeSpill0: testScopeSpill0.cpp symScopeUid.hpp scopedSpillableBase.hpp throw.hpp
+testScopedSpill0: testScopedSpill0.cpp symScopeUid.hpp scopedSpillableBase.hpp throw.hpp
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
 #	
