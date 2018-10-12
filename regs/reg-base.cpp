@@ -10,10 +10,10 @@ std::ostream& operator<<(std::ostream& os, RegId const r){
 }
 std::ostream& operator<<(std::ostream& os, RegisterBase::Use const u){
     if( u == RegisterBase::Use::free ) /* nop */ ;
-    //    <^K>.M· <^K>*X× <^K>Rg® <^K>o/ø <^K>Cu¤
-    // (char)182    215     174     248     164
-    else if( u == RegisterBase::Use::used ) os<<(char)164;
-    else if (u == RegisterBase::Use::reserved) os<<(char)174;
+    //    <^K>.M· <^K>*X× <^K>Rg® <^K>o/ø <^K>Cu¤ <^K>>» <^K><<«
+    // (char)182    215     174     248     164     171    187
+    else if( u == RegisterBase::Use::used ) os<<(char)187;    // just some mark
+    else if (u == RegisterBase::Use::reserved) os<<(char)215; // like e'x'cluded
     else os<<static_cast<RegisterBase::flags_t>(u);
     return os;
 }
