@@ -27,6 +27,8 @@
  * 
  */
 //@{
+/** RegId is a typed enum. Don't know that this strictness was worth
+ * the bother, but at least a RegId will print as rNNN. */
 enum RegId : int_least16_t {};
 
 #if 0

@@ -5,6 +5,11 @@
  * Compared with \ref spillable-base.hpp, we give up control of an \e active symbol concept,
  * since \ref symScopeUid.hpp has a SymbStates class that will assign symbol ids, scope ids,
  * and tell us about whether things are in active scope or not.
+ *
+ * It is a base class in the sense that it supports only the attributes required
+ * for a register that can be spilled (i.e. \e bytes length and \e align).
+ *
+ * No name, No register type, No register id, nothing.
  */
 
 #include "symScopeUid.hpp"

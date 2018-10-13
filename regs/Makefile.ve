@@ -1,7 +1,8 @@
 # We assume $(CC) is ncc/nc++
 TARGETS:=testSpill-old testSymbStates-old \
 	testSpill2 testSpill3 testRegSym \
-	testRegBase prt_regnames testSymScopeUid testScopedSpill0
+	testRegBase prt_regnames testSymScopeUid testScopedSpill0 \
+	tSpill2
 all: $(TARGETS) Goodbye
 
 PHONY: Goodbye
@@ -77,11 +78,19 @@ testScopedSpill0: testScopedSpill0.cpp symScopeUid.hpp scopedSpillableBase.hpp t
 
 spill.o: spill.cpp spill.hpp spill-impl.hpp symbStates-old.hpp throw.hpp regDefs.hpp
 	$(CXX) -o $@ $(CXXFLAGS) -c $<
+# new header arrangement...
+spill2.o: spill2.cpp spill2.hpp spill-impl2.hpp throw.hpp reg-base.hpp
+	g++ -o $@ -Wall -ggdb -O1 $(C11X) -c $<
 
 # test based on spillable-base.hpp
 testSpill2: testSpill2.cpp spill.cpp spill-impl.hpp spill.hpp throw.hpp regDefs.hpp
 	$(CXX) -o $@ $(CXXFLAGS) $(filter %.cpp,$^)
 	$(call vg)
+# new version...
+tSpill2: testSpill2.cpp spill2.o spill-impl2.hpp spill2.hpp throw.hpp reg-base.hpp
+	g++ -o $@ -Wall -ggdb -O1 $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
+	$(call vg)
+
 
 regStates.o: regStates.cpp regStates.hpp throw.hpp
 	$(CXX) -o $@ $(CXXFLAGS) -c $<

@@ -23,6 +23,11 @@
 
 namespace scope {
 
+// todo use this typedef in this file!
+//typedef unsigned SymId;
+// Perhaps eventually, like RegId
+//enum SymId : int_least16_t {};
+
 /** Main scope function.  This is based on detail::SymScopeUid and ParSymbol.
  * - begin_scope, newsym, end_scope are the main functions. */
 template<class BASE> class SymbStates;
@@ -103,7 +108,7 @@ namespace detail {
  *   - begin_scope..end_scope etc. work as here.
  *   - add a \c psym(symId) -> ParSymbol<BASE> lookup function for state.
  *   - \c newsym(Arg&&... arg) now accepts an arg pack that is forwarded to
- *     - ParSymbol&lt;BASE&gt; constructor (with some simId and scope info),
+ *     - ParSymbol&lt;BASE&gt; constructor (with some symId and scope info),
  *     - and then your BASE constructor.
  *
  */
@@ -687,7 +692,7 @@ class SymbStates{
     //    assert( !ssu.scopes.empty() );
     //    return ssu.scopes.front().syms;
     //}
-    /** psym(simId) for sure has at least a 'name()' function [from \c ParSymbol].
+    /** psym(symId) for sure has at least a 'name()' function [from \c ParSymbol].
      */
     Psym const& psym(unsigned const symId) const {
         auto const psym = syms.find(symId);
@@ -872,5 +877,5 @@ std::ostream& operator<<(std::ostream& os, detail::ExBaseSym const& x){
 }
 
 }//scope::
-// vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,h.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
+// vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,h.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break syntax=cpp
 #endif // SYMSCOPEUID_HPP

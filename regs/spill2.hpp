@@ -1,5 +1,5 @@
-#ifndef SPILL_HPP
-#define SPILL_HPP
+#ifndef SPILL2_HPP
+#define SPILL2_HPP
 /** \file
  * Spill area tracking: template functions.
  *
@@ -9,10 +9,10 @@
  * \todo Spill.hpp should use reg-base.hpp instead of the grab-bag regDefs.hpp
  */
 
-#include "regDefs.hpp"
-// actually we probably only need SymId and RegId, and we can get these
-// by asking that SYMBSTATES provide these typedefs.
-// ... or just pull in reg-base_
+#include "reg-base.hpp"
+// It seems the only required type is RegId which changes to a
+// typedef enum as we switch to reg-base.hpp (from regDefs.hpp)
+// SymId is not used, it is just unsigned everywhere.
 #include <forward_list>
 
 namespace ve {
@@ -120,5 +120,5 @@ class Spill {
 };//class Spill
 
 }//ve::
-#endif // SPILL_HPP
-// vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
+#endif // SPILL2_HPP
+// vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break syntax=cpp.doxygen
