@@ -8,7 +8,7 @@
 TARGETS:=testSpill-old testSymbStates-old \
 	testSpill2 testSpill3 testRegSym \
 	testRegBase prt_regnames testSymScopeUid testScopedSpill0 \
-	tSpill2
+	tSpill2 regSymbol2.o
 all: $(TARGETS) Goodbye
 
 PHONY: Goodbye
@@ -88,6 +88,9 @@ testScopedSpill0: testScopedSpill0.cpp symScopeUid.hpp scopedSpillableBase.hpp t
 spill.o: spill.cpp spill.hpp spill-impl.hpp symbStates-old.hpp throw.hpp regDefs.hpp
 	g++ -o $@ -Wall -ggdb -O1 $(C11X) -c $<
 spill2.o: spill2.cpp spill2.hpp spill-impl2.hpp throw.hpp reg-base.hpp
+	g++ -o $@ -Wall -ggdb -O1 $(C11X) -c $<
+# header compilation check:
+regSymbol2.o: regSymbol2.hpp # see if the header makes sense: what is missing?
 	g++ -o $@ -Wall -ggdb -O1 $(C11X) -c $<
 
 # test based on spillable-base.hpp

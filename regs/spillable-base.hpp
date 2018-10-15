@@ -76,6 +76,7 @@ class SpillableBase {
      * - setting register value should call \c setREG(true)
      * - setting memory value should call \c setMEM(true)
      * - register value change ==> memory staleness up (if in memory)
+     *
      */
     SpillableBase(unsigned const uid, int const bytes, int const align)
         : uid(uid), len(bytes), align(align),

@@ -78,7 +78,7 @@ class ScopedSpillableBase {
         }
 
     ///@}
-
+  protected:
     /**  symbols constructed "\c active" ~ (in some valid scope).
      * - symbol \em location (\c Where) flags:
      *   - \c getActive(), \c inREG(), \c inMEM()
@@ -122,6 +122,8 @@ class ScopedSpillableBase {
     bool getMEM() const             { return (locn&MEM); }
   private:
     /** We no longer control scope-active setting.
+     * Therefore this is accessible only to \c Ps
+     * (which via scope::SymbStates controls this call carefully)
      *
      * When exiting scope, symbols should \c setActive(false) this is done
      * during \c SymbStates \c end_scope() or \c delsym(symId)

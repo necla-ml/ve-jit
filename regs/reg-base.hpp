@@ -348,6 +348,11 @@ constexpr int defAlign(RegId const r);
 char const* asmname(RegId const r);
 #endif
 
+// NEW functions. Inquiry baed on RegisterBase::Cls (scalar,vector,mask [none?])
+constexpr int defBytes(RegisterBase::Cls cls);
+constexpr int defAlign(RegisterBase::Cls cls);
+
+
 
 /** every chip has default max-length register types */
 constexpr RegisterBase::Cls cls(RegId const r);
