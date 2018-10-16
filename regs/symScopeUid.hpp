@@ -125,7 +125,7 @@ namespace detail {
 class SymScopeUid {
   public:
     template<class SYMBASE> friend class SymStates;
-    template<class BASE,bool ordered> friend class scope::SymbStates;
+    template<class BASE>    friend class scope::SymbStates;
     typedef std::unordered_set<unsigned> HashSet;
   protected:
     unsigned maxidSym;

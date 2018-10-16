@@ -18,6 +18,7 @@ Goodbye:
 	@echo 'Goodbye'
 
 CXXFLAGS:=-g2 -O1 -std=c++11 -Wall
+VE_EXEC:=
 # Hmmm. maybe leave out the next lines
 CC:=gcc
 CXX:=g++
@@ -37,7 +38,6 @@ $(info $(CC) -std=c++14? $(is_std_c14_ok))
 #    $(error gcc version may be too old -- need some c++14 auto features )
 #    endif
 
-VE_EXEC:=
 is_valgrind_ok := $(shell touch foo.c && valgrind --help 2>&1 > /dev/null && echo 'yes' || echo 'no'; rm -f foo.c foo.o)
 $(info valgrind? <$(is_valgrind_ok)>)
 ifeq ($(is_valgrind_ok), yes)
@@ -48,7 +48,7 @@ vg = $(if $filter($(is_valgrind_ok),yes), \
      || { echo "Ohoh: $@ did not terminate correcly"; echo "see $@.vg"; } \
      , $(VE_EXEC) ./$@ > $@.vg)
 else
-vg = ./$@ > $@.vg
+vg = $(VE_EXEC) ./$@ > $@.vg
 endif
 
 
@@ -68,83 +68,77 @@ C11Y:=-std=c++14
 asm-old.o: asm-old.cpp asm-old.hpp throw.hpp
 	$(CXX) -o $@ $(CXXFLAGS) -c $<
 
-testSpill-old-old: testSpill-old-old.cpp asm-old.o
-	$(CXX) -o $@ $(CXXFLAGS) $^
 testSpill-old: testSpill-old.cpp asm-old.o
-	g++ -o $@ -Wall -ggdb -O1 $(C11X) $^
-	#valgrind --leak-check=full --show-leak-kinds=all ./$@ > $@.vg 2>&1
-	#@echo "gawking summary..."
-	#gawk 'BEGIN{err=-1} /^==.*LEAK SUMMARY/{p=1;err=0} p==1&&/^[^=]/{p=0} p==1{print} END{exit err}' \
-	#	$@.vg || { echo "Ohoh: $@ did not terminate correcly"; \
-	#	echo "see $@.vg"; }
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $^
 	$(call vg,$@)
 
 testSymScopeUid: testSymScopeUid.cpp throw.hpp
-	g++ -o $@ -Wall -ggdb -O1 $(C11X) $^
+	$(CXX) -o $@.i $(CXXFLAGS) -dD -E $<
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $^
 	$(call vg)
 testScopedSpill0: testScopedSpill0.cpp symScopeUid.hpp scopedSpillableBase.hpp throw.hpp
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^) && echo YAY
 	$(call vg)
 
 spill.o: spill.cpp spill.hpp spill-impl.hpp symbStates-old.hpp throw.hpp regDefs.hpp
-	g++ -o $@ -Wall -ggdb -O1 $(C11X) -c $<
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) -c $<
 spill2.o: spill2.cpp spill2.hpp spill-impl2.hpp throw.hpp reg-base.hpp
-	g++ -o $@ -Wall -ggdb -O1 $(C11X) -c $<
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) -c $<
 # header compilation check:
 regSymbol2-hdr.o: regSymbol2.hpp # see if the header makes sense: what is missing?
-	g++ -o $@ -Wall -ggdb -O1 $(C11X) -c $<
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) -c $<
 # header compilation check:
 spill-impl2-hdr.o: spill-impl2.hpp # see if the header makes sense: what is missing?
-	g++ -o $@ -Wall -ggdb -O1 $(C11X) -c $<
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) -c $<
 
 # test based on spillable-base.hpp
 testSpill2: testSpill2.cpp spill.cpp spill-impl.hpp spill.hpp throw.hpp regDefs.hpp
-	g++ -o $@ -Wall -ggdb -O1 $(C11X) $(filter %.cpp,$^)
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^)
 	$(call vg)
 # new version...
 tSpill2: tSpill2.cpp spill2.o spill-impl2.hpp spill2.hpp throw.hpp reg-base.hpp
-	g++ -o $@.i -Wall -ggdb -O1 $(C11X) -dD -E $<
-	g++ -o $@ -Wall -ggdb -O1 $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
+	$(CXX) -o $@.i $(CXXFLAGS) $(C11X) -dD -E $<
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
 tSpill2b: testSpill2b.cpp spill2.o spill-impl2.hpp spill2.hpp throw.hpp reg-base.hpp
-	g++ -o $@ -Wall -ggdb -O1 $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
 
 regStates.o: regStates.cpp regStates.hpp throw.hpp
-	g++ -o $@ -Wall -ggdb -O1 $(C11X) -c $<
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) -c $<
 
 # test based on regSymbol.hpp
 testSpill3: testSpill3.cpp spill.o regStates.o spill-impl.hpp spill.hpp throw.hpp regDefs.hpp
-	g++ -o $@ -Wall -ggdb -O1 $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
 
 # test based on regSymbol.hpp, register name and register id operations
 testRegSym: testRegSym.cpp spill.o regStates.o spill-impl.hpp spill.hpp throw.hpp regDefs.hpp
-	g++ -o $@ -Wall -ggdb -O1 $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
 # test based on regSymbol2.hpp, register name and register id operations
 testRegSym2: testRegSym2.cpp reg-base.o reg-aurora.o spill2.o regSymbol2.hpp spill-impl2.hpp spill2.hpp throw.hpp reg-base.hpp
 	# regStates.hpp (seems like an old idea, defunct?)
-	g++ -o $@.i -Wall -ggdb -O1 $(C11X) -dD -E $<
-	g++ -o $@ -Wall -ggdb -O1 $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
+	$(CXX) -o $@.i $(CXXFLAGS) $(C11X) -dD -E $<
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
 
 symbStates-old.o: symbStates-old.cpp symbStates-old.hpp throw.hpp
-	g++ -o $@ -Wall -ggdb -O1 -std=gnu++11 -c $<
+	$(CXX) -o $@ $(CXXFLAGS) -std=gnu++11 -c $<
 reg-base.o: reg-base.cpp reg-base.hpp bitfield.hpp throw.hpp
-	g++ -o $@ -Wall -ggdb -O1 $(C11X) -c $<
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) -c $<
 testSymbStates-old: testSymbStates-old.cpp symbStates-old.o regStates.o reg-base.o spill.o symbStates-old.hpp spill.hpp throw.hpp
-	g++ -o $@ -Wall -ggdb -O1 $(C11X) $^
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $^
 	$(call vg)
 
 prt_regnames: prt_regnames.cpp reg-base.o reg-base.hpp bitfield.hpp throw.hpp
-	g++ -o $@ -Wall -ggdb -O1 $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 reg-aurora.o: reg-aurora.cpp reg-aurora.hpp reg-base.hpp bitfield.hpp throw.hpp
-	g++ -o $@ -Wall -ggdb -O1 $(C11Y) -c $<
+	$(CXX) -o $@ $(CXXFLAGS) $(C11Y) -c $<
 testRegBase.asm: testRegBase
-	g++ -Wall -ggdb -O1 $(C11X) -Wa,-adhln $^.cpp > $@
+	$(CXX) $(CXXFLAGS) $(C11X) -Wa,-adhln $^.cpp > $@
 testRegBase: testRegBase.cpp reg-base.o reg-aurora.o reg-base.hpp bitfield.hpp throw.hpp
-	g++ -o $@ -Wall -ggdb -O1 $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
 
 .PRECIOUS: asm-old.o regStates.o symbStates-old.o
