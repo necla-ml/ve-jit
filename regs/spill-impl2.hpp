@@ -41,7 +41,7 @@ template<class SYMBSTATES>
         //std::cout<<" contiguity_check "; this->dump();
         if( !use.empty() ){
             auto prev=use.begin();
-            assert( prev->offset < 0 );
+            assert( prev->offset < 0 ); // failed in testRegSym2?
             assert( prev->offset >= this->bottom );
             assert( prev->len > 0 );
             assert( prev->offset + prev->len <= 0 );
@@ -194,12 +194,14 @@ typename Spill<SYMBSTATES>::Rgns::const_iterator Spill<SYMBSTATES>::find_hole( i
 
 template<class SYMBSTATES>
 typename Spill<SYMBSTATES>::Rgns::const_iterator Spill<SYMBSTATES>::newspill(unsigned const symId){
-    static int verbose=0;
+    static int verbose=13;
     using std::cout;
     using std::endl;
     auto const& sym = p(symId);
     int const symBytes = sym.getBytes();
     int const align  = sym.getAlign();
+    assert( symBytes > 0 );
+    assert( align    > 0 );
     int const amask = align - 1; // Ex. align 4 = 0100 --> amask 011
     assert( isPowTwo(align) );
     // score all holes where it could go (minimize wasted bytes)
@@ -215,6 +217,7 @@ typename Spill<SYMBSTATES>::Rgns::const_iterator Spill<SYMBSTATES>::newspill(uns
         //int olen=0;
         typename Rgns::iterator const end = use.end();
         for( ; ++next != end; prev=next ){
+            assert( next->offset < 0 );
             assert( next->symId != 0 );
             assert( next->offset + next->len <= 0 );
             // try to find an existing hole with proper alignment
@@ -337,14 +340,19 @@ void Spill<SYMBSTATES>::emit_spill( unsigned const symId, typename Rgns::const_i
 template<class SYMBSTATES>
 void Spill<SYMBSTATES>::spill(unsigned const symId
         , int align/*=8*/){
-    int const verbose=1;        //0:none, 1:warn/err
+    int const verbose=13;        //0:none, 1:warn/err
     assert( symId );
     auto & sym = p(symId);
     assert( sym.uid == symId );
     using std::cerr;
     using std::cout;
     using std::endl;
-    if(verbose>1){cout<<" spill("<<symId<<")"; cout.flush();}
+    if(verbose>1){cout<<" spill("<<symId<<") len "<<sym.getBytes()<<" align "<<sym.getAlign(); cout.flush();}
+    if(sym.getBytes() == 0 || sym.getAlign() == 0){
+        if(verbose>0){cout<<"\nIgnoring attempt to spill len "<<sym.getBytes()
+            <<" align "<<sym.getAlign()<<" symbol"<<endl; cout.flush();}
+        return;
+    }
     //bool dospill = false;
     // HMMM. maybe active should mean non-register, and id can retain
     // knowledge of previous register allocation (for consistency in register use?)

@@ -1,9 +1,7 @@
 
 #include "spill-impl2.hpp"
-#include "throw.hpp"
-//#include "spillable-base.hpp"
-#include "scopedSpillableBase.hpp"
 #include "symScopeUid.hpp"
+#include "scopedSpillableBase.hpp"
 #include <cassert>
 #include <iostream>
 #include <map>

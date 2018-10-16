@@ -112,9 +112,19 @@ inline constexpr int defBytes(RegId const r){
         : 0/*hopefully never*/
         ;
 }
+inline constexpr int defBytes(RegisterBase::Cls const cls){
+    return cls==RegisterBase::Cls::scalar? 8
+        : cls==RegisterBase::Cls::vector? MVL*SCALAR_BYTES
+        : cls==RegisterBase::Cls::mask? MVL/8
+        : 0/*hopefully never*/
+        ;
+}
 
 /** we assume base type of SCALAR / VECTOR / VMASK, all same align. */
 inline constexpr int defAlign(RegId const r){
+    return 8U;
+}
+inline constexpr int defAlign(RegisterBase::Cls const cls){
     return 8U;
 }
 

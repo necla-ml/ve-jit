@@ -1,50 +1,19 @@
 /** \file
- * Basic \ref regSymbol2.hpp tests with a DemoSymbStates class.
+ * Basic \ref regSymbol.hpp tests with a DemoSymbStates class.
  *
- * First thing I noticed was some need to define register sets.
- * Original work had the symbol state object construct dummy
- * symbols for every register in the machine.  But this is not
- * portable to different machines.
+ * This is based on newer classes from spill2.hpp, RegisterBase,
+ * scope::ParSymbol<ScopedSpillableBase>.
  *
- * With no concept of "register sets", it was handy to predefine
- * a symbol for every register, in global scope.  Then \em every
- * register allocation \em always worked by kicking out another
- * symbol.
+ * It tests out functions like scope::symbStates, but adds setting
+ * an actual RegId, and free a reasonable spill symbol if asked.
  *
- * But really, RESERVED is a \em register state, so let's
- * revise regDefs.hpp into machine-centric and generic
- * parts, and also provide some constexpr bool f(Regid)
- * checkers, for things like RESERVED.
- *
- * - Ex. bool isReserved(regId) --> false for RESERVED and arg-related,
- *   because these \b never go into a Spill object (for local symbols)
- * - Ex. bool isPreserved(regId) --> true if save/restore needed when
- *   generating prologue/epilogue code.
- *
- * Options:
- *
- * 1. We add to the list of function-reserved regs any arg-related registers,
- * 2. OR we forego argument-passing entirely and
- *    ask the client to hand-populate registers to initialize some kernel.
- *
- * I think (2) is easiest to implement, and might fit JIT-style
- * applications nicely.   Automated generation of entire functions need
- * to do some more work, perhaps setting initial symbol states using
- * info from libffi.
- *
- * So plan is:
- *   Call using C wrapper --> C++ impl --> void fn(void) assembler
- *   kernel that has all args passed via (ANY) registers.
- *   The function still generates function prologue/epilogue
- *   that sets stack frame and [only if used] saves/restores
- *   any regs with PRESERVE status.
- *
- * Some register-state checkers need to be runtime-definable.
- * Ex. function arg registers
  */
-#include "regSymbol.hpp"
-#include "spill-impl.hpp"
+#include "regSymbol2.hpp"
+#include "spill-impl2.hpp"
 #include "throw.hpp"
+
+#include "reg-aurora.hpp" // we need scalar registers for some real chipset
+
 #include <cassert>
 #include <iostream>
 #include <map>
@@ -106,6 +75,7 @@ class SpillableRegSym : public RegSymbol
 {
   public:
     friend class Tester;
+    friend class DemoSymbStates;
     SpillableRegSym( SpillableRegSym const& ) = delete;
     SpillableRegSym( SpillableRegSym&& s ) noexcept : RegSymbol(std::move(s)) {}
     /** Just declare a symbol [default: unassigned scalar register with tmp name].
@@ -113,30 +83,32 @@ class SpillableRegSym : public RegSymbol
      *   - perhaps same as the symbol object variable?
      * - For demo, we also never need to assign an actual \c RegId,
      *   - so printout says %XX unless register id is explicitly set
+     *
+     * - Note: Cls ~ none has no length set, so it can't be spilled.
      * */
-    SpillableRegSym(unsigned const symId, uint64_t const tick,
-            char const* name, Reg_t const rtype=REG_T(FREE|SCALAR))
-        : RegSymbol(symId, tick, (name? name: randName()), rtype)
+    SpillableRegSym( char const* name, RegisterBase::Cls cls = RegisterBase::Cls::scalar )
+        : RegSymbol( (name? name: randName()), cls)
         {
-            std::cout<<" +SRS(id="<<symId<<",tick="<<tick<<",name="<<name<<",rtype="<<rtype<<")"<<std::endl;
+            std::cout<<" +SRS(tDecl="<<tDecl()<<",name="<<name<<",cls="<<cls<<")"<<std::endl;
         }
 
-    /** Given a free RegId [from Spill] that you wrote to, declare and assign to register. */
-    SpillableRegSym(unsigned const symId, uint64_t const tick,
-            RegId const rid, char const* name)
-        : RegSymbol(symId, tick, (name? name: randName()), rid)
+    /** Given a free RegId [from Spill?], declare symbol and mark it assigned to RegId. */
+    SpillableRegSym( char const* name, RegId const rid)
+        : RegSymbol((name? name: randName()), rid)
         {
-            std::cout<<" +SRS(id="<<symId<<",tick="<<tick<<",name="<<name<<",rid="<<rid<<")"<<std::endl;
+            std::cout<<" +SRS(tSym="<<tSym()<<",name="<<name<<",rid="<<rid<<")"<<std::endl;
         }
 
 };
 
 /** represent a range of registers, a set of temporary registers. */
 struct Counters {
+    // More fancy would mkChipRegisters() and query the available scalar ones
+    // to get the cyclic register ids for these tests.
     Counters()
         : tick_(0U), symidCnt(0U),
-        ridBeg(30), ridEnd(IDscalar_last+1), ridCyc(ridEnd),
-        ridCyc4(3) {}
+        ridBeg(Regid(30)), ridEnd(Regid(50)), ridCyc(ridEnd),
+        ridCyc4(Regid(4-1)) {}
 
     uint64_t tick_;
     unsigned symidCnt;
@@ -149,11 +121,13 @@ struct Counters {
         return ++symidCnt;
     }
     RegId nextRid() {
-        if(++ridCyc >= ridEnd) ridCyc = ridBeg;
+        ridCyc = Regid(ridCyc+1);
+        if(ridCyc >= ridEnd) ridCyc = ridBeg;
         return ridCyc;
     }
     RegId nextRid4() {
-        if(++ridCyc4 >= 4) ridCyc4 = 0U;
+        ridCyc4 = Regid(ridCyc4+1);
+        if(ridCyc4 >= 4) ridCyc4 = Regid(0U);
         return ridCyc4;
     }
     uint64_t nextTick(){
@@ -173,8 +147,14 @@ struct DemoSymbStates : public Counters {
     typedef map<unsigned,Psym> SymIdMap;
     typedef ve::Spill<DemoSymbStates> SpillType;
 
+    // new: move nextTick into RegSymbol
+    static uint64_t nextTick() { return RegSymbol::nextTick(); }
+
     DemoSymbStates()
-        : Counters(), psyms(), spill(this) {}
+        : Counters(), psyms(), spill(this) {
+            //RegSymbol::t=0U; // symIds start from 1 again, thank-you.
+            //RegSymbol::resetSyms();
+        }
 
     SymIdMap psyms;   ///< symId-->Psym (Psym=SpillableRegSym)
 
@@ -196,6 +176,8 @@ struct DemoSymbStates : public Counters {
             throw(std::runtime_error("psym(symId) doesn't exist"));
         return found->second;
     }
+    // Later addition to help compiler disambiguate the non-const (to-be-protected) version
+    Psym & fpsym(unsigned const symId) { return psym(symId); }
 
     template<typename T, typename U>
         typename std::pair<T,U>
@@ -221,31 +203,17 @@ struct DemoSymbStates : public Counters {
     auto decl(Args&&... otherPsymArgs)
     // C++11 **should** deduce'auto' return type from return statements,
     // but nc++ needs -std=c++17, so... uglify by stating...
-    //-> decltype(symidCnt)
-    -> decltype( nextSym() ) // better (still insulated vs changes)
+    -> decltype( Psym::uid )
     {
-        auto const tick = nextTick();
-        auto const symId = nextSym();
-        assert( psyms.find(symId) == psyms.end() );
-        //Psym s = SpillableRegSym(tick,symId,args...);
-        //psyms.emplace(symId, Psym(tick,symId,"x"));
-        // using Psym copy constructor...
-        //psyms.emplace(symId, Psym(tick,symId,otherPsymArgs...));
-        //psyms.emplace(symId, std::forward<Psym>(Psym(tick,symId,otherPsymArgs...)));
-        //psyms.emplace(make_pair_wrapper(symId, Psym(tick,symId,otherPsymArgs...)));
-        //psyms.emplace(std::piecewise_construct,
-        //        std::forward_as_tuple(symId),
-        //        std::forward_as_tuple(Psym(tick,symId,otherPsymArgs...)));
-        //psyms.emplace(std::move(SymIdMap::value_type{symId, Psym(tick,symId,otherPsymArgs...)}));
-
-        //psyms.emplace(SymIdMap::value_type{symId, Psym(tick,symId,otherPsymArgs...)});
-        psyms.emplace(SymIdMap::value_type{symId, Psym(symId,tick,otherPsymArgs...)});
+        SpillableRegSym s(otherPsymArgs...);
+        auto const symId = s.uid;
+        psyms.emplace(SymIdMap::value_type{symId, std::move(s)});
         return symId;
     }
 
     /// \group utils
     ///@{
-    void syms_all(ve::RegId const r, std::vector<unsigned>& symids){
+    void syms_all(RegId const r, std::vector<unsigned>& symids){
         //
         // More complex behaviour might maintain a map: RegId --> {SymIds}
         //
@@ -260,7 +228,7 @@ struct DemoSymbStates : public Counters {
                 symids.push_back(symId);
 #endif
     }
-    void syms_active(ve::RegId const r, std::vector<unsigned>& symids){
+    void syms_active(RegId const r, std::vector<unsigned>& symids){
         symids.clear();
         for(auto& s: psyms){
             auto const& sObj = s.second;
@@ -268,7 +236,7 @@ struct DemoSymbStates : public Counters {
                 symids.push_back( /*symId*/s.first );
         }
     }
-    void syms_activeREG(ve::RegId const r, std::vector<unsigned>& symids){
+    void syms_activeREG(RegId const r, std::vector<unsigned>& symids){
         symids.clear();
         for(auto& s: psyms){
             auto const& sObj = s.second;
@@ -341,7 +309,7 @@ struct DemoSymbStates : public Counters {
             unsigned const sId = s.first;
             Psym const& sObj = s.second;
             if( !sObj.getActive() ) continue;
-            if(sObj.getREG() && !ve::valid(sObj.regId())){
+            if(sObj.getREG() && !valid(sObj.regId())){
                 std::cout<<" Warning: getREG() but regId no good???\n "; std::cout.flush();
                 return s.first;
             }
@@ -390,10 +358,12 @@ struct DemoSymbStates : public Counters {
     /** spill one symbol, from amongst all existing symbols */
     unsigned spillOne(int const verbose=0) const{
         // find registers covering ALL symbols and punt to worker SpillOne
-        std::unordered_set<RegId> symbolRegs;
+        //std::unordered_set<RegId> symbolRegs; // no std::hash<RegId>
+        std::unordered_set<unsigned> symbolRegs;
         for(auto const& s:psyms)
             symbolRegs.insert(s.second.regId());
-        std::vector<RegId> vecRegs;
+        //std::vector<RegId> vecRegs;
+        std::vector<unsigned> vecRegs;
         vecRegs.reserve(symbolRegs.size());
         for(auto const& s:symbolRegs)
             vecRegs.push_back(s);
@@ -413,7 +383,7 @@ struct DemoSymbStates : public Counters {
      *
      * Note: it might make more sense to return a register + optional {symIds in/mapped to REG}
      */
-    unsigned/*SymId*/ spillOne(std::vector<RegId> regIds, int const verbose=0) const{
+    unsigned/*SymId*/ spillOne(std::vector<unsigned> regIds, int const verbose=0) const{
         if(verbose){
             cout<<" s1:";
             for(auto const& s: psyms) cout<<(s.second.getREG()? "R": "r")
@@ -424,7 +394,7 @@ struct DemoSymbStates : public Counters {
             auto const sid = s.first;
             auto const& sObj = s.second;
             for(auto const r: regIds)
-                if(sObj.regId() == r)
+                if(sObj.regId() == Regid(r))
                     r2s[r].push_back(sid);
         }
         // NOTE: would be better if cycled through the pool (round-robin "state")
@@ -442,7 +412,7 @@ struct DemoSymbStates : public Counters {
         //   - else if still tied check for LRDecl
         // - Oh. fRRobin would need a persistent regIds[] pool to maintain state.
         // - Oh. fANY is always the last tie-breaker.
-        std::vector<ve::RegId> someRegs;
+        std::vector<RegId> someRegs;
         std::vector<unsigned> someSyms, otherSyms;
         int constexpr fANY=0, fLRUsed=1, fLRDecl=2, fMEMstale=4 /*, fRRobin=8*/;
         int ties = fLRUsed | fLRDecl | fANY;
@@ -452,7 +422,7 @@ struct DemoSymbStates : public Counters {
                 if( syms.empty() ){
                     if(verbose) cout<<" r"<<r<<"(no syms)";
                     //return r;                       // no syms
-                    someRegs.push_back(r);
+                    someRegs.push_back(Regid(r));
                 }
             }
             ties = fANY;
@@ -466,7 +436,7 @@ struct DemoSymbStates : public Counters {
                     if(psym(s).getActive())
                         someSyms.push_back(s);  // cond : active?
                 if( someSyms.empty() )          // no syms satisfy cond?
-                    someRegs.push_back(r);
+                    someRegs.push_back(Regid(r));
                 syms = someSyms;                // focus on "cond" syms below
             }
             if(!someRegs.empty() && verbose) cout<<"[no active]"<<endl;
@@ -479,13 +449,13 @@ struct DemoSymbStates : public Counters {
                     auto const& ps = psym(s);
                     assert( ps.getActive() );
                     if(ps.getREG()){
-                        assert( ve::valid(psym(s).regId()));
+                        assert( valid(psym(s).regId()));
                         someSyms.push_back(s);          // cond : [active and] inREG
                     }
                 }
                 if(verbose){cout<<"REG"<<r<<":";for(auto& s:someSyms)cout<<" "<<s;}
                 if( someSyms.empty() )                  // no syms satisfy cond?
-                    someRegs.push_back(r);              //    i.e. all syms for reg spilled to MEM
+                    someRegs.push_back(Regid(r));              //    i.e. all syms for reg spilled to MEM
                 else{
                     r2s[r] = someSyms;  // henceforth focus on activeREG symbols
                 }
@@ -505,12 +475,12 @@ struct DemoSymbStates : public Counters {
                     auto const& ps = psym(s);
                     assert( ps.getActive() );
                     if(ps.getREG() && ps.getMEM() && !ps.getStale() ){  // REG==MEM (spill is no-op)
-                        assert( ve::valid(psym(s).regId()));
+                        assert( valid(psym(s).regId()));
                         someSyms.push_back(s);          // cond : [active and] easy-spill
                     }
                 }
                 if( someSyms.size() == syms.size() )    // all syms satisfy cond [easy-spill] ?
-                    someRegs.push_back(r);
+                    someRegs.push_back(Regid(r));
             }
             //regIds = someRegs;  // focus only on these regs in future
             if(!someRegs.empty() && verbose) cout<<"[no-op spill]"<<endl;
@@ -540,7 +510,7 @@ struct DemoSymbStates : public Counters {
         if(someRegs.empty()){
             if(verbose) cout<<"[def]"<<endl;
             for(auto const r: regIds)
-                someRegs.push_back(r);
+                someRegs.push_back(Regid(r));
         }
         // NO assert( ! someRegs.empty() );
         if(1){
@@ -595,11 +565,12 @@ struct DemoSymbStates : public Counters {
     if( tiedRegs.size() == 1U ) {reg = tiedRegs[0]; ok=true;} \
     else{ someRegs = tiedRegs; } \
 }while(0)
-        RegId reg = ve::invalidReg();
+        RegId reg = invalidReg();
         bool ok=false;
         // NO assert( ! someRegs.empty() );
         if( !someRegs.empty() ){
             std::vector<RegId> tiedRegs = someRegs;
+            //std::vector<unsigned> tiedRegs = someRegs;
             if( !ok && (ties&fMEMstale) == fMEMstale ){
                 MINREGS(getStale, assert(ps.getMEM()));
             }
@@ -613,7 +584,7 @@ struct DemoSymbStates : public Counters {
                 for(auto const r: someRegs){
                     auto const& syms = r2s[r];
                     if( !syms.empty() ){
-                        reg = syms[0];
+                        reg = Regid(syms[0]);
                         ok = true; //sel = ve::invalidReg();
                         break;
                     }
@@ -624,7 +595,7 @@ struct DemoSymbStates : public Counters {
         { // given reg, return a symbol [that is mapped to the register], or zero
             if( !ok )
                 std::cout<<" !ok? no register to spill? "<<std::endl;
-            else if( reg == ve::invalidReg()) {
+            else if( reg == invalidReg()) {
                 std::cout<<" oh? no best register to spill? "<<std::endl;
             }else{
                 if(verbose){
@@ -648,7 +619,7 @@ struct DemoSymbStates : public Counters {
                     // generic lambdas are c++14
                     [](auto const& p){ auto const& sObj = p.second;
                     if(sObj.getActive() && sObj.getREG()) {
-                    assert(ve::valid(sObj.regId())); return true;}
+                    assert(valid(sObj.regId())); return true;}
                     else return false; })
             );
     }
@@ -780,21 +751,22 @@ void Tester::test1(){
         ASSERTTHROW( ssym.psym(1U).getActive() );
         auto const x = ssym.decl("x");          // declare unattached symbol
         cout<<" ssym.decl(\"x\") --> x="<<x<<", s(x)="<<s(x)<<endl;
-        cout<<" decl "<<x<<endl;
+        cout<<" decl "<<x<<"  "<<ssym.psym(x)<<endl;
         assert(x==1);
-        assert( !ve::valid(s(x).regId()) );
+        assert( !valid(s(x).regId()) );
         assert(ssym.nActiveRegs() == 0);        // x is active, but NOT in register
 
 
         auto myreg = ssym.nextRid();
         cout<<" next register id = "<<myreg<<endl;
-        auto const y = ssym.decl(myreg,"y");    // assign register AND declare symbol
-        cout<<" decl "<<y<<endl;
+        auto const y = ssym.decl("y",myreg);    // assign register AND declare symbol
+        cout<<" decl "<<y<<"  "<<ssym.psym(y)<<endl;
         assert(y==2);
-        assert( ve::valid(s(y).regId()) );
+        assert( valid(s(y).regId()) );
         assert( s(y).getREG() );
         assert(ssym.nActiveRegs() == 1);        // y is active, AND in register
     }
+#if 1
     TEST("Again, with lambdas");
     {
         //SpillableRegSym(unsigned const uid, char const* name,
@@ -802,7 +774,7 @@ void Tester::test1(){
         Ssym ssym;
         // lookup symbol via symId
         auto s = [&ssym](auto symId)->Ssym::Psym& {
-            return ssym.psym(symId);
+            return ssym.fpsym(symId);
         };
         // declare symbol                       declare, with no assigned register
         auto decl = [&ssym](auto name) {
@@ -810,17 +782,17 @@ void Tester::test1(){
         };
         // register symbol                      declare and assign register to symbol
         auto rsym = [&ssym](auto name) {
-            return ssym.decl(ssym.nextRid(),name);
+            return ssym.decl(name,ssym.nextRid());
         };
         // register set                         set symbol to register
         // s(x).setReg(rid,tick)
-        auto rset = [&ssym](ve::RegId const rid, unsigned symId){
+        auto rset = [&ssym](RegId const rid, unsigned symId){
             //std::cout<<"rset("<<rid<<","<<symId<<")..."; std::cout.flush();
             ssym.psym(symId).setReg( rid, ssym.nextTick() );
         };
         // auto-register set via nextRid()
         auto nextRid = [&ssym](unsigned symId){
-            ssym.psym(symId).setReg( ssym.nextRid(), ssym.nextTick() );
+            ssym.psym(symId).setReg( ssym.nextRid() );
         };
         auto const x = decl("x");               // declare unattached symbol
         cout<<" decl "<<s(x)<<endl;
@@ -829,14 +801,16 @@ void Tester::test1(){
         cout<<" decl "<<s(y)<<endl;
         assert(ssym.nActiveRegs() == 1);        // y is active, AND in register
         cout<<"    x "<<s(x)<<endl;
-        cout<<"    y "<<s(x)<<endl;
-        s(x).setReg(ssym.nextRid(), ssym.nextTick());
+        cout<<"    y "<<s(y)<<endl;
+        s(x).setReg(ssym.nextRid(),ssym.nextTick());
         cout<<" s(x).setReg... "<<s(x)<<endl;
         rset(ssym.nextRid(),x);
         cout<<" rset(nxt,x)... "<<s(x)<<endl;
         nextRid(x);
         cout<<" nextRid(x) ... "<<s(x)<<endl;
     }
+#endif
+#if 1
     TEST("4-register dumb, cyclic register allocator...");
     {
         //SpillableRegSym(unsigned const uid, char const* name,
@@ -845,8 +819,8 @@ void Tester::test1(){
         //auto s = [&ssym](auto symId)->Ssym::Psym& { return ssym.psym(symId); };
         auto r = [&ssym](auto symId)->RegId       { return ssym.psym(symId).regId(); };
         //auto decl = [&ssym](auto name) { return ssym.decl(name); };
-        auto r4 = [&ssym](auto name) { return ssym.decl(ssym.nextRid4(),name); };
-        //auto rset = [&ssym](ve::RegId const rid, unsigned symId){ ssym.psym(symId).setReg( rid, ssym.nextTick() ); };
+        auto r4 = [&ssym](auto name) { return ssym.decl(name,ssym.nextRid4()); };
+        //auto rset = [&ssym](RegId const rid, unsigned symId){ ssym.psym(symId).setReg( rid, ssym.nextTick() ); };
         //auto r4   = [&ssym](unsigned symId){ ssym.psym(symId).setReg( ssym.nextRid(), ssym.nextTick() ); };
 #define R4(varname) auto const varname = r4(#varname)
         R4(a);
@@ -863,17 +837,19 @@ void Tester::test1(){
         // so we need our DemoSymbStates class to help us look for
         // unallocated registers (and if none, to spill something)
     }
+#endif
+#if 1
     TEST("4-register demo, brutish check for spill...");
     {
         //SpillableRegSym(unsigned const uid, char const* name,
         //          uint64_t const tick, Reg_t const rtype=REG_T(FREE|SCALAR));
         Ssym ssym;
-        auto s = [&ssym](auto symId)->Ssym::Psym& { return ssym.psym(symId); };
-        auto r = [&ssym](auto symId)->RegId       { return ssym.psym(symId).regId(); };
+        auto s = [&ssym](auto symId)->Ssym::Psym& { return ssym.fpsym(symId); };
+        auto r = [&ssym](auto symId)->RegId       { return ssym.fpsym(symId).regId(); };
         auto decl = [&ssym](auto name) { return ssym.decl(name); };
-        auto r4 = [&ssym](auto name) { return ssym.decl(ssym.nextRid4(),name); };
-        auto rset = [&ssym](ve::RegId const rid, unsigned symId){
-            ssym.psym(symId).setReg( rid, ssym.nextTick() );
+        auto r4 = [&ssym](auto name) { return ssym.decl(name,ssym.nextRid4()); };
+        auto rset = [&ssym](RegId const rid, unsigned symId){
+            ssym.psym(symId).setReg(rid);
         };
         //auto r4   = [&ssym](unsigned symId){ ssym.psym(symId).setReg( ssym.nextRid(), ssym.nextTick() ); };
 #define R4(varname) auto const varname = r4(#varname)
@@ -909,14 +885,16 @@ void Tester::test1(){
         ssym.dump();
         assert(ssym.nActiveRegs() == 4);   // Yay, we spilled successfully
     }
+#endif
+#if 1
     TEST("4-register demo, constrained reg-set for spill");
     {
         Ssym ssym;
-        auto s = [&ssym](auto symId)->Ssym::Psym& { return ssym.psym(symId); };
+        auto s = [&ssym](auto symId)->Ssym::Psym& { return ssym.fpsym(symId); };
         auto r = [&ssym](auto symId)->RegId       { return ssym.psym(symId).regId(); };
         auto decl = [&ssym](auto name) { return ssym.decl(name); };
-        auto r4 = [&ssym](auto name) { return ssym.decl(ssym.nextRid4(),name); };
-        auto rset = [&ssym](ve::RegId const rid, unsigned symId){
+        auto r4 = [&ssym](auto name) { return ssym.decl(name,ssym.nextRid4()); };
+        auto rset = [&ssym](RegId const rid, unsigned symId){
             ssym.psym(symId).setReg( rid, ssym.nextTick() );
         };
 #define R4(varname) auto const varname = r4(#varname)
@@ -948,6 +926,7 @@ void Tester::test1(){
         ssym.dump();
         assert(ssym.nActiveRegs() == 4);   // OHOH, 5 is more than the 4 registers available
     }
+#endif
 #if 1
     TEST("R4 with example register read,write info");
     {
@@ -955,9 +934,9 @@ void Tester::test1(){
         auto s = [&ssym](auto symId)->Ssym::Psym& { return ssym.psym(symId); };
         //auto r = [&ssym](auto symId)->RegId       { return ssym.psym(symId).regId(); };
         //auto decl = [&ssym](auto name) { return ssym.decl(name); };
-        //auto r4 = [&ssym](auto name) { return ssym.decl(ssym.nextRid4(),name); };
+        //auto r4 = [&ssym](auto name) { return ssym.decl(name,ssym.nextRid4()); };
         auto r5 = [&ssym](auto name) {
-            auto rid = ve::invalidReg();
+            auto rid = invalidReg();
             rid = ssym.nextRid4();
             if( ssym.nActiveRegs() >= 4 ){
                 auto symId = ssym.spillOne({0,1,2,3},/*verbose*/1);
@@ -966,12 +945,12 @@ void Tester::test1(){
                 ssym.psym(symId).setREG(false);
                 rid = ssym.psym(symId).regId(); // ... so we can re-use the reg
             }
-            auto symid = ssym.decl(rid,name);
+            auto symid = ssym.decl(name,rid);
             //ssym.psym(symid).setReg( rid, ssym.nextTick() );
             //ssym.use4(symid);
             return symid;
         };
-        //auto rset = [&ssym](ve::RegId const rid, unsigned symId){
+        //auto rset = [&ssym](RegId const rid, unsigned symId){
         //    ssym.psym(symId).setReg( rid, ssym.nextTick() );
         //};
         // assigns a "next" register to a symbol.
@@ -1013,7 +992,7 @@ void Tester::test1(){
     TEST("Manual state adjustment of register-symbols");
     {
         Ssym ssym;
-        auto s = [&ssym](auto symId)->Ssym::Psym& { return ssym.psym(symId); };
+        auto s = [&ssym](auto symId)->Ssym::Psym& { return ssym.fpsym(symId); };
         auto r = [&ssym](auto symId)->RegId       { return ssym.psym(symId).regId(); };
         auto decl = [&ssym](auto name) { return ssym.decl(name); };
         //ssym.add(Psym(1U));  // symId 1, len=8, align=8 (64-bit register)
@@ -1022,9 +1001,9 @@ void Tester::test1(){
         //      or psyms.emplace(uid, SpillableBase(uid,bytes,align));
         // has been replace for this test by "decl"
         auto one = decl("one");
-        assert( s(one).uid == 1U );
+        cout<<" one "<<one<<endl; cout.flush(); // oh. I can't reset counter easily with RegSymbol+DemoSymbStates
         auto two = decl("two");
-        assert( s(two).uid == 2U );
+        assert( s(two).uid == one+1 );
         cout<<ssym.psym(one)<<" r"<<r(one)<<endl;
         cout<<ssym.psym(two)<<" r"<<r(two)<<endl;
         ssym.psym(one).setREG(true);
@@ -1060,8 +1039,8 @@ void Tester::test1(){
         auto two = decl("two");
         cout<<ssym.psym(one)<<"  "<<ssym.psym(two)<<endl;
         // If spill-impl.hpp is verbose, may print warnings:
-        ssym.spill.spill(1);
-        ssym.spill.spill(2);
+        ssym.spill.spill(one);
+        ssym.spill.spill(two);
         cout<<ssym.psym(one)<<"  "<<ssym.psym(two)<<endl;
     }
 #endif
@@ -1072,24 +1051,26 @@ void Tester::test1(){
         auto s = [&ssym](auto symId)->Ssym::Psym& { return ssym.psym(symId); };
         //auto r = [&ssym](auto symId)->RegId       { return ssym.psym(symId).regId(); };
         auto decl = [&ssym](auto name) { return ssym.decl(name); };
-        auto one = decl("one");
+        //auto one = decl("one"); // this gott Cls==none, so zero length so cannot spill!!
+        auto one = decl("one"); // so make default Cls here "scalar"
         cout<<" add 1    : "<<s(one)<<endl;
+        assert(s(one).getBytes() > 0);
+        assert(s(one).getAlign() > 0);
         assert(s(one).getREG()==false);
         assert(s(one).getMEM()==false);
         assert(s(one).getStale()==0);
         cout<<" setREG(one)... ";
         s(one).setREG(true);   // say value is "in register"
         cout<<" setREG(one): "<<s(one)<<endl;
-        assert(s(one).getBytes() > 0);
-        assert(s(one).getAlign() > 0);
         assert(s(one).getREG()==true);
         assert(s(one).getMEM()==false);
         assert(s(one).getStale()==0);
-        cout<<" spill(one) ... ";
         ssym.spill.dump();
+        cout<<" spill(one) ... "; cout.flush();
         ssym.spill.spill(one);
+        cout<<" spill(one) BACK! "; cout.flush();
         ssym.spill.dump();
-        cout<<" spill(one) : "<<s(one)<<endl;
+        cout<<" spill(one) : "<<s(one)<<endl; cout.flush();
         assert(s(one).getREG()==true);
         assert(s(one).getMEM()==true);
         assert(s(one).getStale()==0);
@@ -1415,26 +1396,6 @@ void Tester::test3(){
 #endif
 
 int main(int,char**){
-    assert( ve::alignup(0,0x03) == 0 );
-    assert( ve::alignup(1,0x03) == 4 );
-    assert( ve::alignup(2,0x03) == 4 );
-    assert( ve::alignup(3,0x03) == 4 );
-    assert( ve::alignup(4,0x03) == 4 );
-    assert( ve::alignup(5,0x03) == 8 );
-    assert( ve::alignup(6,0x03) == 8 );
-    assert( ve::alignup(7,0x03) == 8 );
-    assert( ve::alignup(8,0x03) == 8 );
-    assert( ve::alignup(9,0x03) == 12 );
-    assert( ve::alignup(-0,0x03) == 0 );
-    assert( ve::alignup(-1,0x03) == 0 );
-    assert( ve::alignup(-2,0x03) == 0 );
-    assert( ve::alignup(-3,0x03) == 0 );
-    assert( ve::alignup(-4,0x03) == -4 );
-    assert( ve::alignup(-5,0x03) == -4 );
-    assert( ve::alignup(-6,0x03) == -4 );
-    assert( ve::alignup(-7,0x03) == -4 );
-    assert( ve::alignup(-8,0x03) == -8 );
-    assert( ve::alignup(-9,0x03) == -8 );
     cout<<"======== test1() ==========="<<endl;
     Tester::test1();
     //cout<<"======== test2() ==========="<<endl;

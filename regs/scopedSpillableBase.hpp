@@ -19,6 +19,7 @@
 #include <typeinfo> // for debug
 
 class ScopedSpillableBase; // active state and symbol id to be managed by scope::SymbStates
+class RegSymbol;           // fwd decl of testing class (friend)
 
 /** This simplifies \c SpillableBase by removing 'active' and 'uid' from
  * a spillable symbols domain.
@@ -64,6 +65,7 @@ class ScopedSpillableBase {
     typedef scope::SymbStates<ScopedSpillableBase> Ss;
     friend Ps;
     friend Ss;
+    friend RegSymbol; // for test access to setActive(bool)
     virtual ~ScopedSpillableBase() {}
 
     /** return the scope::ParSymbol, which has scope+uid, and maybe a SymbStates ptr.

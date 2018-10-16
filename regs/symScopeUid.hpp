@@ -572,6 +572,7 @@ class ParSymbol : public BASE {
     //-----------------------------------------------
     //    This section is just for demo purposes, testSymScopeUid.cpp
     template<class SYMSTATE> friend class detail::SymStates;
+    //friend class RegSymbol; // for testing
     //friend class DemoSymbStates;
     //-----------------------------------------------
     /** Importantly, \c ParSymbol forwards \e unrecognized args to the BASE constructor.
@@ -582,7 +583,7 @@ class ParSymbol : public BASE {
 
     //void setUid(unsigned const uid)           {this->uid = uid;}
     //void setScope(unsigned const scope)       {this->scope = scope;}
-  private:
+  protected:
     void setActive(bool const active) {
         //std::cout<<"ParSymbol::setActive("<<active<<")  "; std::cout.flush();
         if(active) this->active = active;
@@ -660,12 +661,6 @@ class SymbStates{
     detail::SymScopeUid ssu;
     /** symbol uid --> external symbol state.  This data structure \em owns all the
      * Psym objects. */
-    //typename std::conditional<ordered==0,
-    //         std::unordered_map<unsigned/*symId*/,Psym>,
-    //         std::map<unsigned/*symId*/,Psym>
-    //             >::type
-    // SymScopeUid ssu maps symId --> scopes stack (+ inactive scopes)
-    //            syms maps symId --> Psym<BASE> for symId,scope,active and whatever BASE has.
     std::unordered_map<unsigned/*symId*/,Psym> syms;
   public:
     //
@@ -674,15 +669,6 @@ class SymbStates{
     //       etc as needed.
     unsigned begin_scope() { return ssu.begin_scope(); }
     void end_scope() {
-#if 0 // reverse the order, so more invariants hold in base classes
-        ssu.end_scope();
-        for(auto symId: ssu.stales.front().syms){
-            //assert(syms[symId].getActive() == true); // maybe can deactivate syms one-by-one??
-            auto const psym = syms.find(symId);
-            assert( psym != syms.end() );
-            psym->second.setActive(false);
-        }
-#else
         for(auto symId: ssu.scopes.front().syms){ // from current scope
             //assert(syms[symId].getActive() == true); // maybe can deactivate syms one-by-one??
             auto const psym = syms.find(symId);
@@ -690,8 +676,8 @@ class SymbStates{
             std::cout<<" end"<<symId<<" "<<psym->second<<std::endl; std::cout.flush();
             psym->second.setActive(false);
         }
+        // next line last to retain more invariants
         ssu.end_scope(); // NOW [after deactivating] move ssu current scope to ssu.stales
-#endif
     }
     void activate_scope(unsigned const stale) {
         ssu.activate_scope(stale);

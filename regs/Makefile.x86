@@ -8,8 +8,7 @@
 TARGETS:=testSpill-old testSymbStates-old \
 	testSpill2 testSpill3 testRegSym \
 	testRegBase prt_regnames testSymScopeUid testScopedSpill0 \
-	tSpill2 regSymbol2-hdr.o spill-impl2-hdr.o
-#testRegSym2
+	tSpill2 regSymbol2-hdr.o spill-impl2-hdr.o testRegSym2
 all: $(TARGETS) Goodbye
 
 PHONY: Goodbye

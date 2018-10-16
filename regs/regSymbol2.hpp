@@ -3,38 +3,28 @@
 
 #define OLD 0
 
-#if OLD
-#include "spillable-base.hpp"
-//#include "regDefs.hpp"
-#include "reg-base.hpp"
-// While regDefs.hpp is now a processor-specific include file,
-// it does define a few fairly generic functions.
-
-#else
+#include "spill-impl2.hpp"
+#include "symScopeUid.hpp"
 #include "scopedSpillableBase.hpp"
-#include "reg-base.hpp"
-#endif
 class RegSymbol; // SpillableBase + name, rtype and regId()
 
 
-/** Flesh out a \c ScopedSpillableBase symbol.
- * - with \c name,
- * - OLD: \b register type \c rtype
- * - [,and user-settable \c regId()].
- * - NEW: type from RegisterBase::Cls enum { [none?] scalar vector mask }
+/** New version of RegSymbol.
+ * Instead of fleshing out a \c ScopedSpillableBase symbol, we flesh out the
+ * higher-level \c scope::SymbStates<ScopedSpillableBase> object.
  *
- * \sa symScopeUid.hpp for \e active, \e symId, \e scope handling in ParSymbol<BASE>,
- *     and scope/symbol creation in \c SymbStates<BASE>,
- *     where \c RegSymbol can be a BASE.
- * \sa scopedSpillableBase.hpp which maintains \e byte, \e align, and MEM/REG/NONE \c Locn status.
+ * - with \c name(),
+ * - with a \c RegisterBase::Cls enum { [none?] scalar vector mask }, \c rType()
+ * - time of decl, last use (\c t_decl, \c t_sym)
+ * - and a \c regId().
+ *
+ * - how do I get a uid?
+ *
  */
 class RegSymbol :
-#if OLD
-    protected SpillableBase
-#else
-    protected ScopedSpillableBase
-#endif
+    public scope::ParSymbol<ScopedSpillableBase>
 {
+    friend class DemoSymbStates;
   private:
     /** TODO -- should be thread-safe and avoid static (possible dll issues).
      * TODO -- probably should be within reg-base.hpp (common to both symbol and register ops?) */
@@ -42,18 +32,16 @@ class RegSymbol :
         static uint64_t t=0U; // library/multi-threading issues! should used shared_ptr version of a counter.
         return ++t;
     }
+    static unsigned nextSym(){
+        static uint64_t t=0U; // library/multi-threading issues! should used shared_ptr version of a counter.
+        return ++t;
+    }
   public:
-#if OLD
-    typedef RegId ve::RegId;
-#endif
     typedef RegisterBase Rb;
     typedef Rb::Cls      Cls; // Cls::scalar Cls::vector Cls::mask Cls::none
 
-#if OLD
-    typedef SpillableBase Base;
-#else
-    typedef ScopedSpillableBase Base;
-#endif
+    //typedef ScopedSpillableBase Base;
+    typedef scope::ParSymbol<ScopedSpillableBase> Base;
     friend std::ostream& operator<<(std::ostream& os, RegSymbol const& x);
 
     /** <em>Declare</em> symbol for a user register. \c regid is from some
@@ -64,37 +52,22 @@ class RegSymbol :
      *
      * With symbol scopes, \c regid might come from \c SymScopeUid::newsym()
      */
-#if OLD
-    explicit RegSymbol(unsigned const symId, uint64_t const tick, char const* const name,
-            ve::Reg_t const rtype
-            )
-        : SpillableBase(symId, ve::bytes(rtype), ve::align(rtype)),
-        name_(name),
-        regid_(ve::invalidReg()),
-        rtype_(ve::FREE),
-        t_decl(tick), t_sym(0U)
-    {
-        //std::cout<<" +RS-a:"<<*this<<std::endl;
-        assert(name_!=nullptr);
-    }
-#else
     explicit RegSymbol(char const* const name,
             Rb::Cls const rtype = Rb::Cls::none
             //, Rb::Sub const rsub = Rb::Sub::def
             )
-        : ScopedSpillableBase(defBytes(rtype), defAlign(rtype)),
+        : Base(nullptr, nextSym(), 1/*scope*/, defBytes(rtype), defAlign(rtype)),
         name_(name),
         regid_(invalidReg()),
         rtype_(rtype),
         rsub_(Rb::Sub::def),
-        t_decl(nextTick()),
+        t_decl(RegSymbol::nextTick()),
         t_sym(0U)
     {
         //std::cout<<" +RS-a:"<<*this<<std::endl;
         assert(name_!=nullptr);
     }
-#endif
-#if OLD
+    static int const a = 13;
     /** <em>Declare and assign</em> symbol to user register.
      * \c regid is from some register allocator [maybe a \c Spill object],
      * while \c symId is a [unique] forward counter value
@@ -108,21 +81,19 @@ class RegSymbol :
      * For example, \c regid=67 might get mapped to a Reg_t=USED|VECTOR,
      * with none of the optional PRESERVE or VLEN settings set up.
      */
-    explicit RegSymbol(unsigned const symId, uint64_t const tick, char const* const name,
-            ve::RegId const regid)
-        : SpillableBase(symId, ve::bytes(regid), ve::align(regid)),
-        name_(name),
-        regid_(ve::valid(regid)? regid: ve::invalidReg()),
-        rtype_(REG_T(ve::defReg_t(regid)|ve::USED)),
-        t_decl(tick),
-        t_sym(tick)
-    {
-        if(ve::valid(regid_)) setREG(true);
-        std::cout<<" +RS-b "<<*this<<std::endl;
-        assert(name_!=nullptr);
-        assert(ve::valid(regid_));
-    }
-#endif
+    explicit RegSymbol( char const* const name, RegId const regid)
+        : Base(nullptr, nextSym(), 1/*scope*/, defBytes(regid), defAlign(regid))
+          ,name_(name)
+          ,regid_(valid(regid)? regid: invalidReg())
+          ,rtype_(cls(regid))
+          ,t_decl(RegSymbol::nextTick())
+          ,t_sym(0U)
+          {
+              if(valid(regid_)){setREG(true); t_sym=t_decl;}
+              std::cout<<" +RS-b "<<*this<<std::endl;
+              assert(name_!=nullptr);
+              assert(valid(regid_));
+          }
 #if 0
     /** register copying constructor. */
     explicit RegSymbol(RegSymbol const& src, unsigned const symId, char const* const newName,
@@ -170,11 +141,6 @@ class RegSymbol :
     //
     // begin by exposing base class functions "as is" [then customize]
     //
-#if OLD
-    using Base::uid;
-#else
-//#define uid Base::symId()/*unsigned*/
-#endif
     Where getWhere() const              {return Base::getWhere();}
     unsigned symId() const              {return Base::symId();}
     bool getActive() const              {return Base::getActive();}
@@ -182,25 +148,24 @@ class RegSymbol :
     int getAlign() const                {return Base::getAlign();}
     bool getREG() const                 {return Base::getREG();}
     bool getMEM() const                 {return Base::getMEM();}
-#if OLD
-    RegSymbol& setActive(bool set=true  ) {Base::setActive(set); return *this;}
-#endif // scope::SymbStates now controls this (begin_scope/end_scope/delsym)
+    RegSymbol& setActive(bool set=true) {Base::setActive(set); return *this;}
     RegSymbol& setREG(bool set=true)    {Base::setREG(set); return *this;}
     RegSymbol& setMEM(bool set=true)    {Base::setMEM(set); return *this;}
     unsigned getStale() const           {return Base::getStale();}
     RegSymbol& unStale()                {Base::unStale(); return *this;}
     RegSymbol& incStale()               {Base::incStale(); return *this;}
-    //
+    
     // overridden/modified/extended Base functions
     //
     /** register unassign (possibly tmp, or before out-of-scope). */
 #if OLD
     RegSymbol& unsetReg() {Base::setREG(false).Base::setMEM(false); regid_=ve::invalidReg(); return *this;}
 #else
-    RegSymbol& unsetReg() {Base::setREG(false).Base::setMEM(false); regid_=invalidReg(); return *this;}
+    RegSymbol& unsetReg() {setREG(false).setMEM(false); regid_=invalidReg(); return *this;}
 #endif
     /** register copy, moving symbol to given \c rid. */
-    RegSymbol& setReg(RegId const rid, uint64_t const tick);
+    RegSymbol& setReg(RegId const rid, uint64_t const tick); ///< deprecated
+    RegSymbol& setReg(RegId const rid);
     /** annotate register read event */
     RegSymbol& tRead(uint64_t const tick);
     /** annotate register write event */
@@ -227,31 +192,32 @@ class RegSymbol :
     char const* name_;          ///< declared symbol name
     //unsigned scope;           ///< scope uid; 1=function, 2,3,...=sub-blocks (never re-use these)
     // ... see symScopeUid.hpp  symbol<-->scope relation maintained separately
-#if OLD
-    ve::RegId regid_;           ///< register assignment (or IDlast)
-    ve::Reg_t rtype_;           ///< <em>register type</em> (chip-specific, \reg regDefs.hpp for Aurora)
-#else
     RegId regid_;               ///< register assignment (or Rb::invalidReg())
-    Rb::Cls rtype_;      ///< generic register type
-    Rb::Sub rsub_;       ///< register subclass (only generic value is Rb::Sub::def
-#endif
+    Rb::Cls rtype_;             ///< generic register type
+    Rb::Sub rsub_;              ///< register subclass (only generic value is Rb::Sub::def
     uint64_t const t_decl;      ///< declaration time tick
     uint64_t t_sym;             ///< last-used tick
 };//RegSymbol
 
-#if OLD
-inline RegSymbol& RegSymbol::setReg(ve::RegId const rid, uint64_t const tick)
-#else
 inline RegSymbol& RegSymbol::setReg(RegId const rid, uint64_t const tick)
-#endif
 {
-#if OLD
-    if( ve::valid(rid) ){
-#else
     if( valid(rid) ){
-#endif
         assert( tick >= t_sym );
-        t_sym = tick;
+        //t_sym = tick;
+        t_sym = nextTick();
+        //if( rid == regid_ ) this is OK, no warning.
+        regid_ = rid;
+        setREG(true);
+    }else{
+        unsetReg();
+    }
+    return *this;
+}
+inline RegSymbol& RegSymbol::setReg(RegId const rid)
+{
+    if( valid(rid) ){
+        auto const tick = nextTick();
+        assert( tick >= t_sym );
         //if( rid == regid_ ) this is OK, no warning.
         regid_ = rid;
         setREG(true);
@@ -261,21 +227,13 @@ inline RegSymbol& RegSymbol::setReg(RegId const rid, uint64_t const tick)
     return *this;
 }
 inline RegSymbol& RegSymbol::tRead(uint64_t const tick){
-#if 0
-    assert(getActive() && ve::valid(regid_) && Base::getREG() && "symbol not in register?");
-#else
     assert(getActive() && valid(regid_) && Base::getREG() && "symbol not in register?");
-#endif
     assert(tick >= t_sym);
     t_sym=tick;
     return *this;
 }
 inline RegSymbol& RegSymbol::tWrite(uint64_t const tick){
-#if 0
-    assert(getActive() && ve::valid(regid_) && Base::getREG() && "symbol not in register?");
-#else
     assert(getActive() && valid(regid_) && Base::getREG() && "symbol not in register?");
-#endif
     assert(tick >= t_sym);
     t_sym=tick;
     Base::setREG(true); // side effect : if spilled to memory, memory value becomes stale.
@@ -290,13 +248,8 @@ std::ostream& operator<<(std::ostream& os, RegSymbol const& x){
         ;
     if(x.getREG())
         os<<"R"; else os<<"~R";
-#if OLD
-    if(ve::valid(x.regId()))
-        os<<ve::asmname(x.regId());
-#else
     if(valid(x.regId()))
         os<<asmname(x.regId());
-#endif
     else
         os<<"l"<<x.getBytes()<<"a"<<x.getAlign(); //<<"~R";
     if(x.getMEM()){
@@ -308,5 +261,5 @@ std::ostream& operator<<(std::ostream& os, RegSymbol const& x){
     return os<<"}";
 }
 
-// vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,h.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
+// vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,h.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break syntax=cpp.doxygen
 #endif // REGSYMBOL2_HPP
