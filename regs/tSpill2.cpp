@@ -41,44 +41,6 @@ struct Tester{
     static void test3();
 };
 
-#if 0
-/** Function arg symbols may not need spilling to a spill region.
- * 'C' ABI say where function args are in register and/or memory.
- *
- * Aurora ABI assigns every function argument symbol a reserved
- * memory location.  This memory is upward-growing in stack frame,
- * whereas Spill memory is downward-growing from frame pointer.
- *
- * Spill memory max size is tracked so that function prologue can
- * set up a large-enough stack frame upon function entry.
- *
- * ===
- *
- * ScopedSpillableBase relegates symId and active state to ParSymbol.
- *
- * So ParSymbol<ScopeSpillableBase> roughly replaces SpillableBase
- */
-class SpillableSym : public ScopedSpillableBase
-{
-  public:
-    friend class Tester;
-
-    //typedef scope::ParSymbol<ScopedSpillableBase> Base;
-    //SpillableSym(unsigned uid, int bytes, int align)
-    //    : Base(uid, bytes,align) {}
-    SpillableSym(int bytes, int align)
-        : ScopedSpillableBase(bytes,align) {}
-
-    // /** map Region::symId to SpillableSym */
-    // DemoSymbStates *ssym;
-    //----
-    //void scope_enter() {assert(getActive()==false); setActive(true);}
-    //void scope_exit() {setActive(false);}
-    //bool isSpillable() const { return (REG&getWhere()); }
-    //Where w(int const i) const {return static_cast<Where>(i); }
-};
-#endif
-
 //namespace scope{
 /** Spillable objects need a way to convert symbol Ids into SpillableSym.  Here
  * we do not use the usual scope::SymbStates, but a simpler symbol creation
@@ -125,33 +87,6 @@ class DemoSymbStates : public scope::SymbStates<ScopedSpillableBase> {
         return ret;
     }
 
-#if 0 // THE ONLY WAY TO CONSTRUCT A PSYM IS VIA ADDSYM
-    Psym mkPsym(unsigned uid, int bytes, int align){
-        return Psym(nullptr, uid, scope(), bytes, align);
-        //return Psym(this, uid, scope, bytes, align);
-    }
-    //Psym mkPsym(unsigned uid, int bytes, int align){
-    //    return Psym(uid, 1, bytes, align);
-    //}
-
-
-    /** declare a symbol. It is active, but in neither REG nor MEM.
-     * For testing, instead of a monolithic 'newsym(...)', we can construct
-     * a psym, and \e then store it.  (We don't care about scopes at all, for now).
-     */
-    void add(Psym const& s){
-        assert( syms.find(s.uid) == syms.end() );
-        assert( !scopes.empty() );
-        ScopeSymbols& curScopeSymbols = scopes.front();
-        HashSet& scopeSyms = curScopeSymbols.syms;
-        assert( scopeSyms.find(s.uid) == scopeSyms.end() );
-
-        syms.emplace( s.uid, s );
-        //syms.insert( std::make_pair(s.uid, s));
-        scopeSyms[s.uid] = curScopeSymbols.scope;
-
-    }
-#endif
     size_t regOnly() const {
         return count_if( syms.begin(), syms.end(),
                 [](map<unsigned,Psym>::value_type const& v)
@@ -162,11 +97,6 @@ class DemoSymbStates : public scope::SymbStates<ScopedSpillableBase> {
                 [](map<unsigned,Psym>::value_type const& v)
                 { return !v.second.getREG() && v.second.getMEM() && v.second.getStale()==0; });
     }
-#if 0 // scope::SymbStates is the only allowed controller of 'active'
-    void setActive(unsigned symId, bool active){
-        psym(symId).setActive(active);
-    }
-#endif
     auto const& getSyms() const {return Base::syms;} // unordered_map<symId,Psym>, all (dups inside ssu)
     auto symIdAnyScopeSorted() const { return ssu.symIdAnyScopeSorted(); }
 

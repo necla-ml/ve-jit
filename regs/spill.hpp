@@ -38,6 +38,9 @@ void spill_msg_destroy(int bottom);
  *     and memory-staleness
  *
  * It is expected that scope::SymbState be the usual SYMBSTATE.
+ *
+ * Spill maps symbol ids to memory spill offsets.  It doesn't care about
+ * register assignment, even though \c p(symId) may contain such info.
  */
 template<class SYMBSTATES>
 class Spill {

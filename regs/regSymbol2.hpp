@@ -22,7 +22,7 @@ class RegSymbol; // SpillableBase + name, rtype and regId()
  *
  */
 class RegSymbol :
-    public scope::ParSymbol<ScopedSpillableBase>
+    protected scope::ParSymbol<ScopedSpillableBase>
 {
     friend class DemoSymbStates;
   private:

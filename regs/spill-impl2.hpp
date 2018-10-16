@@ -321,7 +321,7 @@ void Spill<SYMBSTATES>::emit_spill( unsigned const symId, typename Rgns::const_i
     //TODO("!!!");
     assert( at != use.cend() );
     assert( at != use.cbefore_begin() );
-    cout<<" emit_spill("<<sym.uid<<",o"<<at->offset
+    cout<<" emit_spill("<<sym.symId()<<",o"<<at->offset
         <<",l"<<at->len<<")"<<endl; cout.flush();
 }
 
@@ -343,7 +343,8 @@ void Spill<SYMBSTATES>::spill(unsigned const symId
     int const verbose=13;        //0:none, 1:warn/err
     assert( symId );
     auto & sym = p(symId);
-    assert( sym.uid == symId );
+    //assert( sym.uid == symId );
+    assert( sym.symId() == symId );
     using std::cerr;
     using std::cout;
     using std::endl;
@@ -390,11 +391,11 @@ void Spill<SYMBSTATES>::spill(unsigned const symId
             return;
         }else{                  // active non-register spilled
             if( sym.getStale() ){
-                if(verbose>0){ cout<<"\nError: active non-register spilled symbol "<<sym.uid<<" is stale."<<endl; cout.flush(); }
+                if(verbose>0){ cout<<"\nError: active non-register spilled symbol "<<sym.symId()<<" is stale."<<endl; cout.flush(); }
                 assert(false);
                 return;
             }else{
-                if(verbose>0){ cout<<"\nWarning: active non-register symbol "<<sym.uid<<" already spilled (no-op)."<<endl; cout.flush(); }
+                if(verbose>0){ cout<<"\nWarning: active non-register symbol "<<sym.symId()<<" already spilled (no-op)."<<endl; cout.flush(); }
                 // check align?
                 return;
             }
@@ -405,7 +406,7 @@ void Spill<SYMBSTATES>::spill(unsigned const symId
 
     // possibly active register symbol
     if( ubeg!=uend && sym.getMEM() && sym.getStale()==0 ){
-        if(verbose>0){ cout<<"\nWarning: active reg symbol "<<sym.uid<<" already spilled??"<<endl; cout.flush(); }
+        if(verbose>0){ cout<<"\nWarning: active reg symbol "<<sym.symId()<<" already spilled??"<<endl; cout.flush(); }
         // check align?
         return;
     }
