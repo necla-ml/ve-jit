@@ -158,7 +158,7 @@ bool chk_order(DemoSymbStates const& ssym, std::initializer_list<unsigned> const
 static int testNum=0;
 #define TEST(MSG) do{ \
     ++testNum; \
-    std::cout<<"@@@ TEST "<<testNum<<" @@@ "; \
+    std::cout<<"\n@@@ TEST "<<testNum<<" @@@ "; \
     if(MSG) std::cout<<MSG; \
     std::cout<<std::endl; \
 }while(0)
@@ -480,6 +480,7 @@ void Tester::test3(){
         for(unsigned i=1U; i<=10U; ++i){
             cout<<"\nUse symbol "<<i<<endl;     // assign register to 'i'
             ssym.use4(i);                       // (max 4 registers)
+            cout<<"\nsyms{"; for(unsigned i=1U; i<=10U; ++i){cout<<"\n\t"<<i<<"\t"<<s(i);} cout<<"\n}"<<endl;
             dump();
         }
         cout<<"All symbols:"<<endl;
@@ -562,9 +563,11 @@ void Tester::test3(){
         }
         dump();
         cout<<"All symbols:"<<endl; for(unsigned i=1U; i<=10U; ++i) cout<<s(i)<<endl;
+        THROW_UNLESS( chk_order(ssym,{1,2,3,4,5,6}), "Unexpected Spill Region Order" );
 
         cout<<" 5 and 8 symbols forgotten (but still active)"<<endl;
         s(5).setREG(false).setMEM(false);
+        s(8).setREG(false).setMEM(false);
         dump();
         cout<<"All symbols:"<<endl; for(unsigned i=1U; i<=10U; ++i) cout<<s(i)<<endl;
 

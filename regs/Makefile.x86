@@ -42,7 +42,7 @@ is_valgrind_ok := $(shell touch foo.c && valgrind --help 2>&1 > /dev/null && ech
 $(info valgrind? <$(is_valgrind_ok)>)
 ifeq ($(is_valgrind_ok), yes)
 vg = $(if $filter($(is_valgrind_ok),yes), \
-     valgrind --leak-check=full --show-leak-kinds=all ./$@ > $@.vg 2>&1 \
+     valgrind --leak-check=full --show-leak-kinds=all --suppressions=./dl_init.supp ./$@ > $@.vg 2>&1 \
      && { echo "gawking summary..." \
           && gawk 'BEGIN{err=-1} /^==.*(LEAK|HEAP) SUMMARY/{p=1;err=0} p==1&&/^[^=]/{p=0} p==1{print} END{exit err}' $@.vg; } \
      || { echo "Ohoh: $@ did not terminate correcly"; echo "see $@.vg"; } \

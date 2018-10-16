@@ -9,7 +9,7 @@
 #include <map>
 using namespace std;
 
-#define STAGE 2
+#define STAGE 3
 
 #if STAGE >= 0
 static int testNum=0;
@@ -187,7 +187,13 @@ class DemoSymbStates : public scope::SymbStates<ScopedSpillableBase> {
         // for reproducibility, we will re-order by symId
         // (better might be staleness or ...)
         std::map<unsigned,Psym> osyms;
-        for(auto const v: syms) osyms.insert(v);
+        for(auto const& v: syms) osyms.insert(v);
+        if(0){
+            cout<<" Compare syms:"<<endl;
+            for(auto const& v: syms) cout<<"\t"<<v.second<<endl;
+            cout<<" with osyms:"<<endl;
+            for(auto const& v: osyms) cout<<"\t"<<v.second<<endl;
+        }
 
         auto nRegs = count_if(osyms.begin(), osyms.end(),
                 [](map<unsigned,Psym>::value_type const& v)
@@ -220,11 +226,11 @@ class DemoSymbStates : public scope::SymbStates<ScopedSpillableBase> {
         assert( r !=  osyms.end() );
         cout<<"< use4:(spill "<<r->first<<"):"<<symId<<" "; cout.flush();
         unsigned r_symid = r->first;
-        spill.spill(r_symid);          // 'r' --> RM
+        assert( r_symid != symId );
         // now back to modifying syms [not osyms]...
-        auto pspilled = psym(r->first);
+        spill.spill(r_symid);          // 'r' --> RM
+        fpsym(r_symid).setREG(false);        // 'r' --> ~RM
         // 's' takes the register away from prev symbol 'r'
-        pspilled.setREG(false);        // 'r' --> ~RM
         s.setREG(true);                // 's' --> R
     }
 };
@@ -493,12 +499,11 @@ void Tester::test2(){
         try{
             THROW_UNLESS( chk_order(ssym,{1,1,1,1,1}), "Unexpected Spill Region Order" );
         }catch(std::exception const& e){
+            cout<<"Expected this: "<<e.what();
             cout<<"Good: caught exception when chk_order did not match:"<<endl;
-            cout<<e.what()<<endl;
         }
         cout<<"Continuing..."<<endl;
     }
-#if 0
     TEST("gc a begin-spill hole and reuse");
     {
         Ssym ssym;
@@ -506,34 +511,40 @@ void Tester::test2(){
         //        spill(1) : spill symbol 1
         //          dump() : print spill region symbol assignments
         typedef Ssym::Psym S; // Symbol object
-        auto s=[&ssym](unsigned symId)->S&  {return ssym.psym(symId);};
+        auto s=[&ssym](unsigned symId)->S&  {return ssym.fpsym(symId);}; // S& version exposed for testing
         auto spill=[&ssym](unsigned symId)  {ssym.spill.spill(symId);};
         auto dump=[&ssym]()->void           {return ssym.spill.dump();};
-        auto p = [&ssym](unsigned symId, int byte, int align)->Ssym::Psym{
-            return ssym.mkPsym(symId, byte,align); };
-        //auto newscalar=[&ssym](unsigned id) {return ssym.add(Psym(id,8,8));};
-        auto newscalarRM=[&ssym,&s,&spill,&p](unsigned id) {
-            ssym.add(p(id,8,8));
-            s(id).setREG(true);
-            spill(id);
+        unsigned lastsym = 0;
+        //auto newscalar=[&ssym,&lastsym](void) { return lastsym=ssym.newsym(8,8);};
+        auto newscalarRM=[&ssym,&s,&spill,&lastsym](void) {
+            lastsym = ssym.newsym(8,8);
+            s(lastsym).setREG(true);
+            spill(lastsym);
         };
 
-        newscalarRM(1);                 // symId 1 --> RM (declare, ->REG, ->MEM)
-        newscalarRM(2);                 // symId 2 --> RM
-        newscalarRM(3);                 // symId 3 --> RM
-        newscalarRM(4);                 // symId 4 --> RM
-        s(1).setREG(true);
-        s(2).setREG(true);
-        ssym.spill.gc();
-        cout<<"\nInitial spill with 2-scalar begin-spill gc'ed hole:"<<endl;
+        newscalarRM();                 // symId 1 --> RM (declare, ->REG, ->MEM)
+        newscalarRM();                 // symId 2 --> RM
+        newscalarRM();                 // symId 3 --> RM
+        newscalarRM();                 // symId 4 --> RM
+        assert( lastsym == 4 );
         dump();
+        s(1).setREG(true);      // Note: setREG here indicates that 'R'
+        s(2).setREG(true);      // valued changed.  'M' now staleness.
+        ssym.spill.gc();        // forget all stale Spill assignments.
+        cout<<"\nInitial spill with 1st 2 of 4 spill gc'ed hole:"<<endl;
+        dump();
+        assert( distance(ssym.spill.regions().begin(), ssym.spill.regions().end()) == 2 );
+        THROW_UNLESS( chk_order(ssym,{3,4}), "Unexpected Spill Region Order" );
         cout<<"\nspill 1, new symbol 5, and 2:"<<endl;
         spill(1);
+        assert( distance(ssym.spill.regions().begin(), ssym.spill.regions().end()) == 3 );
         cout<<"\nNote: too-large hole puts 1 into lowest compatible slot in the hole (posn 2)"<<endl;
         assert( s(1).getREG() && s(1).getMEM() );
         dump(); for(unsigned i=1U; i<=4U; ++i) cout<<s(i)<<endl;
         cout<<"\nspill new 5:"<<endl;
-        newscalarRM(5); // spill(5); OHOH, spilled and not stale! maybe should not spill!
+        newscalarRM(); // spill(5); OHOH, spilled and not stale! maybe should not spill!
+        assert( distance(ssym.spill.regions().begin(), ssym.spill.regions().end()) == 4 );
+        THROW_UNLESS( chk_order(ssym,{5,1,3,4}), "Unexpected Spill Region Order" );
         assert( s(5).getREG() && s(5).getMEM() );
         dump(); for(unsigned i=1U; i<=5U; ++i) cout<<s(i)<<endl;
         cout<<"\nrespill 2"<<endl;
@@ -541,6 +552,7 @@ void Tester::test2(){
         assert( s(2).getREG() && s(2).getMEM() );
         dump(); for(unsigned i=1U; i<=5U; ++i) cout<<s(i)<<endl;
         cout<<endl;
+        assert( distance(ssym.spill.regions().begin(), ssym.spill.regions().end()) == 5 );
         THROW_UNLESS( chk_order(ssym,{5,1,3,4,2}), "Unexpected Spill Region Order" );
     }
     TEST("gc a mid-spill hole and reuse");
@@ -550,30 +562,30 @@ void Tester::test2(){
         //        spill(1) : spill symbol 1
         //          dump() : print spill region symbol assignments
         typedef Ssym::Psym S; // Symbol object
-        auto s=[&ssym](unsigned symId)->S&  {return ssym.psym(symId);};
+        auto s=[&ssym](unsigned symId)->S&  {return ssym.fpsym(symId);};
         auto spill=[&ssym](unsigned symId)  {ssym.spill.spill(symId);};
         auto dump=[&ssym]()->void           {return ssym.spill.dump();};
-        auto p = [&ssym](unsigned symId, int byte, int align)->Ssym::Psym{
-            return ssym.mkPsym(symId, byte,align); };
-        //auto newscalar=[&ssym](unsigned id) {return ssym.add(Psym(id,8,8));};
-        auto newscalarRM=[&ssym,&s,&spill,&p](unsigned id) {
-            ssym.add(p(id,8,8));
-            s(id).setREG(true);
-            spill(id);
+        unsigned lastsym = 0;
+        //auto newscalar=[&ssym,&lastsym](void) { return lastsym=ssym.newsym(8,8);};
+        auto newscalarRM=[&ssym,&s,&spill,&lastsym](void) {
+            lastsym = ssym.newsym(8,8);
+            s(lastsym).setREG(true);
+            spill(lastsym);
         };
 
-        newscalarRM(1);                 // symId 1 --> RM (declare, ->REG, ->MEM)
-        newscalarRM(2);                 // symId 2 --> RM
-        newscalarRM(3);                 // symId 3 --> RM
-        newscalarRM(4);                 // symId 4 --> RM
-        s(2).setREG(true);
-        s(3).setREG(true);
+        newscalarRM();                 // symId 1 --> RM (declare, ->REG, ->MEM)
+        newscalarRM();                 // symId 2 --> RM
+        newscalarRM();                 // symId 3 --> RM
+        newscalarRM();                 // symId 4 --> RM
+        assert( lastsym == 4 );
+        s(2).setREG(true);      // This time we will create stale memory
+        s(3).setREG(true);      // for 2nd and 3rd spilled registers.
         ssym.spill.gc();
-        cout<<" Initial spill with 2-scalar begin-spill gc'ed hole:"<<endl;
+        cout<<" Initial spill with 2nd and 3rd of 4 spill gc'ed hole:"<<endl;
         dump();
         cout<<"\nspill 2, new symbol 5, and 1:"<<endl;
         spill(3);       // Note: re-uses old MEM slot (symbol is ~M, but spill remembers where symbol used to be)
-        newscalarRM(5); // spill(5); OHOH, spilled and not stale! maybe should not spill!
+        newscalarRM(); // spill(5); OHOH, spilled and not stale! maybe should not spill!
         spill(2);
         dump(); for(unsigned i=1U; i<=5U; ++i) cout<<s(i)<<endl;
         cout<<endl;
@@ -586,21 +598,25 @@ void Tester::test2(){
         //        spill(1) : spill symbol 1
         //          dump() : print spill region symbol assignments
         typedef Ssym::Psym S; // Symbol object
-        auto s=[&ssym](unsigned symId)->S&  {return ssym.psym(symId);};
+        auto s=[&ssym](unsigned symId)->S&  {return ssym.fpsym(symId);};
         auto spill=[&ssym](unsigned symId)  {ssym.spill.spill(symId);};
         auto dump=[&ssym]()->void           {return ssym.spill.dump();};
-        auto p = [&ssym](unsigned symId, int byte, int align)->Ssym::Psym{
-            return ssym.mkPsym(symId, byte,align); };
-        auto newscalar=[&ssym,&p](unsigned id) {return ssym.add(p(id,8,8));};
+        unsigned lastsym = 0;
+        auto newscalar=[&ssym,&lastsym](void) { return lastsym=ssym.newsym(8,8);};
+        //auto newscalarRM=[&ssym,&s,&spill,&lastsym](void) {
+        //    lastsym = ssym.newsym(8,8);
+        //    s(lastsym).setREG(true);
+        //    spill(lastsym);
+        //};
 
-        newscalar(1);                   // symId 1
+        newscalar();                   // symId 1
         s(1).setREG(true);              // say value is "in register"
         spill(1);                       // 1-->RM (register+memory)
-        newscalar(2);                   // symId 2
+        newscalar();                   // symId 2
         s(2).setREG(true);              // 2-->R
         spill(2);                       // 2-->RM
-        newscalar(3); s(3).setREG(true); spill(3);    // 3--> RM
-        newscalar(4); s(4).setREG(true); spill(4);    // 4--> RM
+        newscalar(); s(3).setREG(true); spill(3);    // 3--> RM
+        newscalar(); s(4).setREG(true); spill(4);    // 4--> RM
         s(2).setREG(true);
         s(4).setREG(true);
         cout<<"\nAdd syms 1234, spill them, modify reg value of 2 & 4: "<<endl;
@@ -613,12 +629,11 @@ void Tester::test2(){
         cout<<"\nspill 2 (into next hole) :"<<endl;
         spill(2);
         cout<<"\nspill new 5 (expand spill size) :"<<endl;
-        newscalar(5); s(5).setREG(true); spill(5);    // 5--> RM
+        newscalar(); s(5).setREG(true); spill(5);    // 5--> RM
         dump();
         cout<<endl;
         THROW_UNLESS( chk_order(ssym,{1,4,3,2,5}), "Unexpected Spill Region Order" );
     }
-#endif
 }
 #endif
 #if STAGE>=3
@@ -632,25 +647,23 @@ void Tester::test3(){
         //        spill(1) : spill symbol 1
         //          dump() : print spill region symbol assignments
         typedef Ssym::Psym S; // Symbol object
-        auto s=[&ssym](unsigned symId)->S&  {return ssym.psym(symId);};
+        auto s=[&ssym](unsigned symId)->S&  {return ssym.fpsym(symId);};
         //auto spill=[&ssym](unsigned symId)  {ssym.spill.spill(symId);};
         auto dump=[&ssym]()->void           {return ssym.spill.dump();};
-        auto p = [&ssym](unsigned symId, int byte, int align)->Ssym::Psym{
-            return ssym.mkPsym(symId, byte,align); };
-        auto newscalar=[&ssym,&p](unsigned id) {return ssym.add(p(id,8,8));};
-        //auto newscalarRM=[&ssym,&s,&spill](unsigned id) {
-        //    ssym.add(Psym(id,8,8));
-        //    s(id).setREG(true);
-        //    spill(id);
-        //};
-        for(unsigned i=1U; i<=10U; ++i) newscalar(i); // DECLARE 10 scalars
-        cout<<"\nsyms{"; for(auto symid: ssym.symIdAnyScopeSorted()){cout<<" "<<symid;} cout<<"}"<<endl;
+        unsigned lastsym = 0;
+        auto newscalar=[&ssym,&lastsym](void) { return lastsym=ssym.newsym(8,8);};
+
+        for(unsigned i=1U; i<=10U; ++i) newscalar(); // DECLARE 10 scalars
+        //cout<<"\nsyms{"; for(auto symid: ssym.symIdAnyScopeSorted()){cout<<" "<<symid;} cout<<"}"<<endl;
+        cout<<"\nsyms{"; for(auto symid: ssym.symIdAnyScopeSorted()){cout<<"\n\t"<<symid<<"\t"<<s(symid);} cout<<"\n}"<<endl;
+
         for(unsigned i=1U; i<=10U; ++i){
             cout<<"\nUse symbol "<<i<<endl;     // assign register to 'i'
             ssym.use4(i);                       // (max 4 registers)
             cout<<"ssym.prtCurrentSymbols():   ";
             ssym.prtCurrentSymbols();
             cout<<endl; cout.flush();
+            cout<<"\nsyms{"; for(unsigned i=1U; i<=10U; ++i){cout<<"\n\t"<<i<<"\t"<<s(i);} cout<<"\n}"<<endl;
             dump();
         }
         cout<<"All symbols:"<<endl;
@@ -676,41 +689,51 @@ void Tester::test3(){
         //        spill(1) : spill symbol 1
         //          dump() : print spill region symbol assignments
         typedef Ssym::Psym S; // Symbol object
-        auto s=[&ssym](unsigned symId)->S&  {return ssym.psym(symId);};
+        auto s=[&ssym](unsigned symId)->S&  {return ssym.fpsym(symId);};
         //auto spill=[&ssym](unsigned symId)  {ssym.spill.spill(symId);};
         auto dump=[&ssym]()->void           {return ssym.spill.dump();};
-        auto p = [&ssym](unsigned symId, int byte, int align)->Ssym::Psym{
-            return ssym.mkPsym(symId, byte,align); };
-        auto newscalar=[&ssym,&p](unsigned id) {return ssym.add(p(id,8,8));};
-        for(unsigned i=1U; i<=10U; ++i) newscalar(i); // DECLARE 10 scalars
+        unsigned lastsym = 0;
+        auto newscalar=[&ssym,&lastsym](void) { return lastsym=ssym.newsym(8,8);};
+        for(unsigned i=1U; i<=10U; ++i) newscalar(); // DECLARE 10 scalars
         for(unsigned i=1U; i<=10U; ++i){
             ssym.use4(i);                       // (max 4 registers)
         }
+        cout<<"\n10 scalars, used in order, w/ only 4 registers available"<<endl;
+        cout<<"\n\tAll symbols:"<<endl; for(unsigned i=1U; i<=10U; ++i) cout<<"\t"<<s(i)<<endl;
         dump();
-        cout<<"All symbols:"<<endl; for(unsigned i=1U; i<=10U; ++i) cout<<s(i)<<endl;
+        THROW_UNLESS( chk_order(ssym,{1,2,3,4,5,6}), "Unexpected Spill Region Order" );
 
-        cout<<" 5 and 8 symbols forgotten (but still active)"<<endl;
+        cout<<" 5 and 8 forgotten (but still active)"<<endl;
         s(5).setREG(false).setMEM(false);
+        s(8).setREG(false).setMEM(false);
         dump();
         cout<<"All symbols:"<<endl; for(unsigned i=1U; i<=10U; ++i) cout<<s(i)<<endl;
 
-        cout<<"Out-of-scope {5,6,7,8}, without gc"<<endl;
-        ssym.setActive(5,false);
+        cout<<"delsym {5,6,7,8}, without gc"<<endl;
+#if 0 // These are now private
+        s(5).setActive(false);
         ssym.setActive(6,false);
         ssym.setActive(7,false);
         ssym.setActive(8,false);
+#else // the accepted was to deactivate before end_scope is delsym
+        ssym.delsym(5);
+        ssym.delsym(6);
+        ssym.delsym(7);
+	ssym.delsym(8);
+        // net effect similar to setActive(symid,false)
+#endif
         //ssym.spill.gc();
+        cout<<"\n\tAll symbols B:"<<endl; for(unsigned i=1U; i<=10U; ++i) cout<<"\t"<<s(i)<<endl;
         dump();
-        cout<<"All symbols:"<<endl; for(unsigned i=1U; i<=10U; ++i) cout<<s(i)<<endl;
 
         cout<<"add 5 new registers"<<endl;
-        for(unsigned i=21U; i<=25U; ++i) newscalar(i); // DECLARE 5 more scalars
-        for(unsigned i=21U; i<=25U; ++i){
+        for(unsigned i=11U; i<=15U; ++i) {newscalar();assert(lastsym==i);} // DECLARE 5 more scalars
+        for(unsigned i=11U; i<=15U; ++i){
             ssym.use4(i);                       // (max 4 registers)
         }
         dump();
-        cout<<"All symbols:"<<endl; for(auto s: ssym.getSyms()) cout<<s.second<<endl;
-        THROW_UNLESS( chk_order(ssym,{1,2,3,4,5,6,9,10,21}), "Unexpected Spill Region Order" );
+        cout<<"\n\tAll symbols C:"<<endl; for(unsigned i=1U; i<=15U; ++i) cout<<"\t"<<s(i)<<endl;
+        THROW_UNLESS( chk_order(ssym,{1,2,3,4,5,6,9,10,11}), "Unexpected Spill Region Order" );
     }
     TEST("simulate out-of-scope, with gc");
     {
@@ -719,13 +742,13 @@ void Tester::test3(){
         //        spill(1) : spill symbol 1
         //          dump() : print spill region symbol assignments
         typedef Ssym::Psym S; // Symbol object
-        auto s=[&ssym](unsigned symId)->S&  {return ssym.psym(symId);};
+        auto s=[&ssym](unsigned symId)->S&  {return ssym.fpsym(symId);};
         //auto spill=[&ssym](unsigned symId)  {ssym.spill.spill(symId);};
         auto dump=[&ssym]()->void           {return ssym.spill.dump();};
-        auto p = [&ssym](unsigned symId, int byte, int align)->Ssym::Psym{
-            return ssym.mkPsym(symId, byte,align); };
-        auto newscalar=[&ssym,&p](unsigned id) {return ssym.add(p(id,8,8));};
-        for(unsigned i=1U; i<=10U; ++i) newscalar(i); // DECLARE 10 scalars
+        unsigned lastsym = 0;
+        auto newscalar=[&ssym,&lastsym](void) { return lastsym=ssym.newsym(8,8);};
+
+        for(unsigned i=1U; i<=10U; ++i) newscalar(); // DECLARE 10 scalars
         for(unsigned i=1U; i<=10U; ++i){
             ssym.use4(i);                       // (max 4 registers)
         }
@@ -734,28 +757,30 @@ void Tester::test3(){
 
         cout<<" 5 and 8 symbols forgotten (but still active)"<<endl;
         s(5).setREG(false).setMEM(false);
+        s(8).setREG(false).setMEM(false);
         dump();
         cout<<"All symbols:"<<endl; for(unsigned i=1U; i<=10U; ++i) cout<<s(i)<<endl;
 
         cout<<"Out-of-scope {5,6,7,8}, and gc"<<endl;
-        ssym.setActive(5,false);
-        ssym.setActive(6,false);
-        ssym.setActive(7,false);
-        ssym.setActive(8,false);
+        ssym.delsym(5);
+        ssym.delsym(6);
+        ssym.delsym(7);
+	ssym.delsym(8);
         dump();
-        ssym.spill.gc();
+        ssym.spill.gc(); // <-- this now allows MEM posns of 5, 6 to be re-used
         dump();
         cout<<"All symbols:"<<endl; for(unsigned i=1U; i<=10U; ++i) cout<<s(i)<<endl;
 
         cout<<"add 5 new registers"<<endl;
-        for(unsigned i=21U; i<=25U; ++i) newscalar(i); // DECLARE 5 more scalars
-        for(unsigned i=21U; i<=25U; ++i){
+        for(unsigned i=11U; i<=15U; ++i){newscalar();assert(lastsym==i);} // DECLARE 5 more scalars
+        for(unsigned i=11U; i<=15U; ++i){
             ssym.use4(i);                       // (max 4 registers)
         }
         dump();
         cout<<"All symbols:"<<endl; for(auto s: ssym.getSyms()) cout<<s.second<<endl;
         // 5 and 6 were gc'ed, 7 and 8 were in-reg when went out of scope...
-        THROW_UNLESS( chk_order(ssym,{1,2,3,4,9,10,21}), "Unexpected Spill Region Order" );
+        THROW_UNLESS( chk_order(ssym,{1,2,3,4,9,10,11}), "Unexpected Spill Region Order" );
+        assert( ssym.spill.getBottom() == -56 );
     }
 }
 #endif //STAGE >= 3
