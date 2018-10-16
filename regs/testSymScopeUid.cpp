@@ -41,6 +41,7 @@ static int testNum=0;
     std::cout<<std::endl; \
 }while(0)
 
+#if 0
 struct VerboseSymbolState {
     void setActive(bool state) {
         this->active = active;
@@ -50,6 +51,7 @@ struct VerboseSymbolState {
   private:
     bool active;
 };
+#endif
 
 void test1(){
     //typedef SymScopeUid<> Ssu;

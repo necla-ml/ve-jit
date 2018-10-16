@@ -119,7 +119,7 @@ typename Spill<SYMBSTATES>::Sym const& Spill<SYMBSTATES>::p(unsigned const symId
 template<class SYMBSTATES> inline 
 typename Spill<SYMBSTATES>::Sym      & Spill<SYMBSTATES>::p(unsigned const symId)       {
     assert(symbStates != nullptr);
-    return symbStates->psym(symId);
+    return symbStates->fpsym(symId); // alter the error
 }
 
 template<class SYMBSTATES>

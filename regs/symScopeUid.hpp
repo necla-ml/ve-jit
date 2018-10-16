@@ -16,21 +16,24 @@
 #include "throw.hpp"
 #include <unordered_set>
 #include <unordered_map>
+#include <map>
 #include <forward_list>
 #include <cassert>
 #include <iostream>
 #include <cstring>
+#include <vector>
+#include <algorithm> // sort
 
+namespace ve {
+// fwd decl for friend status w/ ParSymbol and SymbStates
+template<class SYMBSTATES> class Spill;
+}
 namespace scope {
 
 // todo use this typedef in this file!
 //typedef unsigned SymId;
 // Perhaps eventually, like RegId
 //enum SymId : int_least16_t {};
-
-/** Main scope function.  This is based on detail::SymScopeUid and ParSymbol.
- * - begin_scope, newsym, end_scope are the main functions. */
-template<class BASE> class SymbStates;
 
 // version 3: simple user-supplied BASE for symbol state
 /** \c ParSymbol supplies the "state" functions required by \c SymbStates.
@@ -39,6 +42,13 @@ template<class BASE> class SymbStates;
  * - active flag, getActive(), goes false via end_scope or delsym.
  */
 template<class BASE> class ParSymbol;
+
+/** Main scope function.  This is based on detail::SymScopeUid and ParSymbol.
+ * - begin_scope, newsym, end_scope are the main functions. */
+template<class BASE> class SymbStates;
+//template<class BASE, typename MAP=std::unordered_map<unsigned,typename ParSymbol<BASE>> > SymbStates;
+//template<class BASE/*=ExBaseSym*/, bool ordered=0> SymbStates;
+
 
 template<class BASE>
 std::ostream& operator<<(std::ostream& os, ParSymbol<BASE> const& x);
@@ -115,7 +125,7 @@ namespace detail {
 class SymScopeUid {
   public:
     template<class SYMBASE> friend class SymStates;
-    template<class BASE> friend class scope::SymbStates;
+    template<class BASE,bool ordered> friend class scope::SymbStates;
     typedef std::unordered_set<unsigned> HashSet;
   protected:
     unsigned maxidSym;
@@ -274,6 +284,24 @@ class SymScopeUid {
             sep = ",";
         }
         std::cout<<"}";
+    }
+    std::vector<unsigned> symIdAnyScopeSorted() const {
+        size_t nSym = 0U;
+        size_t nSco = 0U;
+        for(auto const& sco: scopes){
+            ++nSco;
+            nSym += sco.syms.size();
+        }
+        std::cout<<" count "<<nSym<<" syms in "<<nSco<<" active scopes"<<std::endl;
+        std::vector<unsigned> ret;
+        ret.reserve(nSym);
+        for(auto const& sco: scopes){
+            for(unsigned sym: sco.syms){
+                ret.push_back(sym);
+            }
+        }
+        std::sort(ret.begin(), ret.end());
+        return ret;
     }
 };
 
@@ -544,6 +572,7 @@ class ParSymbol : public BASE {
     //-----------------------------------------------
     //    This section is just for demo purposes, testSymScopeUid.cpp
     template<class SYMSTATE> friend class detail::SymStates;
+    //friend class DemoSymbStates;
     //-----------------------------------------------
     /** Importantly, \c ParSymbol forwards \e unrecognized args to the BASE constructor.
      * In this simple implementation, the BASE has \b no access to uid or scope, since we
@@ -615,18 +644,28 @@ inline ParSymbol<BASE>::ParSymbol(/*Ssym *ssym,*/ unsigned uid, unsigned scope, 
  * assignment, memory location, ...  We will pass all "extra" constructor args in \c newsym()
  * down to your BASE class, without interpreting them.
  *
+ * If the symbolId order is important [some tests], you can use ordered=1.
+ * Perhaps we can support different orders, like order-by staleness?
  */
-template<class BASE/*=ExBaseSym*/>
+template<class BASE/*=ExBaseSym*/> //, bool ordered/*=0*/ >
 class SymbStates{
   public:
     typedef SymbStates<BASE> Ssym;
     typedef ParSymbol<BASE> Psym;
     typedef BASE Base;
     friend BASE;
-  private:
+    //template<class SYMBSTATES> friend ve::Spill<SYMBSTATES>;
+    friend ve::Spill<SymbStates<BASE>>;
+  protected:
     detail::SymScopeUid ssu;
     /** symbol uid --> external symbol state.  This data structure \em owns all the
      * Psym objects. */
+    //typename std::conditional<ordered==0,
+    //         std::unordered_map<unsigned/*symId*/,Psym>,
+    //         std::map<unsigned/*symId*/,Psym>
+    //             >::type
+    // SymScopeUid ssu maps symId --> scopes stack (+ inactive scopes)
+    //            syms maps symId --> Psym<BASE> for symId,scope,active and whatever BASE has.
     std::unordered_map<unsigned/*symId*/,Psym> syms;
   public:
     //
@@ -692,8 +731,7 @@ class SymbStates{
     //    assert( !ssu.scopes.empty() );
     //    return ssu.scopes.front().syms;
     //}
-    /** psym(symId) for sure has at least a 'name()' function [from \c ParSymbol].
-     */
+    /** Look up symId, returning ParSymbol<BASE> */
     Psym const& psym(unsigned const symId) const {
         auto const psym = syms.find(symId);
         if( psym == syms.end() ){
@@ -702,6 +740,25 @@ class SymbStates{
         assert( psym != syms.end() );
         return psym->second;
     }
+  protected:
+    Psym      & psym(unsigned const symId)       {
+        auto psym = syms.find(symId);
+        if( psym == syms.end() ){
+            THROW( "psym("<<symId<<") doesn't exist!");
+        }
+        assert( psym != syms.end() );
+        return psym->second;
+    }
+    /** "friend psym", to help compiler know I need the non-const psym. */
+    Psym      & fpsym(unsigned const symId)      {
+        auto psym = syms.find(symId);
+        if( psym == syms.end() ){
+            THROW( "fpsym("<<symId<<") doesn't exist!");
+        }
+        assert( psym != syms.end() );
+        return psym->second;
+    }
+  public:
     template<typename... Arg>
         unsigned newsym(Arg&&... arg) {
             // get a new symbol id

@@ -8,7 +8,8 @@
 TARGETS:=testSpill-old testSymbStates-old \
 	testSpill2 testSpill3 testRegSym \
 	testRegBase prt_regnames testSymScopeUid testScopedSpill0 \
-	tSpill2 regSymbol2.o
+	tSpill2 regSymbol2-hdr.o spill-impl2-hdr.o
+#testRegSym2
 all: $(TARGETS) Goodbye
 
 PHONY: Goodbye
@@ -43,7 +44,7 @@ ifeq ($(is_valgrind_ok), yes)
 vg = $(if $filter($(is_valgrind_ok),yes), \
      valgrind --leak-check=full --show-leak-kinds=all ./$@ > $@.vg 2>&1 \
      && { echo "gawking summary..." \
-          && gawk 'BEGIN{err=-1} /^==.*LEAK SUMMARY/{p=1;err=0} p==1&&/^[^=]/{p=0} p==1{print} END{exit err}' $@.vg; } \
+          && gawk 'BEGIN{err=-1} /^==.*(LEAK|HEAP) SUMMARY/{p=1;err=0} p==1&&/^[^=]/{p=0} p==1{print} END{exit err}' $@.vg; } \
      || { echo "Ohoh: $@ did not terminate correcly"; echo "see $@.vg"; } \
      , $(VE_EXEC) ./$@ > $@.vg)
 else
@@ -90,7 +91,10 @@ spill.o: spill.cpp spill.hpp spill-impl.hpp symbStates-old.hpp throw.hpp regDefs
 spill2.o: spill2.cpp spill2.hpp spill-impl2.hpp throw.hpp reg-base.hpp
 	g++ -o $@ -Wall -ggdb -O1 $(C11X) -c $<
 # header compilation check:
-regSymbol2.o: regSymbol2.hpp # see if the header makes sense: what is missing?
+regSymbol2-hdr.o: regSymbol2.hpp # see if the header makes sense: what is missing?
+	g++ -o $@ -Wall -ggdb -O1 $(C11X) -c $<
+# header compilation check:
+spill-impl2-hdr.o: spill-impl2.hpp # see if the header makes sense: what is missing?
 	g++ -o $@ -Wall -ggdb -O1 $(C11X) -c $<
 
 # test based on spillable-base.hpp
@@ -98,7 +102,11 @@ testSpill2: testSpill2.cpp spill.cpp spill-impl.hpp spill.hpp throw.hpp regDefs.
 	g++ -o $@ -Wall -ggdb -O1 $(C11X) $(filter %.cpp,$^)
 	$(call vg)
 # new version...
-tSpill2: testSpill2.cpp spill2.o spill-impl2.hpp spill2.hpp throw.hpp reg-base.hpp
+tSpill2: tSpill2.cpp spill2.o spill-impl2.hpp spill2.hpp throw.hpp reg-base.hpp
+	g++ -o $@.i -Wall -ggdb -O1 $(C11X) -dD -E $<
+	g++ -o $@ -Wall -ggdb -O1 $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
+	$(call vg)
+tSpill2b: testSpill2b.cpp spill2.o spill-impl2.hpp spill2.hpp throw.hpp reg-base.hpp
 	g++ -o $@ -Wall -ggdb -O1 $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
 
@@ -112,6 +120,12 @@ testSpill3: testSpill3.cpp spill.o regStates.o spill-impl.hpp spill.hpp throw.hp
 
 # test based on regSymbol.hpp, register name and register id operations
 testRegSym: testRegSym.cpp spill.o regStates.o spill-impl.hpp spill.hpp throw.hpp regDefs.hpp
+	g++ -o $@ -Wall -ggdb -O1 $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
+	$(call vg)
+# test based on regSymbol2.hpp, register name and register id operations
+testRegSym2: testRegSym2.cpp reg-base.o reg-aurora.o spill2.o regSymbol2.hpp spill-impl2.hpp spill2.hpp throw.hpp reg-base.hpp
+	# regStates.hpp (seems like an old idea, defunct?)
+	g++ -o $@.i -Wall -ggdb -O1 $(C11X) -dD -E $<
 	g++ -o $@ -Wall -ggdb -O1 $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
 

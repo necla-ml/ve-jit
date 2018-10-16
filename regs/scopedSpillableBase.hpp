@@ -16,18 +16,18 @@
 
 #include <iostream>
 #include <cassert>
+#include <typeinfo> // for debug
 
 class ScopedSpillableBase; // active state and symbol id to be managed by scope::SymbStates
 
-/** This simplifies \c SpillableBase by removing 'active' and 'uid' from a spillable symbols domain.
+/** This simplifies \c SpillableBase by removing 'active' and 'uid' from
+ * a spillable symbols domain.
  *
- * \sa SpillableBase for a description of what a basic \e spillable symbol does have.
- * Basically it has flags for Locn (none/register/memory).
  *
  * In contrast to \c SpillableBase, for \c ScopedSpillableBase the uid is assigned by
  * \c scope::SymbStates, which constructs BASE classes that:
  *
- * - obtain their uid from ParSymbol::uid (so we don't have a 'uid' field)
+ * - obtain their uid from ParSymbol::uid (better, symId()) so we don't have a 'uid' field
  * - have a ParSymbol::scope and
  * - have control over the \e active flag (so we don't confuse this orthogonal concept into our \c Locn enum)
  *
@@ -35,7 +35,11 @@ class ScopedSpillableBase; // active state and symbol id to be managed by scope:
  * Oh. our constructor is private, because the scope manager, scope::SymbStates, gives us a
  * \c newsym function that creates new symbols (like \c ScopedSpillableBase symbols).
  *
- * \c ScopedSpillableBase is managed by scope::SymbStates.
+ * \c ScopedSpillableBase is ultimately managed by \c scope::SymbStates.
+ * \e active and \e uid state of the old \ref SpillableBase have move into
+ * \c scope::ParSymbol, so that symbols are really \c scope::ParSymbol<ScopedSpillableBase>.
+ * Symbols are created within \c scope::SymbStates<ScopedSpillableBase> \c begin_scope
+ * and \c end_scope.
  *
  * - \b only via \c newsym we get constructed.
  *   - initially active
@@ -43,6 +47,12 @@ class ScopedSpillableBase; // active state and symbol id to be managed by scope:
  * - via \c delsym or \c end_scope, we are \e told about going out of scope.
  * - \ref symScopeUid.hpp retains all symbols by design, even stale, out-of-scope ones.
  *   But we probably don't care about extended symbol lifetime here.
+ *
+ * \sa SpillableBase for what a basic \e spillable symbol needs to do.
+ *
+ * Note: for now you \e must use ParSymbol<ScopedSpillableBase> exactly like that.
+ * For more generality, this class could be templated on a ParSymbol<BASE> where
+ * BASE is a type derived from SpillableBase.
  */
 class ScopedSpillableBase {
 
@@ -56,10 +66,14 @@ class ScopedSpillableBase {
     friend Ss;
     virtual ~ScopedSpillableBase() {}
 
-    /** return the ParSymbol, which has scope+uid, and maybe a SymbStates ptr.
+    /** return the scope::ParSymbol, which has scope+uid, and maybe a SymbStates ptr.
      * For example our low-level symbol id is parent()->uid.
      */
-    Ps const *parent() const { return dynamic_cast<Ps const*>(this);}
+    //Ps const *parent() const { return dynamic_cast<Ps const*>(this);}
+    Ps const *parent() const {
+        //std::cout<<"parent() type "<<typeid(Ps).name()<<std::endl; std::cout.flush();
+        return dynamic_cast<Ps const*>(this);
+    }
     /** might return null */
     Ss const *symids() const { return (dynamic_cast<Ps const*>(this))->ssym;}
 
@@ -102,14 +116,8 @@ class ScopedSpillableBase {
     typedef enum : int { NONE=0, /*ACTIVE=1,*/ REG=2, MEM=4
         /*, ARGREG=8, ARGMEM=16*/
     } Where;
-    Where getWhere() const          {return this->locn;}
-    ScopedSpillableBase& setWhere(Where const w) {
-        //assert( w & ~(ACTIVE|REG|MEM) == 0 );
-        // perhaps allow derived classes to ADD flags
-        this->locn = w;
-        return *this;
-    }
 
+  public:
     /** symbol unique id (now from scope::detail::ParSymbol parent) */
     unsigned symId() const          {return this->parent()->uid;}
     /** Are we in valid scope? */
@@ -120,6 +128,16 @@ class ScopedSpillableBase {
     // spill-specific ...
     bool getREG() const             { return (locn&REG); }
     bool getMEM() const             { return (locn&MEM); }
+    Where getWhere() const          {return this->locn;}
+
+  protected:
+    ScopedSpillableBase& setWhere(Where const w) {
+        //assert( w & ~(ACTIVE|REG|MEM) == 0 );
+        // perhaps allow derived classes to ADD flags
+        this->locn = w;
+        return *this;
+    }
+
   private:
     /** We no longer control scope-active setting.
      * Therefore this is accessible only to \c Ps
@@ -148,6 +166,8 @@ class ScopedSpillableBase {
     /** call \c setREG(true) when the register value associated with this symbol is set or is changed,
      * and \c setREG(false) when the register is dissociated from this symbol. */
     ScopedSpillableBase& setREG(bool set=true) {
+        //auto a = this->getActive();
+        //std::cout<<" a="<<a<<std::endl; std::cout.flush();
         assert( this->getActive() );  // when we are going false, we are already deactivated in ParSymbol!
         locn = static_cast<Where>( set? locn|REG: locn&~REG );
         if(set && getMEM()) incStale();

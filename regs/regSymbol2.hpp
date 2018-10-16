@@ -1,5 +1,5 @@
-#ifndef REGSYMBOL_HPP
-#define REGSYMBOL_HPP
+#ifndef REGSYMBOL2_HPP
+#define REGSYMBOL2_HPP
 
 #define OLD 0
 
@@ -9,6 +9,7 @@
 #include "reg-base.hpp"
 // While regDefs.hpp is now a processor-specific include file,
 // it does define a few fairly generic functions.
+
 #else
 #include "scopedSpillableBase.hpp"
 #include "reg-base.hpp"
@@ -35,7 +36,8 @@ class RegSymbol :
 #endif
 {
   private:
-    /** TODO -- should be thread-safe and avoid static (possible dll issues) */
+    /** TODO -- should be thread-safe and avoid static (possible dll issues).
+     * TODO -- probably should be within reg-base.hpp (common to both symbol and register ops?) */
     static uint64_t nextTick(){
         static uint64_t t=0U; // library/multi-threading issues! should used shared_ptr version of a counter.
         return ++t;
@@ -171,7 +173,7 @@ class RegSymbol :
 #if OLD
     using Base::uid;
 #else
-#define uid Base::symId()/*unsigned*/
+//#define uid Base::symId()/*unsigned*/
 #endif
     Where getWhere() const              {return Base::getWhere();}
     unsigned symId() const              {return Base::symId();}
@@ -284,7 +286,7 @@ std::ostream& operator<<(std::ostream& os, RegSymbol const& x){
     os<<"RegSymbol{"
         <<(x.name()!=nullptr? x.name(): "?")<<":"
         <<(x.getActive()?"+":"-")
-        <<x.uid
+        <<x.symId()
         ;
     if(x.getREG())
         os<<"R"; else os<<"~R";
@@ -307,4 +309,4 @@ std::ostream& operator<<(std::ostream& os, RegSymbol const& x){
 }
 
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,h.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
-#endif // REGSYMBOL_HPP
+#endif // REGSYMBOL2_HPP
