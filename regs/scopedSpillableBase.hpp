@@ -62,9 +62,7 @@ class ScopedSpillableBase {
     ///@{
   public:
     typedef scope::ParSymbol<ScopedSpillableBase> Ps; ///< parent Ps::uid and Ps::scope assigned "from above"
-    typedef scope::SymbStates<scope::ParSymbol<ScopedSpillableBase>> Ss;
     friend Ps;
-    friend Ss;
     friend RegSymbol; // for test access to setActive(bool)
     virtual ~ScopedSpillableBase() {}
 
@@ -76,12 +74,18 @@ class ScopedSpillableBase {
         //std::cout<<"parent() type "<<typeid(Ps).name()<<std::endl; std::cout.flush();
         return dynamic_cast<Ps const*>(this);
     }
+    typedef scope::SymbStates<scope::ParSymbol<ScopedSpillableBase>> Ss;
+    friend Ss;
+#if 0
     /** might return null */
     Ss const *symids() const {
         return parent()->ssym;}
+#endif
 
-    unsigned scope() const {return this->parent()->scope;}
+    unsigned scope() const {return this->parent()->scope();}
     // symId(), below, also changes
+    /** symbol unique id (now from scope::detail::ParSymbol parent) */
+    unsigned symId() const          {return this->parent()->symId();}
   private:
     /** throw on duplicate symbol name in scame scope.
      * Cannot have 2 duplicate symbol names [with different uids] in same scope.
@@ -91,7 +95,7 @@ class ScopedSpillableBase {
      */
     template<typename SymIdSet>
         void chk_different_name(SymIdSet const& ids) const {
-            // no-op, we don't have a name so assume no conflict
+            ;// no-op, we don't have a name so assume no conflict
         }
 
     ///@}
@@ -121,8 +125,6 @@ class ScopedSpillableBase {
     } Where;
 
   public:
-    /** symbol unique id (now from scope::detail::ParSymbol parent) */
-    unsigned symId() const          {return this->parent()->uid;}
     /** Are we in valid scope? */
     //bool getActive() const          {return (locn&ACTIVE);}
     bool getActive() const          {return parent()->getActive();}

@@ -134,12 +134,10 @@ class Regset {
 
 class Counters {
   public:
-    Counters() : t_(0U), s_(0U)
+    Counters() : t_(0U)
     uint64_t nextTick(){ return ++t_; }
-    unsigned nextSym(){ return ++s_; }
   private:
     uint64_t t_;
-    unsigned s_;
 };
 
 /** Try to join up some symbol features from regSymbol2.hpp, like named symbols
@@ -150,8 +148,8 @@ class DemoSymbStates
     , private Counters
 {
   public:
-    typedef scope::SymbStates<ScopedSpillableBase> Base;
-    typedef Base::Psym Psym;
+    typedef scope::SymbStates<ScopedSpillableBase> Ssym;
+    typedef Ssym::Psym Psym;
     typedef RegSymbol Rs;
 
   private:
@@ -179,6 +177,9 @@ class DemoSymbStates
     }
   public: // republish some functions
     auto symIdAnyScopeSorted() const { return ssu.symIdAnyScopeSorted(); }
+    template<typename... Arg>
+        unsigned newsym(Arg&&... arg){
+            auto const symId = Ssym::newsym(arg...);
   public:
     RegId allocScalar();                    ///< allocate from \c scalars, spill if nec.
     RegId allocScalar(unsigned const symId);///< allocScalar + setReg

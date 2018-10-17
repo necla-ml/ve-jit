@@ -43,7 +43,7 @@ ifeq ($(is_valgrind_ok), yes)
 vg = $(if $filter($(is_valgrind_ok),yes), \
      valgrind --leak-check=full --show-leak-kinds=all --suppressions=./dl_init.supp ./$@ > $@.vg 2>&1 \
      && { echo "gawking summary..." \
-          && gawk 'BEGIN{err=-1} /^==.*(LEAK|HEAP) SUMMARY/{p=1;err=0} p==1&&/^[^=]/{p=0} p==1{print} END{exit err}' $@.vg; } \
+     && gawk 'BEGIN{err=-1} /^==.*(LEAK|HEAP) SUMMARY/{p=1;err=0} /^Goodbye/{p=1;err=0} p==13&&/^[^=]/{p=0} p==1{print} END{exit err}' $@.vg; } \
      || { echo "Ohoh: $@ did not terminate correcly"; echo "see $@.vg"; } \
      , $(VE_EXEC) ./$@ > $@.vg)
 else
@@ -95,7 +95,7 @@ testSpill2: testSpill2.cpp spill.cpp spill-impl.hpp spill.hpp throw.hpp regDefs.
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^)
 	$(call vg)
 # new version...
-tSpill2: tSpill2.cpp spill2.o spill-impl2.hpp spill2.hpp throw.hpp reg-base.hpp
+tSpill2: tSpill2.cpp spill2.o spill-impl2.hpp spill2.hpp throw.hpp reg-base.hpp symScopeUid.hpp
 	$(CXX) -o $@.i $(CXXFLAGS) $(C11X) -dD -E $<
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
@@ -126,7 +126,7 @@ symbStates-old.o: symbStates-old.cpp symbStates-old.hpp throw.hpp
 	$(CXX) -o $@ $(CXXFLAGS) -std=gnu++11 -c $<
 reg-base.o: reg-base.cpp reg-base.hpp bitfield.hpp throw.hpp
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) -c $<
-testSymbStates-old: testSymbStates-old.cpp symbStates-old.o regStates.o reg-base.o spill.o symbStates-old.hpp spill.hpp throw.hpp
+testSymbStates-old: testSymbStates-old.cpp symbStates-old.o regStates.o reg-base.o spill.o symbStates-old.hpp spill.hpp throw.hpp symScopeUid.hpp
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $^
 	$(call vg)
 

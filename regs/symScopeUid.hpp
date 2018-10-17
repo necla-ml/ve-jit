@@ -23,6 +23,7 @@
 #include <cstring>
 #include <vector>
 #include <algorithm> // sort
+#include <typeinfo> // debug!
 
 //fwd decl
 template<class SYMBSTATES> class Regset;
@@ -46,43 +47,33 @@ namespace scope {
  */
 template<class BASE> class ParSymbol;
 
-/** Main scope function.  This is based on detail::SymScopeUid and ParSymbol.
- * - begin_scope, newsym, end_scope are the main functions. */
-template<class BASE> class SymbStates;
-//template<class BASE, typename MAP=std::unordered_map<unsigned,typename ParSymbol<BASE>> > SymbStates;
-//template<class BASE/*=ExBaseSym*/, bool ordered=0> SymbStates;
-
-
 template<class BASE>
 std::ostream& operator<<(std::ostream& os, ParSymbol<BASE> const& x);
 
+/** Main scope function.  This is based on detail::SymScopeUid and ParSymbol.
+ * - begin_scope, newsym, end_scope are the main functions. */
+template<class BASE> class SymbStates;
 
-/** Mainly provides \c SymScopeUid some other 'ideas' code for testing and finally
- * a \c ParSymbol helper that adds 'name' as a symbol feature. */
+
 namespace detail {
-// version 0: basic uids, demo the scope and newsym mechanics.
+
+/** Data structure -- active/stale symbol/scope relationships */
 class SymScopeUid;
 
-// version 1: reusable uid-only impl
+// fwd decl some friends in symScopeUid-test.hpp:
 class BaseSymbolState;
 template<typename SYMBASE=BaseSymbolState> class SymStates; // fwd decl
 
-// version 2: CRTP impl
-
-class ExBaseSym; ///< an example BASE for SymbStates (ParSymbol)
 }//detail::
-
-/** for the demo class... */
-std::ostream& operator<<(std::ostream&, const detail::ExBaseSym&);
 
 namespace detail {
 /** simple symbol scopes.
  *
- * Scopes and symbols are represented as uids.
+ * Scopes and symbols are represented as unsigned uids.
  *
  * This is a low-level class, used within more useful objects,
  * \b Derived objects will add some sort of \em state tracking,
- * \c adding some sort of <TT>symbol id --> symbol state tracking.
+ * \e adding some sort of <TT>symbol id --> symbol state tracking.
  *
  * - Active scopes form a stack representing nested scopes.
  *   - Basic ops:
@@ -98,31 +89,12 @@ namespace detail {
  *     - \c scopeof(symId) always returns this scope.
  *     - \c active(symId) returns this [until scope stale]
  *
- *   - ?? hmmm...
- *     - SYMBASE [default is \c BaseSymbolState] is returned to user,
- *       where more state can be added in a derived class.
- *     - SYMBASE should have const uid and scope data, as well
- *       as constructors and get/setActive, like \c BaseSymbolState.
- *
  * By maintaining stale scopes, symbols logically have an
  * active/inactive status.  If scopes come back active, all
  * their symbols become active, so the user can maintain
  * some persistent symbol state.  When using \c activate_scope(),
  * it is up to the user to maintain proper nestedness, by
  * reactivating innermost scopes first.
- *
- * <B>There are some levels of refinement:</B>
- *
- * 1. \c SymStates&lt;SYMBASE&gt; is a simple wrapper, providing a void* state.
- *   - with some examples of what to do with SYMBASE to add some state.
- *
- * 2. The more complex <B>\c SymbStates&lt;BASE&gt;</B> internally wraps your BASE
- *   class into a \c ParSymbol&lt;BASE&gt; data member.
- *   - begin_scope..end_scope etc. work as here.
- *   - add a \c psym(symId) -> ParSymbol<BASE> lookup function for state.
- *   - \c newsym(Arg&&... arg) now accepts an arg pack that is forwarded to
- *     - ParSymbol&lt;BASE&gt; constructor (with some symId and scope info),
- *     - and then your BASE constructor.
  *
  */
 class SymScopeUid {
@@ -172,29 +144,7 @@ class SymScopeUid {
     /** reactivate \c stale scope (throw if not a stale scope).
      * \note It is up to the user to activate scopes in proper
      * order -- stale scopes can be added back in any order. */
-    void activate_scope( unsigned const stale ){
-#if 0
-        auto found = find_if(
-                staleScopes.begin(), staleScopes.end(),
-                [&stale](const ScopeSymbols& ss)
-                { return ss.scope == stale; });
-#else // ohoh, need a prev iter...
-        auto prev = stales.before_begin();
-        auto found = prev;
-        for( ; ++found != stales.end(); prev=found){
-            if(found->scope == stale) break;
-        }
-#endif
-        if( found == stales.end() ){
-            // XXX make this a fn call
-            THROW("cannot activate non-stale scope"<<stale);
-        }
-        scopes.emplace_front(*found);
-        stales.erase_after(prev);
-        unsigned mv = scopes.front().scope;
-        activeSco.insert(mv);
-        staleSco.erase(mv);
-    }
+    void activate_scope( unsigned const stale );
     /** set up global scope with no active symbols */
     SymScopeUid()
         : maxidSym(0U), maxidSco(0U), symScope()
@@ -234,14 +184,10 @@ class SymScopeUid {
      * So ParSymbol can be told \c eraseSym(symId) and have
      * its active setting go false before the \c end_scope. */
     unsigned active(unsigned const symId) const {
-        //int const verbose = 0;
         unsigned scope = scopeOf(symId);
-        //if(verbose) std::cout<<"scope:"<<scope;
         if(scope && activeSco.find(scope) == activeSco.end() ){
-            //if(verbose) std::cout<<"oops";
             scope = 0U;
         }
-        //if(verbose) std::cout.flush();
         return scope;
     }
     /** define a new symbol in current scope, without creating any symbol object */
@@ -259,389 +205,61 @@ class SymScopeUid {
     }
     /** delete sym uid in current scope (o/w throw).
      * [alt.] wait for \c end_scope() to auto-delete. */
-    void delsym(unsigned const symId){
-        ScopeSymbols& curScopeSymbols = scopes.front();
-        unsigned scope = curScopeSymbols.scope;
-        HashSet& syms = curScopeSymbols.syms;
-        auto const iter = syms.find(symId);
-        if( iter == syms.end() ){
-            THROW("delsym("<<symId<<") of symbol not in current scope="<<scope);
-        }
-        syms.erase(iter);
-        symScope.erase(symId);
-    }
+    void delsym(unsigned const symId);
     /** return current scope uid */
     unsigned scope() const {
         assert( ! scopes.empty() );
         return scopes.front().scope;
     }
+    /** return number of symbols defined in current (innermost) scope, active or not. */
     size_t nScopeSymbols() const{
         assert( !scopes.empty() );
         return scopes.front().syms.size();
     }
-    void prtCurrentSymbols() const{
-        ScopeSymbols const& curScopeSymbols = scopes.front();
-        unsigned scope = curScopeSymbols.scope;
-        HashSet const& curSyms = curScopeSymbols.syms;
-        std::cout<<" CurrentScope"<<scope;
-        char const* sep = "{";
-        for(auto const sym : curSyms ){
-            std::cout<<sep<<sym;
-            sep = ",";
-        }
-        std::cout<<"}";
-    }
-    std::vector<unsigned> symIdAnyScopeSorted() const {
-        size_t nSym = 0U;
-        size_t nSco = 0U;
-        for(auto const& sco: scopes){
-            ++nSco;
-            nSym += sco.syms.size();
-        }
-        std::cout<<" count "<<nSym<<" syms in "<<nSco<<" active scopes"<<std::endl;
-        std::vector<unsigned> ret;
-        ret.reserve(nSym);
-        for(auto const& sco: scopes){
-            for(unsigned sym: sco.syms){
-                ret.push_back(sym);
-            }
-        }
-        std::sort(ret.begin(), ret.end());
-        return ret;
-    }
-};
-
-
-/** A low-level helper class allowing \c SymStates to add the \e active
- * attribute to a symbol.  This is a default template class for
- * SymStates<SYMBASE=BaseSymbolState>.  It allows SymStates to return
- * an additional opaque \c state.
- */
-struct BaseSymbolState {
-  public:
-    //BaseSymbolState() : uid(0U), scope(0U), state(nullptr), active(false) {}
-    bool getActive() const {return this->active;}
-    unsigned const uid;
-    unsigned const scope;
-    void *state;              // arbitrary client state
-  protected:
-    template<class SYMSTATE> friend class SymStates;
-    //void setUid(unsigned const uid)           {this->uid = uid;}
-    //void setScope(unsigned const scope)       {this->scope = scope;}
-    void setActive(bool const active)         {this->active = active;}
-    BaseSymbolState(unsigned uid, unsigned scope)
-        : uid(uid), scope(scope), state(nullptr), active(true) {
-            assert(uid > 0U);
-            assert(scope > 0U);
-        }
-  private:
-    bool active;
-};
-
-/** Wrap a \c SymScopeUid with a map of symbol id --> state.
- *
- * Allowed states must at least provide the functionality of SYMBASE, which
- * might add user-defined state to a \c BaseSymbolState.
- *
- * Basic usage is:
- *
- * - <B>\c begin_scope</B>, Now you can inquire about:
- *   - current \c scope() (some number)
- *   - number of symbols in current scope \c nScopeSymbols()
- *     - (or total symbols \c nSymbols)
- *     - or you can \c prtCurrentSymbols
- * - <B>auto x = \c newsym</B>,
- *   - you can now asck for \c scopeOf(x)
- *   - you now cat ask if \c active(x)
- *     - \c x begins active, and remains so until a matching \c end_scope.
- *       - unless you \c delsym(x) in this or any contained scope.
- *         - you can only delsym(x) once.  Then !active(x).
- * - \c stateOf(x).state = new MyState(...) [see below!],
- *   - because I really know nothing about your grand plans for \c x.
- *   - and I don't want to know anything about your grand plans for \c x.
- * - \c end_scope
- *   - Now the \em current scope becomes stale
- *     - all contained variables are set to inactive
- *
- * - For 'linear' programs \c begin_scope -- \c end_scope is all you need!
- * - You \em can \c activate_scope(stale scope id).
- *   - To re-enter a sub-block during a loop construct, for example.
- *     - re-using old symbols for induction, say.
- * - It is important to reactivate in correct order, because what happens is
- *   - the stale scope is \e moved from the list of stale scopes to become
- *     the current active scope, as if we had done a \e begin_scope.
- *     - internal state reactivated symbols is... Oh. That's your problem.
- *
- * Now back to \c stateOf(x).state = new MyState(...) 
- *
- * - Ex. 1
- *   - Suppose you want to derive from \c BaseSymbolState
- *     and insulate the user from every seeing that void *state.
- *   - We provide an example in \c BaseSymbol<DERIVED>, where the
- *     SYMBASE functionality is beefed up with the ability to cast
- *     up to your own DERIVED class, such as the \c ExDerivedSym class
- *     that allows you attach a character string ExDerivedSym::name
- *     as an example of additional state.
- * - Ex. 2
- *   - \e Better. Use your client class as a base class, as in ParSymbol<BASE>
- */
-template<class SYMBASE/*=BaseSymbolState*/>
-class SymStates{
-  private:
-    SymScopeUid ssu;
-    /** symbol uid --> external symbol state */
-    std::unordered_map<unsigned/*symId*/,SYMBASE> syms;
-  public:
-    unsigned begin_scope() { return ssu.begin_scope(); }
-    void end_scope() {
-        ssu.end_scope();
-        for(auto symId: ssu.stales.front().syms){
-            //assert(syms[symId].getActive() == true); // maybe can deactivate syms one-by-one??
-            auto const psym = syms.find(symId);
-            assert( psym != syms.end() );
-            psym->second.setActive(false);
-        }
-    }
-    void activate_scope(unsigned const stale) {
-        ssu.activate_scope(stale);
-        for(auto const symId: ssu.scopes.front().syms ){
-            auto const psym = syms.find(symId);
-            assert( psym != syms.end() );
-            assert( psym->second.getActive() == false);
-            psym->second.setActive(true);
-        }
-    }
-    unsigned scopeOf(unsigned const symId) const {
-        unsigned ret = 0U;
-        auto const psym = syms.find(symId);
-        if( psym != syms.end() ){
-            ret = psym->second.scope;
-        }
-        assert( ret == ssu.scopeOf(symId) );
-        return ret;
-    }
-    BaseSymbolState const& stateOf(unsigned const symId) const {
-        auto const psym = syms.find(symId);
-        assert( psym != syms.end() );
-        return psym->second.state;
-    }
-    /** return \b scope of \c symId.
-     * Note: diff't from bool \c stateOf(symId).getActive()
-     */
-    unsigned active(unsigned const symId) const {
-        unsigned ret = 0U;
-        auto psym = syms.find(symId);
-        if( psym != syms.end() && psym->second.getActive() ){
-            ret = psym->second.scope;
-            //std::cout<<" syms.find("<<symId<<")->second.scope = "<<syms.find(symId)->second.scope;
-        }
-        //std::cout<<"active:"<<ret<<" ?= "<<ssu.active(symId)<<std::endl; std::cout.flush();
-        //if( ret != ssu.active(symId) ){
-        //    THROW("active:"<<ret<<"!="<<ssu.active(symId));
-        //}
-        assert( ret == ssu.active(symId) );
-        return ret;
-    }
-    unsigned newsym() {
-        unsigned const symId = ssu.newsym();
-        assert( ssu.active(symId) );
-        assert( ssu.active(symId) == this->scope() );
-        std::cout<<"u"<<symId; std::cout.flush();
-        unsigned const scope = this->scope();
-        std::cout<<"s"<<scope; std::cout.flush();
-        assert( syms.find(symId) == syms.end() );
-        syms.insert( std::make_pair(symId, SYMBASE{symId,scope}) ); // ???
-        assert( syms.find(symId) != syms.end() );
-        assert( syms.find(symId)->second.uid == symId );
-        assert( syms.find(symId)->second.scope == scope );
-        assert( syms.find(symId)->second.getActive() == true );
-        std::cout<<"+"; std::cout.flush();
-        assert( ssu.active(symId) == scope );
-        assert( this->active(symId) == scope );
-        std::cout<<"+"; std::cout.flush();
-        return symId;
-    }
-    void delsym(unsigned const symId){
-        auto const psym = syms.find(symId);
-        assert( active(symId) );
-        psym->second.setActive(false);
-    }
-    unsigned scope() const { return ssu.scope(); }
-    size_t nScopeSymbols() { return ssu.nScopeSymbols(); }
-    size_t nSymbols() { return syms.size(); }
-    void prtCurrentSymbols() const{
-        std::cout<<" CurrentScope"; std::cout.flush();
-        SymScopeUid::ScopeSymbols const& curScopeSymbols = ssu.scopes.front();
-        unsigned scope = curScopeSymbols.scope;
-        std::cout<<scope; std::cout.flush();
-        SymScopeUid::HashSet const& curSyms = curScopeSymbols.syms;
-        char const* sep = "{";
-        if(curSyms.empty()) std::cout<<sep;
-        else for(auto const sym : curSyms ){
-            std::cout<<sep<<sym; std::cout.flush();
-            auto found = syms.find(sym);
-            assert( found != syms.end() );
-            assert( found->second.uid == sym );
-            //assert( syms[sym].active == true );
-            assert( found->second.scope == scope );
-            if( !found->second.active ) std::cout<<"!";
-            sep = ",";
-        }
-        std::cout<<"}";
-        std::cout.flush();
-    }
-};//class SymStates
-
-/** Maybe...
- * \tparm DERIVED is a derived class, such as:
- * ```
- * class Derived : public BaseSymbolState<Derived> {
- *   Derived(<arglist>) : BaseSymbolState<Derived>(uid,scope,this?)
- *   ...
- * }
- * ```
- * .. just an idea ..
- */
-class ExDerivedSym;
-template<class DERIVED=ExDerivedSym>
-struct BaseSymbol {
-  public:
-    //typedef DERIVED Derived;
-    //BaseSymbolState() : uid(0U), scope(0U), state(nullptr), active(false) {}
-    bool getActive() const {return this->active;}
-    unsigned const uid;
-    unsigned const scope;
-    virtual ~BaseSymbol(){}
-    /** cast to DERIVED */
-    DERIVED & der() { return static_cast<DERIVED&>(*this); }
-    DERIVED const& der() const { return static_cast<DERIVED const&>(*this); }
-    //void *state;              // arbitrary client state
-  protected:
-    template<class SYMSTATE> friend class SymStates;
-    //void setUid(unsigned const uid)           {this->uid = uid;}
-    //void setScope(unsigned const scope)       {this->scope = scope;}
-    void setActive(bool const active)         {this->active = active;}
-    BaseSymbol(unsigned uid, unsigned scope)
-        : uid(uid), scope(scope)
-          //, state(nullptr)
-          , active(true) {
-              assert(uid > 0U);
-              assert(scope > 0U);
-          }
-  private:
-    bool active;
-};
-/** This is a derived class that takes an additional \c name to construct */
-class ExDerivedSym : public BaseSymbol<ExDerivedSym> {
-  public:
-    virtual ~ExDerivedSym(){}
-    template<typename... Arg>
-        ExDerivedSym(unsigned uid, unsigned scope, Arg&&... arg)
-        : BaseSymbol(uid, scope)                    // 1st two args ---> Base class constructor
-          //NO , ExDerivedSym(std::forward<Arg>(arg)...) // delegate other args to "our" constructor
-        {
-            this->init(std::forward<Arg>(arg)...);
-        }
-  protected:
-    char const* name;
-  private:
-    void init(char const* name)
-    { this->name = name; }
+    void prtCurrentSymbols() const;
+    /** sorted symIds of all symbols in active scopes */
+    std::vector<unsigned> symIdAnyScopeSorted() const;
 };
 
 }//detail::
 
 //===================================================================================//
-/** maybe simpler is to set up the client class as a base class.
- * New symbols had better have support for a default 'undefined' state,
- * or you can construct a new one with arg packs that gets passed to
- * the BASE constructor -- you may have to roll your own ParSymbol constructors :(
+/** ParSymbol provides uid+scope and an active flag (\e only).
+ * Other details are handled by the \tparm BASE class, that gets passed an
+ * arg pack.
  */
 template<class BASE>
 class ParSymbol : public BASE {
   public:
     typedef BASE Base;
-    friend BASE;
-    //friend SymbStates<BASE>;
-    //typedef SymbStates<BASE> Ssym;
     typedef ParSymbol<BASE> Psym;
-    //typedef SymbStates<Psym> Ssym;
-    typedef SymbStates<ParSymbol<BASE>> Ssym;
-    //friend Ssym;
+    friend BASE;
     friend SymbStates<ParSymbol<BASE>>;
-    virtual ~ParSymbol() {}
-    template<typename... Arg>
-        ParSymbol(Ssym *ssym, unsigned uid, unsigned scope, Arg&&... arg);
+    template<class SYMSTATE> friend class detail::SymStates; // for testSymScopeUid.cpp
 
-    BASE const& base() const {return *this;}
+    virtual ~ParSymbol() {}
+    BASE const& base() const {return *this;} // just for convenience
     BASE      & base()       {return *this;}
     bool getActive() const {return this->active;}
+    unsigned symId() const {return this->uid;}
+    unsigned scope() const {return this->scope_;}
     unsigned const uid;
-    unsigned const scope;
-    //void *state;              // arbitrary client state? No. BASE "is" the state
+    unsigned const scope_;
   protected:
-    //-----------------------------------------------
-    //    This section is just for demo purposes, testSymScopeUid.cpp
-    template<class SYMSTATE> friend class detail::SymStates;
-    //friend class RegSymbol; // for testing
-    //friend class DemoSymbStates;
-    //-----------------------------------------------
-    /** Importantly, \c ParSymbol forwards \e unrecognized args to the BASE constructor.
-     * In this simple implementation, the BASE has \b no access to uid or scope, since we
-     * are not yet fully constructed.  (Can be worked around, if necessary). */
+    /** \c ParSymbol grabs uid and scope, forwarding \e unrecognized args
+     * to the BASE constructor.  Base constructor has \b no access
+     * to uid or scope, since we are not yet fully constructed. */
     template<typename... Arg>
-        ParSymbol(/*Ssym *ssym,*/ unsigned uid, unsigned scope, Arg&&... arg);
+        ParSymbol(unsigned uid, unsigned scope, Arg&&... arg);
 
-    //void setUid(unsigned const uid)           {this->uid = uid;}
-    //void setScope(unsigned const scope)       {this->scope = scope;}
-  protected:
     void setActive(bool const active) {
         //std::cout<<"ParSymbol::setActive("<<active<<")  "; std::cout.flush();
         if(active) this->active = active;
         BASE::setActive(active);        // order important, so BASE can check more invariants!
         if(!active) this->active = active;
     }
-    Ssym *ssym;             ///< back-ptr to our owner, optional
     bool active;
 };
-
-template<class BASE>
-    template<typename... Arg>
-inline ParSymbol<BASE>::ParSymbol(Ssym *ssym, unsigned uid, unsigned scope, Arg&&... arg)
-    : BASE(/*this,*/ std::forward<Arg>(arg)...)
-      , uid(uid), scope(scope), ssym(ssym), active(true)
-{
-    int const verbose=1;
-    if(verbose){
-        std::cout<<" Par(id"<<uid<<",sc"<<scope<<")" // <<ssym@"<<(void*)ssym
-            <<"'"<<base()<<"'"; std::cout.flush();
-    }
-}
-
-#if 1
-// just for demo...
-inline std::string bogusname(unsigned const uid){
-    std::ostringstream oss;
-    oss<<uid;
-    return oss.str();
-}
-
-// interesting that this somewhat different-looking constructor can be supplied like
-// a specialization, out-of-class...
-
-template<class BASE>
-    template<typename... Arg>
-inline ParSymbol<BASE>::ParSymbol(/*Ssym *ssym,*/ unsigned uid, unsigned scope, Arg&&... arg)
-    : BASE(bogusname(uid).c_str(), std::forward<Arg>(arg)...)
-      , uid(uid), scope(scope), ssym(nullptr), active(true)
-{
-    int const verbose=1;
-    if(verbose){
-        std::cout<<" Par(id"<<uid<<",sc"<<scope<<")" // <<ssym@"<<(void*)ssym
-            <<"'"<<BASE::name<<"'"; std::cout.flush();
-    }
-}
-#endif
 
 /** Main public interface for scoped symbols.
  *
@@ -685,18 +303,44 @@ class SymbStates{
     //       etc as needed.
     unsigned begin_scope() { return ssu.begin_scope(); }
     void end_scope() {
+        assert( !ssu.scopes.empty() );
         for(auto symId: ssu.scopes.front().syms){ // from current scope
-            //assert(syms[symId].getActive() == true); // maybe can deactivate syms one-by-one??
-            auto const psym = syms.find(symId);
+            auto const& psym = syms.find(symId);
             assert( psym != syms.end() );
+            //assert(psym.getActive() == true); // you can delsym(symId)
             std::cout<<" end"<<symId<<" "<<psym->second<<std::endl; std::cout.flush();
             psym->second.setActive(false);
         }
         // next line last to retain more invariants
         ssu.end_scope(); // NOW [after deactivating] move ssu current scope to ssu.stales
     }
+
+    /** args are passed verbatim down to PARSYMBOL */
+    template<typename... Arg> unsigned newsym(Arg&&... arg);
+
+    /** premature deactivation of any active symbol (from any scope).
+     * Expected use is to free a register as early as possible. */
+    void delsym(unsigned const symId){
+        auto const psym = syms.find(symId);
+        assert( psym != syms.end() );
+        assert( psym->second.getActive() ); // fast check for 'active'
+        assert( this->active(symId) ); // same, but adds a small consistency check
+        //assert( ssu.active(symId) ); // if it must be active in *innermost* scope
+        psym->second.setActive(false);
+    }
+
+    /** current active scope number */
+    unsigned scope() const { return ssu.scope(); }
+    /** return number of symbols defined in current (innermost) scope, active or not. */
+    size_t nScopeSymbols() { return ssu.nScopeSymbols(); }
+    /** since beginning of time. \c delsym and \c end_scope deactivate, but don't remove. */
+    size_t nSymbols() { return syms.size(); }
+    void prtCurrentSymbols(int verbose=0) const;
+
+    /** tricky behavior, try to stick with begin/end_scope */
     void activate_scope(unsigned const stale) {
         ssu.activate_scope(stale);
+        assert( !ssu.scopes.empty() );
         for(auto const symId: ssu.scopes.front().syms ){
             auto const psym = syms.find(symId);
             assert( psym != syms.end() );
@@ -704,23 +348,26 @@ class SymbStates{
             psym->second.setActive(true);
         }
     }
+
+    /** return \b scope of \e any \c symId, or 0 if the symbol has never been created.
+     * \c scopeOf doesn't mind if the scope is stale, or if the symbol is inactive. */
     unsigned scopeOf(unsigned const symId) const {
         unsigned ret = 0U;
         auto const psym = syms.find(symId);
         if( psym != syms.end() ){
-            ret = psym->second.scope;
+            ret = psym->second.scope();
         }
         assert( ret == ssu.scopeOf(symId) );
         return ret;
     }
-    /** return \b scope of active \c symId, or 0.
-     */
+    /** return \b scope of an active symbol
+     * (zero if symbol is stale or scope is inactive). */
     unsigned active(unsigned const symId) const {
         unsigned ret = 0U;
         auto psym = syms.find(symId);
         if( psym != syms.end() && psym->second.getActive() ){
-            ret = psym->second.scope;
-            //std::cout<<" syms.find("<<symId<<")->second.scope = "<<syms.find(symId)->second.scope;
+            ret = psym->second.scope();
+            //std::cout<<" syms.find("<<symId<<")->second.scope() = "<<syms.find(symId)->second.scope();
         }
         //std::cout<<"active:"<<ret<<" ?= "<<ssu.active(symId)<<std::endl; std::cout.flush();
         //if( ret != ssu.active(symId) ){
@@ -729,10 +376,6 @@ class SymbStates{
         assert( ret == ssu.active(symId) );
         return ret;
     }
-    //SymScopeUid::HashSet const& scopeSymUids() const {
-    //    assert( !ssu.scopes.empty() );
-    //    return ssu.scopes.front().syms;
-    //}
     /** Look up symId, returning ParSymbol<BASE> */
     Psym const& psym(unsigned const symId) const {
         auto const psym = syms.find(symId);
@@ -742,198 +385,237 @@ class SymbStates{
         assert( psym != syms.end() );
         return psym->second;
     }
+#if 0
+    detail::SymScopeUid::HashSet const& scopeSymUids() const {
+        assert( !ssu.scopes.empty() );
+        return ssu.scopes.front().syms;
+    }
+#endif
+#if 0 // for internal use, cause bugs when used from within newsym (inconsistent state)
+    // but should be ok for client use.
+    std::vector<Psym const*> psymsActiveIn( unsigned scop ){
+        std::vector<Psym const*> scop_psyms;
+        // find it in active-scope list
+        std::cout<<" A "; std::cout.flush();
+        auto const ssIter = std::find_if( ssu.scopes.begin(), ssu.scopes.end(),
+                [scop](detail::SymScopeUid::ScopeSymbols const& ss)
+                { return ss.scope == scop; } );
+        if (ssIter != ssu.scopes.end()){
+            std::cout<<" B "; std::cout.flush();
+            //scop_psyms.reserve(ssIter->syms.size());
+            detail::SymScopeUid::HashSet const& hs = ssIter->syms;
+            //std::transform( ssIter->syms.begin(), ssIter->syms.end(),
+            std::cout<<" BB "; std::cout.flush();
+            for(auto const s: hs){
+                std::cout<<"\n\ts="<<s<<std::endl; std::cout.flush();
+                Psym const& p = this->psym(s);
+                scop_psyms.push_back(&p);
+            }
+            //std::transform( hs.begin(), hs.end(),
+            //        std::back_inserter(scop_psyms),
+            //        [this](unsigned symId)->Psym const*
+            //        {std::cout<<" "<<symId<<":"<<this->psym(symId)<<"\n"; std::cout.flush();
+            //        return &this->psym(symId);} );
+            for(auto p: scop_psyms) std::cout<<"  p:"<<*p; std::cout.flush();
+            std::cout<<" C "; std::cout.flush();
+        }
+        return scop_psyms;
+    }
+#endif
   protected:
     Psym      & psym(unsigned const symId)       {
-        auto psym = syms.find(symId);
+        auto const psym = syms.find(symId);
         if( psym == syms.end() ){
             THROW( "psym("<<symId<<") doesn't exist!");
         }
         assert( psym != syms.end() );
         return psym->second;
     }
-    /** "friend psym", to help compiler know I need the non-const psym. */
+    /** "friend psym", to help compiler know the non-const psym is really needed :( */
     Psym      & fpsym(unsigned const symId)      {
-        auto psym = syms.find(symId);
+        auto const psym = syms.find(symId);
         if( psym == syms.end() ){
             THROW( "fpsym("<<symId<<") doesn't exist!");
         }
         assert( psym != syms.end() );
         return psym->second;
     }
-  public:
-    template<typename... Arg>
-        unsigned newsym(Arg&&... arg) {
-            // get a new symbol id
-            unsigned const symId = ssu.newsym();
-            assert( ssu.active(symId) );
-            assert( ssu.active(symId) == this->scope() );
-            std::cout<<"u"<<symId; std::cout.flush();
-            unsigned const scope = this->scope();
-            std::cout<<"s"<<scope; std::cout.flush();
-            assert( syms.find(symId) == syms.end() );
-            //syms.emplace( symId, Psym{symId,scope,arg}... ); // ???
-            try{
-                // construct ParSymbol symbol+scope (and user's BASE state)
-                std::cout<<" create Psym..."<<std::endl;
-                Psym psym{this,symId,scope,arg...};
-                std::cout<<" chk_different_name..."<<std::endl;
-                psym.chk_different_name(ssu.scopes.front().syms);
-                syms.emplace( std::make_pair(symId, psym) ); // ???
-            }
-            catch(...){
-                std::cout<<" Error creating newsym at "<<__FILE__<<":"<<__LINE__<<std::endl;
-                throw;
-            }
-            assert( syms.find(symId) != syms.end() );
-            assert( syms.find(symId)->second.uid == symId );
-            assert( syms.find(symId)->second.scope == scope );
-            assert( syms.find(symId)->second.getActive() == true );
-            //std::cout<<"+"; std::cout.flush();
-            assert( ssu.active(symId) == scope );
-            assert( this->active(symId) == scope );
-            //std::cout<<"+"; std::cout.flush();
-
-            // WARN: if symbol hides one in enclosing scope
-            bool doit=false;      // current scope we already checked -- dups were an ERROR
-            Psym const& oursym = psym(symId);
-            for(auto const& sc: ssu.scopes){
-                if(doit){ // enclosing scopes...
-                    try{
-                        oursym.chk_different_name(sc.syms);
-                    }catch(...){
-                        // turn this exception into a non-fatal warning
-                        std::cout<<" Warning: symbol id"<<symId<<" in scope "<<ssu.scope()
-                            <<" hides one of same name in enclosing scope "<<sc.scope<<std::endl;
-                    }
-                }
-                doit=true;
-            }
-            return symId;
-        }
-    void delsym(unsigned const symId){
-        auto const psym = syms.find(symId);
-        assert( active(symId) );
-        psym->second.setActive(false);
-    }
-    unsigned scope() const { return ssu.scope(); }
-    size_t nScopeSymbols() { return ssu.nScopeSymbols(); }
-    size_t nSymbols() { return syms.size(); }
-    void prtCurrentSymbols(int verbose=0) const{
-        std::cout<<" CurrentScope"; std::cout.flush();
-        detail::SymScopeUid::ScopeSymbols const& curScopeSymbols = ssu.scopes.front();
-        unsigned scope = curScopeSymbols.scope;
-        std::cout<<scope; std::cout.flush();
-        detail::SymScopeUid::HashSet const& curSyms = curScopeSymbols.syms;
-        char const* sep = "{";
-        if(curSyms.empty()) std::cout<<sep;
-        else for(auto const sym : curSyms ){
-            std::cout<<sep<<sym; std::cout.flush();
-            // is it active right now?
-            auto found = syms.find(sym);
-            assert( found != syms.end() );
-            assert( found->second.uid == sym );
-            //assert( syms[sym].active == true );
-            assert( found->second.scope == scope );
-            if( verbose<=0 && !found->second.getActive() ) std::cout<<"!";
-            //if(verbose>0) {std::cout<<found->second; std::cout.flush();}
-            //if(verbose>0) {std::cout<<"="<<found->second.base(); std::cout.flush();}
-            if(verbose>0) {std::cout<<"="<<found->second; std::cout.flush();}
-            sep = ", ";
-        }
-        std::cout<<"}";
-        std::cout.flush();
-    }
 };//class SymbStates
 
+inline void detail::SymScopeUid::activate_scope( unsigned const stale ){
+    // oh, need a prev iter...
+    auto prev = stales.before_begin();
+    auto found = prev;
+    for( ; ++found != stales.end(); prev=found){
+        if(found->scope == stale) break;
+    }
+    if( found == stales.end() ){
+        // XXX make this a fn call
+        THROW("cannot activate non-stale scope"<<stale);
+    }
+    scopes.emplace_front(*found);
+    stales.erase_after(prev);
+    unsigned mv = scopes.front().scope;
+    activeSco.insert(mv);
+    staleSco.erase(mv);
+}
+inline void detail::SymScopeUid::delsym(unsigned const symId){
+    ScopeSymbols& curScopeSymbols = scopes.front();
+    unsigned scope = curScopeSymbols.scope;
+    HashSet& syms = curScopeSymbols.syms;
+    auto const iter = syms.find(symId);
+    if( iter == syms.end() ){
+        THROW("delsym("<<symId<<") of symbol not in current scope="<<scope);
+    }
+    syms.erase(iter);
+    symScope.erase(symId);
+}
+inline void detail::SymScopeUid::prtCurrentSymbols() const{
+    ScopeSymbols const& curScopeSymbols = scopes.front();
+    unsigned scope = curScopeSymbols.scope;
+    HashSet const& curSyms = curScopeSymbols.syms;
+    std::cout<<" CurrentScope"<<scope;
+    char const* sep = "{";
+    for(auto const sym : curSyms ){
+        std::cout<<sep<<sym;
+        sep = ",";
+    }
+    std::cout<<"}";
+}
+inline std::vector<unsigned> detail::SymScopeUid::symIdAnyScopeSorted() const {
+    size_t nSym = 0U;
+    size_t nSco = 0U;
+    for(auto const& sco: scopes){
+        ++nSco;
+        nSym += sco.syms.size();
+    }
+    std::cout<<" count "<<nSym<<" syms in "<<nSco<<" active scopes"<<std::endl;
+    std::vector<unsigned> ret;
+    ret.reserve(nSym);
+    for(auto const& sco: scopes){
+        for(unsigned sym: sco.syms){
+            ret.push_back(sym);
+        }
+    }
+    std::sort(ret.begin(), ret.end());
+    return ret;
+}
+
 template<class BASE>
+    template<typename... Arg> inline
+ParSymbol<BASE>::ParSymbol(unsigned uid, unsigned scope, Arg&&... arg)
+    : BASE(std::forward<Arg>(arg)...)
+      , uid(uid), scope_(scope), active(true)
+{
+    int const verbose=1;
+    if(verbose){
+        Base const& b = *this;
+        std::cout<<" +Par(id"<<uid<<",sc"<<scope<<")'"<<b<<"'"; std::cout.flush();
+    }
+}
+
+template<class BASE> inline 
 std::ostream& operator<<(std::ostream& os, ParSymbol<BASE> const& x){
     return os
         <<"ParSymbol"
         <<(x.getActive()?'+':'-')
-        <<x.uid
-        <<"s"<<x.scope
+        <<x.symId()
+        <<"s"<<x.scope()
         <<"<"<<x.base()<<">}";
 }
 
-#if 0
-inline void ExBaseSym::chk_name_unique_in_current_scope()
-{
-    std::cout<<" symids()@"<<(void*)symids()<<std::endl;
-    SymScopeUid::HashSet const& ids = symids()->scopeSymUids();
-    for( auto id: ids ){
-        if( strcmp(symids()->psym(id).name, name) == 0 ){
-            THROW("Symbol "<<name<<" already exists in current scope");
+template<class PARSYMBOL> 
+template<typename... Arg> inline
+unsigned SymbStates<PARSYMBOL>::newsym(Arg&&... arg) {
+    // get a new symbol id
+    assert( !ssu.scopes.empty() );
+    unsigned const symId = ssu.newsym(); // symId is already push onto the ssu !!
+    assert( ssu.active(symId) );
+    assert( ssu.active(symId) == this->scope() );
+    std::cout<<"u"<<symId; std::cout.flush();
+    unsigned const scope = this->scope();
+    std::cout<<"s"<<scope; std::cout.flush();
+    assert( syms.find(symId) == syms.end() );
+
+    auto nameclash = [this](Psym const& ps, detail::SymScopeUid::HashSet const& uids)->void {
+        std::vector<Psym const*> uid_psyms;
+        uid_psyms.reserve(uids.size());
+        for(auto u: uids) {
+            if (u!=ps.symId()){
+                std::cout<<" nameclash checking "<<this->psym(u)<<std::endl; std::cout.flush();
+                uid_psyms.push_back(&(this->psym(u)));
+            }
         }
+        ps.chk_different_name(uid_psyms);
+    };
+
+    // Psym (or its BASE) may place restrictions on detecting illegal dups in
+    // same scope.  (No need to extend to clashes in upper?)
+    // ERROR: if symbol hides one in current scope
+    try{
+        // construct ParSymbol symbol+scope (and user's BASE state)
+        Psym psym{symId,scope,arg...};
+        nameclash(psym, ssu.scopes.front().syms);
+        // finalize the symbol
+        syms.emplace( std::make_pair(symId, std::move(psym)) ); // ???
     }
-}
-#endif
-
-// test class separation by putting the "USER CLASS" after everything else...
-
-
-namespace detail{
-
-/** This is an example base class.  In practice, many more features
- * would be provided automatically (including perhaps requiring a symbol "name").
- *
- * Some [std] features would augment ParSymbol<BASE>, and special features
- * [ex. register usage, arg memory locations, spill memory locations, ...]
- * would go into BASE.
- */
-class ExBaseSym{
-  public:
-    typedef ParSymbol<ExBaseSym> Psym;
-    typedef SymbStates<Psym> Ssym;
-    typedef void Base;
-    friend Psym;
-    friend Ssym;
-    friend std::ostream& scope::operator<<(std::ostream& os, ExBaseSym const& x);
-
-    virtual ~ExBaseSym() {}
-  protected:
-    ExBaseSym() : /*psym(psym),*/ name("noname?") {
-        THROW("ExBaseSym constructor missing args: please use newsym(ExBaseSym_args...)");
+    catch(...){
+        std::cout<<" Error creating newsym at "<<__FILE__<<":"<<__LINE__<<std::endl;
+        throw;
+        // or else could ssu.delsym and try to carry on ???
     }
-    ExBaseSym(char const* name) : name(name) {
-        //chk_name_unique_in_current_scope(); NO! parent is not fully initialized at this point!
-    }
-    /** return the ParSymbol, which has scope+uid, and maybe a SymbStates ptr.
-     * For example our low-level symbol id is parent()->uid.
-     */
-    Psym const *parent() const { return dynamic_cast<Psym const*>(this);}
-    /** might return null */
-    Ssym const *symids() const { return (dynamic_cast<Psym const*>(this))->ssym;}
-  private:
-    /** throw on duplicate symbol name in scame scope.
-     * Cannot have 2 duplicate symbol names [with different uids] in same scope.
-     * Note: compare our name only to \c ids that don't match our \c parent()->uid !
-     */
-    template<typename SymIdSet>
-        void chk_different_name(SymIdSet const& ids) const;
+    assert( syms.find(symId) != syms.end() );
+    assert( syms.find(symId)->second.symId() == symId );
+    assert( syms.find(symId)->second.scope() == scope );
+    assert( syms.find(symId)->second.getActive() == true );
+    //std::cout<<"+"; std::cout.flush();
+    assert( ssu.active(symId) == scope );
+    assert( this->active(symId) == scope );
+    //std::cout<<"+"; std::cout.flush();
 
-    void setActive(bool set=true) {} // nothing to do, but we were told about it.
-    char const* name;
-};
-
-template<typename SymIdSet>
-void ExBaseSym::chk_different_name(SymIdSet const& ids) const
-{
-    //std::cout<<" check_name_not_in({";
-    for( auto id: ids ){ std::cout<<" "<<id; }
-    //std::cout<<" }"<<std::endl;
-    for( auto id: ids ){
-        //std::cout<<" id"<<id; std::cout.flush();
-        if( id == parent()->uid )       // NB: skip ourself when checking for duplicates!
-            continue;
-        char const* existing_name = symids()->psym(id).name;
-        if( strcmp(name, existing_name) == 0 ){
-            THROW("Symbol "<<name<<" already exists in current scope");
+    // WARN: if symbol hides one in enclosing scope
+    bool doit=false;      // current scope we already checked -- dups were an ERROR
+    Psym const& oursym = psym(symId);
+    for(auto const& sc: ssu.scopes){
+        if(doit){ // enclosing scopes...
+            try{
+                nameclash(oursym, sc.syms);
+            }catch(...){
+                // nameclash with syms in higher scope is non-fatal
+                std::cout<<" Warning: symbol id"<<symId<<" in scope "<<ssu.scope()
+                    <<" hides one of same name in enclosing scope "<<sc.scope<<std::endl;
+            }
         }
+        doit=true;
     }
+    return symId;
 }
-}//detail::
-std::ostream& operator<<(std::ostream& os, detail::ExBaseSym const& x){
-    return os<<"ExBaseSym{"<<x.name<<"}";
+template<class PARSYMBOL> inline
+void SymbStates<PARSYMBOL>::prtCurrentSymbols(int verbose/*=0*/) const {
+    std::cout<<" CurrentScope"; std::cout.flush();
+    assert( !ssu.scopes.empty() );
+    detail::SymScopeUid::ScopeSymbols const& curScopeSymbols = ssu.scopes.front();
+    unsigned scope = curScopeSymbols.scope;
+    std::cout<<scope; std::cout.flush();
+    detail::SymScopeUid::HashSet const& curSyms = curScopeSymbols.syms;
+    char const* sep = "{";
+    if(curSyms.empty()) std::cout<<sep;
+    else for(auto const sym : curSyms ){
+        std::cout<<sep<<sym; std::cout.flush();
+        // is it active right now?
+        auto found = syms.find(sym);
+        assert( found != syms.end() );
+        assert( found->second.symId() == sym );
+        //assert( syms[sym].active == true );
+        assert( found->second.scope() == scope );
+        if( verbose<=0 && !found->second.getActive() ) std::cout<<"!";
+        //if(verbose>0) {std::cout<<found->second; std::cout.flush();}
+        //if(verbose>0) {std::cout<<"="<<found->second.base(); std::cout.flush();}
+        if(verbose>0) {std::cout<<"="<<found->second; std::cout.flush();}
+        sep = ", ";
+    }
+    std::cout<<"}";
+    std::cout.flush();
 }
 
 }//scope::

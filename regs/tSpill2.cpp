@@ -226,8 +226,8 @@ void Tester::test1(){
             cout<<" x                    = "<<x<<endl;
             cout<<" Since x is ParSymbol<BASE>..."<<endl;
             cout<<" x.getActive() = "<<x.getActive()<<endl; cout.flush();
-            cout<<" x.uid         = "<<x.uid<<endl;
-            cout<<" x.scope       = "<<x.scope<<endl;
+            cout<<" x.symId()            = "<<x.symId()<<endl;
+            cout<<" x.scope()            = "<<x.scope()<<endl;
             cout<<" x.base()             = "<<x.base()<<endl;
             cout<<" Since x.base() is ScopedSpillableBase..."<<endl;
             cout<<" x.base().scope()     = "<<x.base().scope()<<endl; // ScopedSpillableBase

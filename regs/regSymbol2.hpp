@@ -56,7 +56,7 @@ class RegSymbol :
             Rb::Cls const rtype = Rb::Cls::none
             //, Rb::Sub const rsub = Rb::Sub::def
             )
-        : Base(nullptr, nextSym(), 1/*scope*/, defBytes(rtype), defAlign(rtype)),
+        : Base(nextSym(), 1/*scope*/, defBytes(rtype), defAlign(rtype)),
         name_(name),
         regid_(invalidReg()),
         rtype_(rtype),
@@ -82,7 +82,7 @@ class RegSymbol :
      * with none of the optional PRESERVE or VLEN settings set up.
      */
     explicit RegSymbol( char const* const name, RegId const regid)
-        : Base(nullptr, nextSym(), 1/*scope*/, defBytes(regid), defAlign(regid))
+        : Base(nextSym(), 1/*scope*/, defBytes(regid), defAlign(regid))
           ,name_(name)
           ,regid_(valid(regid)? regid: invalidReg())
           ,rtype_(cls(regid))
