@@ -509,8 +509,12 @@ ParSymbol<BASE>::ParSymbol(unsigned uid, unsigned scope, Arg&&... arg)
 {
     int const verbose=1;
     if(verbose){
+        std::cout<<" +Par(id"<<uid<<",sc"<<scope<<")";
+//#if !defined(__ve) // nc++ had trouble finding the appropriate operator, sometimes
         Base const& b = *this;
-        std::cout<<" +Par(id"<<uid<<",sc"<<scope<<")'"<<b<<"'"; std::cout.flush();
+        std::cout<<"'"<<(decltype(b))b<<"'";
+//#endif
+        std::cout.flush();
     }
 }
 

@@ -2,7 +2,7 @@
 TARGETS:=testSpill-old testSymbStates-old \
 	testSpill2 testSpill3 testRegSym \
 	testRegBase prt_regnames testSymScopeUid testScopedSpill0 \
-	tSpill2 regSymbol2-hdr.o spill-impl2-hdr.o
+	tSpill2 regSymbol2-hdr.o spill-impl2-hdr.o testRegSym2
 all: $(TARGETS) Goodbye
 
 PHONY: Goodbye
@@ -48,7 +48,7 @@ ifeq ($(is_valgrind_ok), yes)
 vg = $(if $filter($(is_valgrind_ok),yes), \
      valgrind --leak-check=full --show-leak-kinds=all --suppressions=./dl_init.supp ./$@ > $@.vg 2>&1 \
      && { echo "gawking summary..." \
-          && gawk 'BEGIN{err=-1} /^==.*(LEAK|HEAP) SUMMARY/{p=1;err=0} p==1&&/^[^=]/{p=0} p==1{print} END{exit err}' $@.vg; } \
+     && gawk 'BEGIN{err=-1} /^==.*(LEAK|HEAP) SUMMARY/{p=1;err=0} /^Goodbye/{p=1;err=0} p==13&&/^[^=]/{p=0} p==1{print} END{exit err}' $@.vg; } \
      || { echo "Ohoh: $@ did not terminate correcly"; echo "see $@.vg"; } \
      , $(VE_EXEC) ./$@ > $@.vg)
 else
@@ -111,6 +111,12 @@ testRegSym: testRegSym.cpp spill.o regStates.o spill-impl.hpp spill.hpp throw.hp
 	# base on the return statement.
 	#
 	$(CXX) -o $@ $(CXXFLAGS) $(C11Y) $(filter %.cpp,$^) $(filter %.o,$^)
+	$(call vg)
+# test based on regSymbol2.hpp, register name and register id operations
+testRegSym2: testRegSym2.cpp reg-base.o reg-aurora.o spill2.o regSymbol2.hpp spill-impl2.hpp spill2.hpp throw.hpp reg-base.hpp
+	# regStates.hpp (seems like an old idea, defunct?)
+	$(CXX) -o $@.i $(CXXFLAGS) $(C11X) -dD -E $<
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
 
 symbStates-old.o: symbStates-old.cpp symbStates-old.hpp throw.hpp

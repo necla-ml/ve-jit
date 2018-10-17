@@ -34,22 +34,15 @@ template<typename SYMBASE> class SymStates; // fwd decl (in symScopeUid.hpp)
 // version 2: CRTP impl
 
 class ExBaseSym; ///< an example BASE for SymbStates (ParSymbol)
-}//detail::
-
+#if defined(__ve) // there are name loopup issues for operator<< !!!
 /** for the demo class... */
 std::ostream& operator<<(std::ostream&, const detail::ExBaseSym&);
+#endif
+}//detail::
 
-#if 0
-inline void ExBaseSym::chk_name_unique_in_current_scope()
-{
-    std::cout<<" symids()@"<<(void*)symids()<<std::endl;
-    SymScopeUid::HashSet const& ids = symids()->scopeSymUids();
-    for( auto id: ids ){
-        if( strcmp(symids()->psym(id).name, name) == 0 ){
-            THROW("Symbol "<<name<<" already exists in current scope");
-        }
-    }
-}
+#if !defined(__ve)
+/** for the demo class... */
+std::ostream& operator<<(std::ostream&, const detail::ExBaseSym&);
 #endif
 
 }//scope::
@@ -318,7 +311,13 @@ class ExBaseSym{
     typedef void Base;
     friend Psym;
     friend Ssym;
+#if defined(__ve)
+    // nc++ can find it when in scope::detail::, but cannot find it in scope::
+    // I was not able to hack around with using or anything
+    friend std::ostream&        operator<<(std::ostream& os, ExBaseSym const& x);
+#else
     friend std::ostream& scope::operator<<(std::ostream& os, ExBaseSym const& x);
+#endif
 
     virtual ~ExBaseSym() {}
   protected:
@@ -365,25 +364,19 @@ void ExBaseSym::chk_different_name(SET const& psyms) const
     }
 }
 
-}//detail::
-
-std::ostream& operator<<(std::ostream& os, detail::ExBaseSym const& x)
+#if defined(__ve) // it really wants it in detail::
+inline std::ostream& operator<<(std::ostream& os, ExBaseSym const& x)
 {
     return os<<"ExBaseSym{"<<x.name<<"}";
 }
+#endif
 
-#if 0
-template<class BASE>
-    template<typename... Arg>
-inline ParSymbol<BASE>::ParSymbol(/*Ssym *ssym,*/ unsigned uid, unsigned scope, Arg&&... arg)
-    : BASE(detail::bogusname(uid).c_str(), std::forward<Arg>(arg)...)
-      , uid(uid), scope(scope), ssym(nullptr), active(true)
+}//detail::
+
+#if !defined(__ve)
+inline std::ostream& operator<<(std::ostream& os, detail::ExBaseSym const& x)
 {
-    int const verbose=1;
-    if(verbose){
-        std::cout<<" Par(id"<<uid<<",sc"<<scope<<")" // <<ssym@"<<(void*)ssym
-            <<"'"<<BASE::name<<"'"; std::cout.flush();
-    }
+    return os<<"ExBaseSym{"<<x.name<<"}";
 }
 #endif
 
@@ -397,32 +390,6 @@ using namespace std;
 using namespace scope;
 using namespace scope::detail;
 
-#if 0
-namespace scope {
-
-// just for demo...
-inline std::string bogusname(unsigned const uid){
-    std::ostringstream oss;
-    oss<<uid;
-    return oss.str();
-}
-// interesting that this somewhat different-looking constructor can be supplied like
-// a specialization, out-of-class...
-template<class BASE>
-    template<typename... Arg>
-inline ParSymbol<BASE>::ParSymbol(/*Ssym *ssym,*/ unsigned uid, unsigned scope, Arg&&... arg)
-    : BASE(bogusname(uid).c_str(), std::forward<Arg>(arg)...)
-      , uid(uid), scope(scope), ssym(nullptr), active(true)
-{
-    int const verbose=1;
-    if(verbose){
-        std::cout<<" Par(id"<<uid<<",sc"<<scope<<")" // <<ssym@"<<(void*)ssym
-            <<"'"<<BASE::name<<"'"; std::cout.flush();
-    }
-}
-}//scope::
-#endif
-
 static int testNum=0;
 #define TEST(MSG) do{ \
     ++testNum; \
@@ -430,18 +397,6 @@ static int testNum=0;
     if(MSG) std::cout<<MSG; \
     std::cout<<std::endl; \
 }while(0)
-
-#if 0
-struct VerboseSymbolState {
-    void setActive(bool state) {
-        this->active = active;
-        cout<<(active?"+":"-");
-    }
-    bool getActive() const { return active; }
-  private:
-    bool active;
-};
-#endif
 
 void test1(){
     //typedef SymScopeUid<> Ssu;
