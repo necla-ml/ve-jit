@@ -24,6 +24,9 @@
 #include <vector>
 #include <algorithm> // sort
 
+//fwd decl
+template<class SYMBSTATES> class Regset;
+
 namespace ve {
 // fwd decl for friend status w/ ParSymbol and SymbStates
 template<class SYMBSTATES> class Spill;
@@ -226,7 +229,10 @@ class SymScopeUid {
         }
         return ret;
     }
-    /** return active symbol scope, or zero if stale/unknown */
+    /** return active symbol scope, or zero if stale/unknown.
+     * Note that this refers to scope-related 'active' only.
+     * So ParSymbol can be told \c eraseSym(symId) and have
+     * its active setting go false before the \c end_scope. */
     unsigned active(unsigned const symId) const {
         //int const verbose = 0;
         unsigned scope = scopeOf(symId);
@@ -554,10 +560,15 @@ class ExDerivedSym : public BaseSymbol<ExDerivedSym> {
 template<class BASE>
 class ParSymbol : public BASE {
   public:
+    typedef BASE Base;
     friend BASE;
-    friend SymbStates<BASE>;
-    typedef SymbStates<BASE> Ssym;
+    //friend SymbStates<BASE>;
+    //typedef SymbStates<BASE> Ssym;
     typedef ParSymbol<BASE> Psym;
+    //typedef SymbStates<Psym> Ssym;
+    typedef SymbStates<ParSymbol<BASE>> Ssym;
+    //friend Ssym;
+    friend SymbStates<ParSymbol<BASE>>;
     virtual ~ParSymbol() {}
     template<typename... Arg>
         ParSymbol(Ssym *ssym, unsigned uid, unsigned scope, Arg&&... arg);
@@ -590,7 +601,7 @@ class ParSymbol : public BASE {
         BASE::setActive(active);        // order important, so BASE can check more invariants!
         if(!active) this->active = active;
     }
-    SymbStates<BASE> *ssym;             ///< back-ptr to our owner, optional
+    Ssym *ssym;             ///< back-ptr to our owner, optional
     bool active;
 };
 
@@ -607,7 +618,7 @@ inline ParSymbol<BASE>::ParSymbol(Ssym *ssym, unsigned uid, unsigned scope, Arg&
     }
 }
 
-#if 0
+#if 1
 // just for demo...
 inline std::string bogusname(unsigned const uid){
     std::ostringstream oss;
@@ -648,15 +659,20 @@ inline ParSymbol<BASE>::ParSymbol(/*Ssym *ssym,*/ unsigned uid, unsigned scope, 
  * If the symbolId order is important [some tests], you can use ordered=1.
  * Perhaps we can support different orders, like order-by staleness?
  */
-template<class BASE/*=ExBaseSym*/> //, bool ordered/*=0*/ >
+//template<class BASE/*=ExBaseSym*/> //, bool ordered/*=0*/ >
+template<class PARSYMBOL>
 class SymbStates{
   public:
-    typedef SymbStates<BASE> Ssym;
-    typedef ParSymbol<BASE> Psym;
-    typedef BASE Base;
-    friend BASE;
-    //template<class SYMBSTATES> friend ve::Spill<SYMBSTATES>;
-    friend ve::Spill<SymbStates<BASE>>;
+    //typedef ParSymbol<BASE> Psym;
+    //typedef SymbStates<BASE> Ssym;
+    typedef PARSYMBOL Psym;
+    typedef SymbStates<PARSYMBOL> Ssym;
+    typedef typename PARSYMBOL::Base Base;
+
+    //friend Base;
+    //friend ve::Spill<SymbStates<Base>>;
+    friend ve::Spill<Ssym>;
+    template<class SYMBSTATES> friend class ::Regset;
   protected:
     detail::SymScopeUid ssu;
     /** symbol uid --> external symbol state.  This data structure \em owns all the
@@ -758,9 +774,9 @@ class SymbStates{
             //syms.emplace( symId, Psym{symId,scope,arg}... ); // ???
             try{
                 // construct ParSymbol symbol+scope (and user's BASE state)
-                //std::cout<<" create Psym..."<<std::endl;
+                std::cout<<" create Psym..."<<std::endl;
                 Psym psym{this,symId,scope,arg...};
-                //std::cout<<" chk_different_name..."<<std::endl;
+                std::cout<<" chk_different_name..."<<std::endl;
                 psym.chk_different_name(ssu.scopes.front().syms);
                 syms.emplace( std::make_pair(symId, psym) ); // ???
             }
@@ -818,7 +834,7 @@ class SymbStates{
             assert( found->second.uid == sym );
             //assert( syms[sym].active == true );
             assert( found->second.scope == scope );
-            if( verbose<=0 && !found->second.active ) std::cout<<"!";
+            if( verbose<=0 && !found->second.getActive() ) std::cout<<"!";
             //if(verbose>0) {std::cout<<found->second; std::cout.flush();}
             //if(verbose>0) {std::cout<<"="<<found->second.base(); std::cout.flush();}
             if(verbose>0) {std::cout<<"="<<found->second; std::cout.flush();}
@@ -866,8 +882,9 @@ namespace detail{
  */
 class ExBaseSym{
   public:
-    typedef SymbStates<ExBaseSym> Ssym;
     typedef ParSymbol<ExBaseSym> Psym;
+    typedef SymbStates<Psym> Ssym;
+    typedef void Base;
     friend Psym;
     friend Ssym;
     friend std::ostream& scope::operator<<(std::ostream& os, ExBaseSym const& x);

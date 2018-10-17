@@ -47,10 +47,12 @@ struct Tester{
  * helper that helps us model a machine with only 4 register locations.  Recall
  * we can check all the symbols' location with getREG/getMEM.
  */
-class DemoSymbStates : public scope::SymbStates<ScopedSpillableBase> {
+class DemoSymbStates : public scope::SymbStates<scope::ParSymbol<ScopedSpillableBase>> {
   public:
-    typedef scope::SymbStates<ScopedSpillableBase> Base;
-    typedef Base::Psym Psym;
+    //typedef scope::SymbStates<scope::ParSymbol<ScopedSpillableBase>> Base;
+    //typedef Base::Psym Psym;
+    typedef scope::ParSymbol<ScopedSpillableBase> Psym;
+    typedef scope::SymbStates<Psym> Base;
 
     /** The spill manager lifetime should be less than the psyms map lifetime */
     ve::Spill<DemoSymbStates> spill;

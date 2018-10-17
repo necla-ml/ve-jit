@@ -18,7 +18,8 @@ static int testNum=0;
 }while(0)
 
 void test1(){
-    typedef scope::SymbStates<ScopedSpillableBase> Ssym;
+    typedef scope::ParSymbol<ScopedSpillableBase> Psym;
+    typedef scope::SymbStates<Psym> Ssym;
     TEST("Construct SymScopeUid");
     {
         Ssym ssym;

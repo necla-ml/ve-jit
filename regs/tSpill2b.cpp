@@ -44,35 +44,6 @@ struct Tester{
     static void test3();
 };
 
-typedef RegisterBase Rb;
-
-static chipregs = mkChipRegisters();
-static std::vector<uint32_t> getFreeScalarRegs(){
-    for(uint32_t i=0U; i<chipregs.size(); ++i){
-        RegisterBase const& rb = chipregs(i);
-        if( rb == Rb::scalar && rb.free()
-                && !isReserved(Regid(i), Abi::c)
-                && !isPreserved(Regid(i), Abi::c) ){
-            ret.push_back(i);
-        }
-    }
-}
-static std::vector<RegId> scalars;
-void init_scalars(){
-    scalars.clear();
-    auto const regs = getFreeScalarRegs();
-    scalars = std::transform( regs.begin(), regs.end(),
-            std::back_inserter(scalars),
-            [](regs::value_type const r) {return Regid(r);} );
-}
-void init_some_scalars(unsigned nScalarRegs){
-    scalars.clear();
-    auto const regs = getFreeScalarRegs();
-    for(unsigned cnt=0U; cnt<nScalarRegs && cnt<regs.size(); ++cnt){
-        scalars.push_back(regs(cnt));
-    }
-}
-
 class RegSymbol :
     protected scope::ParSymbol<ScopedSpillableBase>
 {
@@ -117,6 +88,50 @@ class RegSymbol :
     RegId regId_;               ///< register Id \sa reg-base.hpp
 };
 
+template<class SYMBSTATES>
+class Regset {
+  public:
+    typedef RegisterBase Rb;
+    Regset(SYMBSTATE *ssym, int nScalars)
+        : ssym(ssym), scalars(init_some_scalars(nScalars)) {}
+    Regset(SYMBSTATE *ssym)
+        : scalars(init_scalars()) {}
+
+    std::vector<RegId> unused();
+    std::vector<RegId> 
+  private:
+    SYMBSTATES *ssym;
+    std::vector<RegId> scalars;
+
+  private:
+    static chipregs = mkChipRegisters();
+    static std::vector<uint32_t> getFreeScalarRegs(){
+        for(uint32_t i=0U; i<chipregs.size(); ++i){
+            RegisterBase const& rb = chipregs(i);
+            if( rb == Rb::scalar && rb.free()
+                    && !isReserved(Regid(i), Abi::c)
+                    && !isPreserved(Regid(i), Abi::c) ){
+                ret.push_back(i);
+            }
+        }
+    }
+    static std::vector<Regid> init_scalars(){
+        std::vector<Regid> ret;
+        auto const regs = getFreeScalarRegs();
+        ret = std::transform( regs.begin(), regs.end(),
+                std::back_inserter(scalars),
+                [](regs::value_type const r) {return Regid(r);} );
+        return ret;
+    }
+    static std::vector<Regid> init_some_scalars(unsigned nScalarRegs){
+        std::vector<Regid> ret
+        auto const regs = getFreeScalarRegs();
+        for(unsigned cnt=0U; cnt<nScalarRegs && cnt<regs.size(); ++cnt){
+            ret.push_back(RegId(regs(cnt)));
+        }
+    }
+};
+
 class Counters {
   public:
     Counters() : t_(0U), s_(0U)
@@ -137,6 +152,19 @@ class DemoSymbStates
   public:
     typedef scope::SymbStates<ScopedSpillableBase> Base;
     typedef Base::Psym Psym;
+    typedef RegSymbol Rs;
+
+  private:
+    // psym/fpsym is ParSymbol<ScopedSpillableBase> with:
+    //   ParSymbol:           uid/symId(), scope, getActive,
+    //   ScopedSpillableBase: getREG, getMEM
+    //   (Spillable:          getBytes, getAlign)
+    // rs (RegSymbol) map for:
+    //   name, RegId, staleness, 
+    //std::map<unsigned, Rs> rsyms;
+    // Can we store Rs instead of Base in SymbStates::syms ??
+  public:
+    Rs const& rsym(unsigned symId) r
 
   public:
     friend class ve::Spill<DemoSymbStates>;
@@ -149,7 +177,9 @@ class DemoSymbStates
     ~DemoSymbStates() {
         //Base::end_scope();
     }
-
+  public: // republish some functions
+    auto symIdAnyScopeSorted() const { return ssu.symIdAnyScopeSorted(); }
+  public:
     RegId allocScalar();                    ///< allocate from \c scalars, spill if nec.
     RegId allocScalar(unsigned const symId);///< allocScalar + setReg
     void setReg(unsigned const symId, RegId const rid); ///< copy symbol R-->R

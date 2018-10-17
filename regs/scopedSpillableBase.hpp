@@ -62,7 +62,7 @@ class ScopedSpillableBase {
     ///@{
   public:
     typedef scope::ParSymbol<ScopedSpillableBase> Ps; ///< parent Ps::uid and Ps::scope assigned "from above"
-    typedef scope::SymbStates<ScopedSpillableBase> Ss;
+    typedef scope::SymbStates<scope::ParSymbol<ScopedSpillableBase>> Ss;
     friend Ps;
     friend Ss;
     friend RegSymbol; // for test access to setActive(bool)
@@ -77,7 +77,8 @@ class ScopedSpillableBase {
         return dynamic_cast<Ps const*>(this);
     }
     /** might return null */
-    Ss const *symids() const { return (dynamic_cast<Ps const*>(this))->ssym;}
+    Ss const *symids() const {
+        return parent()->ssym;}
 
     unsigned scope() const {return this->parent()->scope;}
     // symId(), below, also changes

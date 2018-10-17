@@ -144,8 +144,10 @@ struct Counters {
 /** Spillable objects need a way to convert symbol Ids into SpillableRegSym */
 struct DemoSymbStates : public Counters {
     typedef SpillableRegSym Psym;  // "parent" symbol class
-    typedef map<unsigned,Psym> SymIdMap;
     typedef ve::Spill<DemoSymbStates> SpillType;
+    typedef map<unsigned,Psym> SymIdMap;
+
+    SymIdMap psyms;   ///< symId-->Psym (Psym=SpillableRegSym)
 
     // new: move nextTick into RegSymbol
     static uint64_t nextTick() { return RegSymbol::nextTick(); }
@@ -155,8 +157,6 @@ struct DemoSymbStates : public Counters {
             //RegSymbol::t=0U; // symIds start from 1 again, thank-you.
             //RegSymbol::resetSyms();
         }
-
-    SymIdMap psyms;   ///< symId-->Psym (Psym=SpillableRegSym)
 
     /** The spill manager lifetime should be less than the psyms map lifetime */
     SpillType spill;

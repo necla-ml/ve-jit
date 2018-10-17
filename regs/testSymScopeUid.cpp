@@ -7,7 +7,7 @@ using namespace std;
 using namespace scope;
 using namespace scope::detail;
 
-#if 1
+#if 0
 namespace scope {
 
 // just for demo...
@@ -256,7 +256,7 @@ void test3(){
     //typedef SymScopeUid<> Ssu;
     //typedef SymScopeUid<VerboseSymbolState> Ssu;
     //typedef SymStates<> Sst;
-    typedef SymbStates<ExBaseSym> Ssym;
+    typedef SymbStates<ParSymbol<ExBaseSym>> Ssym;
     //typedef ParSymbol<ExBaseSym> Psym;
     TEST("Construct SymScopeUid");
     {

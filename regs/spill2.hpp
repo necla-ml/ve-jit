@@ -42,12 +42,6 @@ void spill_msg_destroy(int bottom);
 template<class SYMBSTATES>
 class Spill {
   public:
-    void dump() const;
-    void contiguity_check() const;
-    /** validate our data structures, or throw. */
-    void validate();
-    /** get max negative offset ~ size of "locals" memory. */
-    int getBottom() const {return this->bottom;}
     typedef typename SYMBSTATES::Psym Sym;
     /** We maintain a downward growing list of regions. With time, the symbols
      * in smap change state: they declared, assigned to registers, acquire values,
@@ -65,6 +59,14 @@ class Spill {
     typedef typename std::forward_list<Region> Rgns;
     Rgns const& regions() const {return this->use;}
 
+    void dump() const;
+    /** get max negative offset ~ size of "locals" memory. */
+    int getBottom() const {return this->bottom;}
+  protected:
+    void contiguity_check() const;
+    /** validate our data structures, or throw. */
+    void validate();
+  public:
     /** \p symbStates need not be fully constructed. We use symbStates to
      * dereference unsigned symId --> SYMBSTATES::Psym symbol objects. */
     Spill(SYMBSTATES *symbStates)
