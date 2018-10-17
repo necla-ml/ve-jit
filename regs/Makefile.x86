@@ -8,7 +8,8 @@
 TARGETS:=testSpill-old testSymbStates-old \
 	testSpill2 testSpill3 testRegSym \
 	testRegBase prt_regnames testSymScopeUid testScopedSpill0 \
-	tSpill2 regSymbol2-hdr.o spill-impl2-hdr.o testRegSym2
+	tSpill2 regSymbol2-hdr.o spill-impl2-hdr.o testRegSym2 \
+	tSpill2b
 all: $(TARGETS) Goodbye
 
 PHONY: Goodbye
@@ -99,7 +100,8 @@ tSpill2: tSpill2.cpp spill2.o spill-impl2.hpp spill2.hpp throw.hpp reg-base.hpp 
 	$(CXX) -o $@.i $(CXXFLAGS) $(C11X) -dD -E $<
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
-tSpill2b: testSpill2b.cpp spill2.o spill-impl2.hpp spill2.hpp throw.hpp reg-base.hpp
+# new: add name and register support to scoped symbols (expand basic symScopeUid functions)
+tSpill2b: tSpill2b.cpp spill2.o reg-aurora.o reg-base.o spill-impl2.hpp spill2.hpp throw.hpp reg-base.hpp symScopeUid.hpp
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
 

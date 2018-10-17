@@ -18,4 +18,5 @@ a.out
 html
 testScopedSpill0
 tSpill2
+tSpill2b
 testRegSym2

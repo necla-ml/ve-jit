@@ -170,6 +170,10 @@ inline ChipRegisters& mkChipRegistersAurora() {
     return ChipRegistersAurora::Instance();
 }
 
+inline ChipRegisters& mkChipRegisters() {
+    return ChipRegistersAurora::Instance();
+}
+
 constexpr RegisterBase::Flags::StorageType defRegFlags(RegId const r){
     return 0
         | RegisterBase::shift(RegisterBase::Use::free)
