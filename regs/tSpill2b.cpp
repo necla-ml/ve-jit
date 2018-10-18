@@ -71,16 +71,6 @@ class RegSymbol :
         regId_(invalidReg())
         { init(arg...); }
 
-    template<typename... Arg>
-        RegSymbol(char const* name, uint64_t const tick,
-                RegId const regid, Arg&&... arg)
-        : Psym(arg...),
-        name_(name),
-        t_decl(tick),
-        t_sym(valid(regid)? tick: 0U),
-        regId_(regid != invalidReg()? regid: invalidReg())
-    {}
-
     char const* name() const {return name_;}
     RegId regId() const      {return regId_;}
     uint64_t tDecl() const   {return t_decl;}
@@ -139,28 +129,156 @@ std::ostream& operator<<(std::ostream& os, RegSymbol const& x){
     return os;
 }
 
-template<class SYMBSTATES>
+/**
+ * Regset provides low-level RegId<-->symId pairing.
+ *
+ * State is synchronized by SYMBSTATES to match individual RegSymbol info.
+ * SYMBSTATES::syms maps symId-->RegSymbol,
+ * and you use SYMBSTATES::psym(symId) to obtain the RegSymbol.
+ *
+ * - compare with:
+ *   - \c SymbStates (\c DemoSymStates) symId<-->scope (high-level)
+ *     - \c SymScopeUid, scope<-->symids (low-level data structure)
+ *
+ * - Just as a symId maps to a single scope,
+ *   - a symId maps to a single RegId.
+ *   - a symId can be reassigned to another RegId
+ *   - a symId is still 'assigned' to a Reg when it is spilled
+ *     - but RegSymbol::getREG() is false. See \ref ScopedSpillableBase.
+ *   - a symId can be either \e strong-assigned or \e weak-assigned to reg.
+ *     - (just like a symId can be in either \e active or \e stale scope)
+ *
+ * === \e Strong-assign : symId <--> RegId association
+ *
+ * - When a RegId \e r is \e write-assigned to a given [new] symId \e s,
+ *   all other symids must be dissociated.
+ *   - Here:
+ *     - \post \c regmap(r) has a \b single entry, \e s.
+ *   - Elsewhere:
+ *     - other symids get setREG(false).
+ *     - if other symids are scope-active, they \b must be spilled.
+ *     - if other symids are scope-inactive, that is OK (they may or may
+ *       not still be in spill, but can be gc'ed).
+ * - A RegId may be write-assigned to the same unique symbol quickly.
+ *   - i.e. calculating a symbol value in a number of assembler statements.
+ *   - but for some chipsets this might lead to slower code, so...
+ * - Consider a symbol \e s with previous register assignment
+ *   \f$r_prev(s)\f$that may be \e weak- or \e strong-assigned (or absent).
+ * - Suppose \e s is to be \e write-assigned.
+ * - We need to allocate and \e strong-assign a register \f$r_new\f$ to \e s:
+ * - The steps might be ordered as follows for fully-unrolled jit code:
+ *   1. Look for \c mt registers.
+ *      - (first, because (3.) \e might in some cases cause pipeline stalls?).
+ *      - \e select one, \f$r_new(s)\f$, (staleness? round-robin?)
+ *      - Now \f$r_new(s)\f$ is a register with \b no
+ *        \e strong- or \e weak-assign symbols.
+ *      - Erase \e s's mapping to \f$r_prev(s)\f$
+ *      - \e strong-assign \e s to \f$r_new(s)\f$.
+ *   2. O/w, if \e s is already \c strong-assigned, use the same register.
+ *      - Some chipsets may take a performance hit for this,
+ *        but still it is probably better than spilling a register to memory.
+ *      - so this step might be skipped.
+ *   3. O/w, if \e s is \e weak-assigned to \f$r_prev(s)\f$ and there is no
+ *       \e strong-assign for \f$r_prev(s)\f$. Use \f$r_new(s) = r_prev(s)\f$.
+ *       - (This \e might cause pipeline stalls, so do it after (3b) for unrolled-jit code)
+ *       - Promote \e s's mapping to \f$r_prev(s)\f$ from \e weak- to \e strong-assign.
+ *   4. O/w, look for registers with \b no \e strong-assign.  (They must
+ *       have \e weak-assigns, because we already looked for empties in (1.))
+ *       - \e select one, \f$r_new(s)\f$, (staleness? round-robin?)
+ *         - prefer not to re-use \f$r_prev(s)\f$ (differet from (3.)).
+ *       - Erase \e s's mapping to \f$r_prev(s)\f$
+ *       - \e strong-assign \e s to \f$r_new(s)\f$.
+ *   5. O/w, step (2.), if we skipped it before.
+ *   6. O/w look at all symIds in \e strong-register assignments
+ *      - \e select one, \e x, (staleness? round-robin?)
+ *      - spill \e x, if nec., (\ref ScopedSpillableBase),
+ *      - demote \e x's previous \e strong-assign to a \e weak-assign,
+ *      - and \e strong-assign new symId \e s to register \e x.
+ *
+ * Issues:
+ *
+ * - 'stale' for selecting spill symbol is based on symbol usage time
+ * - 'stale' for selecting register \e might be based on register usage time.
+ *   - for simplicity, \b require:
+*      - \e strong-assign registers update the symbol-usage time information.
+*      - all assembler \e read ops also update the symbol time.
+*    - register staleness is defined as:
+*      - the staleness of its unique \e strong-assign symbol.
+*      - o/w, the minimum staleness of its \e weak-assign symbol.
+*      - o/w the register is \c mt, always preferred for use.
+ *
+ * === \e Weak-assign : symId <--> RegId association
+ *
+ * - When a strong RegId association kicks out previous \e strong-assign
+ *   symIds, we still remember the last-used register association.
+ * - Also when a strong Reg
+ *   - Those other symbols have \e strong-assign --> \e weak-assign.
+ *   - akin to \c SymScopeUid maintaining \e stale-scope information,
+ *     which (at least in the API) could be re-activated.
+ *
+ */
+//template<class SYMBSTATES> // hard-wired to DemoSymbStates
 class Regset {
   public:
     typedef RegisterBase Rb;
-    Regset(SYMBSTATES *ssym, int nScalars)
-        : chipregs(mkChipRegisters())
-        , ssym(ssym)
-        , scalars(init_some_scalars(nScalars))
-    {}
-    Regset(SYMBSTATES *ssym)
-        : chipregs(mkChipRegisters())
-        , ssym(ssym)
-        , scalars(init_scalars())
-    {}
-
-    std::vector<RegId> unused();
+    typedef DemoSymbStates SYMBSTATES;
+    typedef std::unordered_set<unsigned> HashSet;
+    friend class SYMBSTATES;
   private:
     decltype(mkChipRegisters()) chipregs; // initialize first!
     SYMBSTATES *ssym;
     std::vector<RegId> scalars;
+  protected:
+    std::map<RegId, std::forward_list<unsigned>> regmap;
+    std::map<symId, RegId> symmap;
+    std::vector<RegId> mt;      ///< empty
+  public:
+    void assign(unsigned const symId, RegId
+  public:
+    Regset(SYMBSTATES *ssym, int nScalars)
+        : chipregs(mkChipRegisters())
+          , ssym(ssym)
+          , scalars(init_some_scalars(nScalars))
+          , regmap(init_regmap())
+          , symmap()
+          , mt()
+    {}
+    Regset(SYMBSTATES *ssym)
+        : chipregs(mkChipRegisters())
+          , ssym(ssym)
+          , scalars(init_scalars())
+          , regmap(init_regmap())
+          , symmap()
+          , mt()
+    {}
+
+    std::vector<RegId> const&
+        Mt() const {
+            return mt;}
+    std::forward_list<unsigned> const&
+        symIds(RegId const r) const {
+            assert( valid(r) );
+            auto found = regmap.find(r);
+            if (found==regmap.end()){
+                THROW("Regset::symIds(RegId="<<r<<") does not know about that RegId");
+            }
+            assert( scalars.find(r) != scalars.end() );
+            chk(); }
 
   private:
+    void chk(){
+        assert( scalars.size() == regmap.size() );
+        assert( mt.size() <= scalars.size() );
+        // A symbol can never be in 2 forward_lists,
+        // and (stronger) can never occur twice in any list
+        std::unordered_set<unsigned> seen;
+        for(auto const& m: regmap){
+            for(auto const& s: m->second){
+                assert( seen.find(s) == seen.end() );
+                seen.insert(s);
+            }
+        }
+    }
     auto getFreeScalarRegs(){
         std::vector<uint32_t> ret;
         for(uint32_t i=0U; i<chipregs.size(); ++i){
@@ -168,7 +286,7 @@ class Regset {
             if( rb.cls() == Rb::Cls::scalar && rb.free()
                     && !isReserved(RegId(i), Abi::c)
                     && !isPreserved(RegId(i), Abi::c) ){
-                std::cout<<" Free Scalar Reg: "<<chipregs(i)<<std::endl;
+                std::cout<<" Free Scalar Reg: "<<chipregs(i)<<" asmname "<<asmname(rb.rid)<<std::endl;
                 std::cout.flush();
                 ret.push_back(i);
             }
@@ -189,6 +307,11 @@ class Regset {
         for(unsigned cnt=0U; cnt<nScalarRegs && cnt<regs.size(); ++cnt){
             ret.push_back(RegId(regs(cnt)));
         }
+        return ret;
+    }
+    std::map<RegId, std::forward_list<unsigned>> init_regmap(){
+        std::map<RegId, std::forward_list<unsigned>> ret;
+        for(auto const r: scalars) ret.emplace(r,std::forward_list());
         return ret;
     }
 };
@@ -244,7 +367,7 @@ class DemoSymbStates
     // Can we store Rs instead of Base in SymbStates::syms ??
   public:
     Rs const& rsym(unsigned symId);
-    Regset<DemoSymbStates> regset;
+    Regset<DemoSymbStates> regset; ///< hard-wired to a set of scalar regs now.
 
   public:
     friend class ve::Spill<DemoSymbStates>;
