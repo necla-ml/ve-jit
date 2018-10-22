@@ -52,7 +52,7 @@ constexpr RegId invalidReg(){
     return rBad;
 }
 
-std::ostream& operator<<(std::ostream& os, RegId const r){
+inline std::ostream& operator<<(std::ostream& os, RegId const r){
     std::ostringstream oss; // this way setw(n) works nicely
     oss<<'r'<<static_cast<std::underlying_type<RegId>::type>(r);
     return os<<oss.str();
