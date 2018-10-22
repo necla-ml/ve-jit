@@ -5,9 +5,6 @@
 #include <stdexcept>
 using namespace std;
 
-std::ostream& operator<<(std::ostream& os, RegId const r){
-    return os<<'r'<<static_cast<std::underlying_type<RegId>::type>(r);
-}
 std::ostream& operator<<(std::ostream& os, RegisterBase::Use const u){
     if( u == RegisterBase::Use::free ) /* nop */ ;
     //    <^K>.M· <^K>*X× <^K>Rg® <^K>o/ø <^K>Cu¤ <^K>>» <^K><<«

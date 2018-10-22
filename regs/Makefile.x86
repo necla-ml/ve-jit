@@ -9,7 +9,7 @@ TARGETS:=testSpill-old testSymbStates-old \
 	testSpill2 testSpill3 testRegSym \
 	testRegBase prt_regnames testSymScopeUid testScopedSpill0 \
 	tSpill2 regSymbol2-hdr.o spill-impl2-hdr.o testRegSym2 \
-	tSpill2b
+	tSpill2b s2r
 all: $(TARGETS) Goodbye
 
 PHONY: Goodbye
@@ -75,6 +75,9 @@ testSpill-old: testSpill-old.cpp asm-old.o
 testSymScopeUid: testSymScopeUid.cpp throw.hpp
 	$(CXX) -o $@.i $(CXXFLAGS) -dD -E $<
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $^
+	$(call vg)
+s2r: s2r.hpp
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) -DS2R_MAIN -x c++ $^
 	$(call vg)
 testScopedSpill0: testScopedSpill0.cpp symScopeUid.hpp scopedSpillableBase.hpp throw.hpp
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^) && echo YAY

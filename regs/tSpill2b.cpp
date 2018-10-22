@@ -129,96 +129,74 @@ std::ostream& operator<<(std::ostream& os, RegSymbol const& x){
     return os;
 }
 
-/**
- * Regset provides low-level RegId<-->symId pairing.
- *
- * State is synchronized by SYMBSTATES to match individual RegSymbol info.
- * SYMBSTATES::syms maps symId-->RegSymbol,
- * and you use SYMBSTATES::psym(symId) to obtain the RegSymbol.
- *
- * - compare with:
- *   - \c SymbStates (\c DemoSymStates) symId<-->scope (high-level)
- *     - \c SymScopeUid, scope<-->symids (low-level data structure)
- *
- * - Just as a symId maps to a single scope,
- *   - a symId maps to a single RegId.
- *   - a symId can be reassigned to another RegId
- *   - a symId is still 'assigned' to a Reg when it is spilled
- *     - but RegSymbol::getREG() is false. See \ref ScopedSpillableBase.
- *   - a symId can be either \e strong-assigned or \e weak-assigned to reg.
- *     - (just like a symId can be in either \e active or \e stale scope)
- *
- * === \e Strong-assign : symId <--> RegId association
- *
- * - When a RegId \e r is \e write-assigned to a given [new] symId \e s,
- *   all other symids must be dissociated.
- *   - Here:
- *     - \post \c regmap(r) has a \b single entry, \e s.
- *   - Elsewhere:
- *     - other symids get setREG(false).
- *     - if other symids are scope-active, they \b must be spilled.
- *     - if other symids are scope-inactive, that is OK (they may or may
- *       not still be in spill, but can be gc'ed).
- * - A RegId may be write-assigned to the same unique symbol quickly.
- *   - i.e. calculating a symbol value in a number of assembler statements.
- *   - but for some chipsets this might lead to slower code, so...
- * - Consider a symbol \e s with previous register assignment
- *   \f$r_prev(s)\f$that may be \e weak- or \e strong-assigned (or absent).
- * - Suppose \e s is to be \e write-assigned.
- * - We need to allocate and \e strong-assign a register \f$r_new\f$ to \e s:
- * - The steps might be ordered as follows for fully-unrolled jit code:
- *   1. Look for \c mt registers.
- *      - (first, because (3.) \e might in some cases cause pipeline stalls?).
- *      - \e select one, \f$r_new(s)\f$, (staleness? round-robin?)
- *      - Now \f$r_new(s)\f$ is a register with \b no
- *        \e strong- or \e weak-assign symbols.
- *      - Erase \e s's mapping to \f$r_prev(s)\f$
- *      - \e strong-assign \e s to \f$r_new(s)\f$.
- *   2. O/w, if \e s is already \c strong-assigned, use the same register.
- *      - Some chipsets may take a performance hit for this,
- *        but still it is probably better than spilling a register to memory.
- *      - so this step might be skipped.
- *   3. O/w, if \e s is \e weak-assigned to \f$r_prev(s)\f$ and there is no
- *       \e strong-assign for \f$r_prev(s)\f$. Use \f$r_new(s) = r_prev(s)\f$.
- *       - (This \e might cause pipeline stalls, so do it after (3b) for unrolled-jit code)
- *       - Promote \e s's mapping to \f$r_prev(s)\f$ from \e weak- to \e strong-assign.
- *   4. O/w, look for registers with \b no \e strong-assign.  (They must
- *       have \e weak-assigns, because we already looked for empties in (1.))
- *       - \e select one, \f$r_new(s)\f$, (staleness? round-robin?)
- *         - prefer not to re-use \f$r_prev(s)\f$ (differet from (3.)).
- *       - Erase \e s's mapping to \f$r_prev(s)\f$
- *       - \e strong-assign \e s to \f$r_new(s)\f$.
- *   5. O/w, step (2.), if we skipped it before.
- *   6. O/w look at all symIds in \e strong-register assignments
- *      - \e select one, \e x, (staleness? round-robin?)
- *      - spill \e x, if nec., (\ref ScopedSpillableBase),
- *      - demote \e x's previous \e strong-assign to a \e weak-assign,
- *      - and \e strong-assign new symId \e s to register \e x.
- *
- * Issues:
- *
- * - 'stale' for selecting spill symbol is based on symbol usage time
- * - 'stale' for selecting register \e might be based on register usage time.
- *   - for simplicity, \b require:
-*      - \e strong-assign registers update the symbol-usage time information.
-*      - all assembler \e read ops also update the symbol time.
-*    - register staleness is defined as:
-*      - the staleness of its unique \e strong-assign symbol.
-*      - o/w, the minimum staleness of its \e weak-assign symbol.
-*      - o/w the register is \c mt, always preferred for use.
- *
- * === \e Weak-assign : symId <--> RegId association
- *
- * - When a strong RegId association kicks out previous \e strong-assign
- *   symIds, we still remember the last-used register association.
- * - Also when a strong Reg
- *   - Those other symbols have \e strong-assign --> \e weak-assign.
- *   - akin to \c SymScopeUid maintaining \e stale-scope information,
- *     which (at least in the API) could be re-activated.
- *
- */
-//template<class SYMBSTATES> // hard-wired to DemoSymbStates
+/** Thin wrapper (example class) around std::vector that selects a subset of Registers.
+ * This one selects scalar registers that are neither reserved nor preserved in C-abi.
+ * The user may want to select several groups of registers ??? */
 class Regset {
+  public:
+    typedef RegisterBase Rb;
+    typedef std::vector<RegId> SetType;
+  public:
+    Regset(int nScalars)
+        : scalars(init_scalars(nscalars))   // subset
+          , pos_(-1)
+    { assert( scalars.size() >= 0 ); }
+    Regset()
+        : scalars(init_scalars())   // subset
+        , pos_(-1)
+    { assert( scalars.size() >= 0 ); }
+
+    /** Since Regset is very simple, we have only a few exposed functions */
+    SetType::const_iterator find(int const r){
+        return scalars.find(scalars.begin(), scalars.end(), RegId(r));
+    }
+    SetType::const_iterator begin() const { return scalars.begin(); }
+    SetType::const_iterator end()   const { return scalars.end(); }
+    bool valid(int const r)         const{ return find(r) != end(); }
+    SetType::size_type size()       const{ return scalars.size(); }
+    Regid front()                   const {return scalars.front();}
+    Regid back()                    const {return scalars.back();}
+    /** an internal round-robin next */
+    Regid next()                    {return scalars[++pos_ % scalars.size()];}
+
+  private:
+    /** idx of a RegId \c r within our set */
+     find(uint32_t const r) const{
+        ret = false;
+        for(auto s: scalars){ if(s==r) { ret=true; break; }}
+        return ret;
+    }
+    auto init_scalars(){
+        decltype(mkChipRegisters()) chipregs(mkChipRegisters()) // all
+        std::vector<RegId> ret;
+        std::vector<uint32_t> const regs = getFreeScalarRegs();
+        std::transform( regs.begin(), regs.end(),
+                std::back_inserter(ret),
+                [](uint32_t const r) {return RegId(r);} );
+        return ret;
+    }
+    auto init_some_scalars(unsigned nScalarRegs){
+        decltype(mkChipRegisters()) chipregs(mkChipRegisters()) // all
+        std::vector<RegId> ret;
+        auto const regs = getFreeScalarRegs();
+        for(unsigned cnt=0U; cnt<nScalarRegs && cnt<regs.size(); ++cnt){
+            ret.push_back(RegId(regs(cnt)));
+        }
+        return ret;
+    }
+    std::map<RegId, std::forward_list<unsigned>> init_regmap(){
+        std::map<RegId, std::forward_list<unsigned>> ret;
+        for(auto const r: scalars) ret.emplace(r,std::forward_list());
+        return ret;
+    }
+  private:
+    SetType const scalars;   ///< internal set of registers
+    int pos_;                           ///< round-robin index, for \c next()
+};
+
+
+template<class SYMBSTATES> // hard-wired to DemoSymbStates
+class RegsetScopedSpillable {
   public:
     typedef RegisterBase Rb;
     typedef DemoSymbStates SYMBSTATES;
@@ -266,6 +244,7 @@ class Regset {
             chk(); }
 
   private:
+    bool 
     void chk(){
         assert( scalars.size() == regmap.size() );
         assert( mt.size() <= scalars.size() );
@@ -278,6 +257,7 @@ class Regset {
                 seen.insert(s);
             }
         }
+        // strong- or weak-assigned symbols here MUST have getREG state true
     }
     auto getFreeScalarRegs(){
         std::vector<uint32_t> ret;
@@ -520,4 +500,116 @@ int main(int,char**){
     cout<<"\nGoodbye - " __FILE__ " ran "<<testNum<<" tests"<<endl;
     return 0;
 }
+/** \file
+ * --------------------------------------------------------------------
+ * What follows is a discussion of Use Cases, and how [some other class]
+ * would use the low-level SymRegid data structure.
+ *
+ * State is synchronized by SYMBSTATES to match individual RegSymbol info.
+ * SYMBSTATES::syms maps symId-->RegSymbol,
+ * and you use SYMBSTATES::psym(symId) to obtain the RegSymbol.
+ *
+ * - compare with:
+ *   - \c SymbStates (\c DemoSymStates) symId<-->scope (high-level)
+ *     - \c SymScopeUid, scope<-->symids (low-level data structure)
+ *   - symbol \e scopes have infinite nestedness, in principle
+ *   - symbol \e register-assignments have to deal with a finite
+ *     number of registers (o.w. they spill).
+ *   - Hmmm. or I could use the infinite-register model, and later
+ *     remap to actual registers, as done in llvm.
+ *     - Downside is that this requires some post-processing.
+ *     - OH, BUT...
+ *       - the post-processing could be restricted to rewriting
+ *         the #define SYMNAME V_REG_NNNN [opt. other info]
+ *         lines of the infinite register model
+ *         with #define SYMNAME %s37 actual register assignments
+ *   - But let's stick with Regset approach, whose policies can likely
+ *     be fine-tuned to provide for decent code in the 3 main code-gen
+ *     scenarios:
+ *     - looping generic code
+ *     - looping jit code
+ *     - unrolled jit code.
+ *   - These scenarios also use chipset info:
+ *     - register-reuse impact (i.e. dest reg == source reg),
+ *     - pipeline depth,
+ *     - parallelism available for different op-types.
+ *
+ * - Just as a symId maps to a single scope,
+ *   - a symId maps to a single RegId.
+ *   - a symId can be reassigned to another RegId
+ *   - a symId is still 'assigned' to a Reg when it is spilled
+ *     - but RegSymbol::getREG() is false. See \ref ScopedSpillableBase.
+ *   - a symId can be either \e strong-assigned or \e weak-assigned to reg.
+ *     - (just like a symId can be in either \e active or \e stale scope)
+ *
+ * === \e Strong-assign : symId <--> RegId association
+ *
+ * - When a RegId \e r is \e write-assigned to a given [new] symId \e s,
+ *   all other symids must be dissociated.
+ *   - Here:
+ *     - \post \c regmap(r) has a \b single entry, \e s.
+ *   - Elsewhere:
+ *     - other symids get setREG(false).
+ *     - if other symids are scope-active, they \b must be spilled.
+ *     - if other symids are scope-inactive, that is OK (they may or may
+ *       not still be in spill, but can be gc'ed).
+ * - A RegId may be write-assigned to the same unique symbol quickly.
+ *   - i.e. calculating a symbol value in a number of assembler statements.
+ *   - but for some chipsets this might lead to slower code, so...
+ * - Consider a symbol \e s with previous register assignment
+ *   \f$r_prev(s)\f$that may be \e weak- or \e strong-assigned (or absent).
+ * - Suppose \e s is to be \e write-assigned.
+ * - We need to allocate and \e strong-assign a register \f$r_new\f$ to \e s:
+ * - The steps might be ordered as follows for fully-unrolled jit code:
+ *   1. Look for \c mt registers.
+ *      - (first, because (3.) \e might in some cases cause pipeline stalls?).
+ *      - \e select one, \f$r_new(s)\f$, (staleness? round-robin?)
+ *      - Now \f$r_new(s)\f$ is a register with \b no
+ *        \e strong- or \e weak-assign symbols.
+ *      - Erase \e s's mapping to \f$r_prev(s)\f$
+ *      - \e strong-assign \e s to \f$r_new(s)\f$.
+ *   2. O/w, if \e s is already \c strong-assigned, use the same register.
+ *      - Some chipsets may take a performance hit for this,
+ *        but still it is probably better than spilling a register to memory.
+ *      - so this step might be skipped.
+ *   3. O/w, if \e s is \e weak-assigned to \f$r_prev(s)\f$ and there is no
+ *       \e strong-assign for \f$r_prev(s)\f$. Use \f$r_new(s) = r_prev(s)\f$.
+ *       - (This \e might cause pipeline stalls, so do it after (3b) for unrolled-jit code)
+ *       - Promote \e s's mapping to \f$r_prev(s)\f$ from \e weak- to \e strong-assign.
+ *   4. O/w, look for registers with \b no \e strong-assign.  (They must
+ *       have \e weak-assigns, because we already looked for empties in (1.))
+ *       - \e select one, \f$r_new(s)\f$, (staleness? round-robin?)
+ *         - prefer not to re-use \f$r_prev(s)\f$ (differet from (3.)).
+ *       - Erase \e s's mapping to \f$r_prev(s)\f$
+ *       - \e strong-assign \e s to \f$r_new(s)\f$.
+ *   5. O/w, step (2.), if we skipped it before.
+ *   6. O/w look at all symIds in \e strong-register assignments
+ *      - \e select one, \e x, (staleness? round-robin?)
+ *      - spill \e x, if nec., (\ref ScopedSpillableBase),
+ *      - demote \e x's previous \e strong-assign to a \e weak-assign,
+ *      - and \e strong-assign new symId \e s to register \e x.
+ *
+ * Issues:
+ *
+ * - 'stale' for selecting spill symbol is based on symbol usage time
+ * - 'stale' for selecting register \e might be based on register usage time.
+ *   - for simplicity, \b require:
+*      - \e strong-assign registers update the symbol-usage time information.
+*      - all assembler \e read ops also update the symbol time.
+*    - register staleness is defined as:
+*      - the staleness of its unique \e strong-assign symbol.
+*      - o/w, the minimum staleness of its \e weak-assign symbol.
+*      - o/w the register is \c mt, always preferred for use.
+ *
+ * === \e Weak-assign : symId <--> RegId association
+ *
+ * - When a strong RegId association kicks out previous \e strong-assign
+ *   symIds, we still remember the last-used register association.
+ * - Also when a strong Reg
+ *   - Those other symbols have \e strong-assign --> \e weak-assign.
+ *   - akin to \c SymScopeUid maintaining \e stale-scope information,
+ *     which (at least in the API) could be re-activated.
+ *
+ * ----------------------------------------------------
+ */
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,h.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break syntax=cpp.doxygen

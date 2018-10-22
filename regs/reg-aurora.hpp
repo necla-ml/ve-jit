@@ -37,7 +37,7 @@ constexpr RegId IDnone        = Regid(IDlast);               // 144
 //@{
 inline constexpr bool isReg(RegId const r){ return r<Regid(IDlast); }
 inline constexpr bool valid(RegId const r){ return r<Regid(IDlast); }
-inline constexpr RegId invalidReg(){ return Regid(IDlast); }
+//inline constexpr RegId invalidReg(){ return Regid(IDlast); }
 
 #if 0
 // naive impls, somewhat generic

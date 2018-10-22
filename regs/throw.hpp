@@ -3,6 +3,20 @@
 #include <stdexcept>
 #include <iostream>
 #include <sstream>
+/** \file
+ * C++ THROW macro that accepts '<<' print strings verbatim.
+ *
+ * \todo A better THROW macro would create class to throw the error, and then
+ * invoke a class object.  This approach creates a separate compilation block
+ * for the bulky 'ostringstream' code.  No perceptible difference to the user,
+ * but replacing bulky compiler IR with a tiny function call to the local
+ * 'throw' funciton no longer makes the THROWing function IR look huge.  If you
+ * don't do this, then if you THROW from even a very short function, the
+ * compiler may <em>absolutely refuse to inline</em> the function.  This can
+ * drastically slow down your program.
+ * Above trick works with older C++ compilers.  I'm not sure if using lambda
+ * functions might be a more concise way to achieve the same effect.
+ */
 #if 0
 #define THROW_PRETTY_IF(FILE,LINE,COND,MSG) do{}while(0)
 #define THROW_PRETTY( FILE, LINE, MSG ) do{}while(0)

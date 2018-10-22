@@ -9,6 +9,7 @@
 #include "throw.hpp"
 #include <cstdint>
 #include <stdexcept>
+#include <functional>
 //#include <iosfwd> oh. throw.hpp pulls in even more
 
 
@@ -29,7 +30,33 @@
 //@{
 /** RegId is a typed enum. Don't know that this strictness was worth
  * the bother, but at least a RegId will print as rNNN. */
-enum RegId : int_least16_t {};
+enum RegId : int_least16_t { rBad=-1 };
+
+// custom specialization of std::hash can be injected in namespace std
+namespace std
+{
+    template<> struct hash<RegId>
+    {
+        typedef RegId argument_type;
+        typedef std::size_t result_type;
+        result_type operator()(argument_type const& r) const noexcept
+        {
+            short int rr = static_cast<std::underlying_type<RegId>::type>(r);
+            return std::hash<std::underlying_type<RegId>::type>()(rr);
+        }
+    };
+}
+
+/** Making invalidReg the same for all chipsets reduces header dependencies */
+constexpr RegId invalidReg(){
+    return rBad;
+}
+
+std::ostream& operator<<(std::ostream& os, RegId const r){
+    std::ostringstream oss; // this way setw(n) works nicely
+    oss<<'r'<<static_cast<std::underlying_type<RegId>::type>(r);
+    return os<<oss.str();
+}
 
 #if 0
 /** Chipset-specific Basic Functions */
@@ -325,7 +352,6 @@ public:
 enum class Abi : uint8_t {none, c};
 constexpr bool isReg(RegId const r);
 constexpr bool valid(RegId const r);
-constexpr RegId invalidReg();
 /** but only some RegId are valid */
 std::runtime_error invalid_RegId(char const* file, int line, RegId id);
 
