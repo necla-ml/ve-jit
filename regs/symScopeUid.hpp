@@ -26,7 +26,8 @@
 #include <typeinfo> // debug!
 
 //fwd decl
-template<class SYMBSTATES> class Regset;
+//template<class SYMBSTATES> class Regset;
+class Regset;
 
 namespace ve {
 // fwd decl for friend status w/ ParSymbol and SymbStates
@@ -290,7 +291,8 @@ class SymbStates{
     //friend Base;
     //friend ve::Spill<SymbStates<Base>>;
     friend ve::Spill<Ssym>;
-    template<class SYMBSTATES> friend class ::Regset;
+    //template<class SYMBSTATES> friend class ::Regset;
+    friend class ::Regset;
   protected:
     detail::SymScopeUid ssu;
     /** symbol uid --> external symbol state.  This data structure \em owns all the

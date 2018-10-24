@@ -2,6 +2,7 @@
 #include "spill-impl2.hpp"
 #include "symScopeUid.hpp"
 #include "scopedSpillableBase.hpp"
+#include "s2r.hpp"
 
 #include "reg-aurora.hpp"
 
@@ -138,7 +139,7 @@ class Regset {
     typedef std::vector<RegId> SetType;
   public:
     Regset(int nScalars)
-        : scalars(init_scalars(nscalars))   // subset
+        : scalars(init_scalars(nScalars))   // subset
           , pos_(-1)
     { assert( scalars.size() >= 0 ); }
     Regset()
@@ -147,120 +148,26 @@ class Regset {
     { assert( scalars.size() >= 0 ); }
 
     /** Since Regset is very simple, we have only a few exposed functions */
-    SetType::const_iterator find(int const r){
-        return scalars.find(scalars.begin(), scalars.end(), RegId(r));
+    SetType::const_iterator find(RegId const r) const {
+        return std::find(scalars.begin(), scalars.end(), RegId(r));
     }
     SetType::const_iterator begin() const { return scalars.begin(); }
     SetType::const_iterator end()   const { return scalars.end(); }
-    bool valid(int const r)         const{ return find(r) != end(); }
+    bool valid(RegId const r)       const{ return find(RegId(r)) != end(); }
     SetType::size_type size()       const{ return scalars.size(); }
-    Regid front()                   const {return scalars.front();}
-    Regid back()                    const {return scalars.back();}
+    RegId front()                   const {return scalars.front();}
+    RegId back()                    const {return scalars.back();}
     /** an internal round-robin next */
-    Regid next()                    {return scalars[++pos_ % scalars.size()];}
+    RegId next()                    {return scalars[++pos_ % scalars.size()];}
 
   private:
     /** idx of a RegId \c r within our set */
-     find(uint32_t const r) const{
-        ret = false;
-        for(auto s: scalars){ if(s==r) { ret=true; break; }}
-        return ret;
-    }
-    auto init_scalars(){
-        decltype(mkChipRegisters()) chipregs(mkChipRegisters()) // all
-        std::vector<RegId> ret;
-        std::vector<uint32_t> const regs = getFreeScalarRegs();
-        std::transform( regs.begin(), regs.end(),
-                std::back_inserter(ret),
-                [](uint32_t const r) {return RegId(r);} );
-        return ret;
-    }
-    auto init_some_scalars(unsigned nScalarRegs){
-        decltype(mkChipRegisters()) chipregs(mkChipRegisters()) // all
-        std::vector<RegId> ret;
-        auto const regs = getFreeScalarRegs();
-        for(unsigned cnt=0U; cnt<nScalarRegs && cnt<regs.size(); ++cnt){
-            ret.push_back(RegId(regs(cnt)));
-        }
-        return ret;
-    }
-    std::map<RegId, std::forward_list<unsigned>> init_regmap(){
-        std::map<RegId, std::forward_list<unsigned>> ret;
-        for(auto const r: scalars) ret.emplace(r,std::forward_list());
-        return ret;
-    }
-  private:
-    SetType const scalars;   ///< internal set of registers
-    int pos_;                           ///< round-robin index, for \c next()
-};
-
-
-template<class SYMBSTATES> // hard-wired to DemoSymbStates
-class RegsetScopedSpillable {
-  public:
-    typedef RegisterBase Rb;
-    typedef DemoSymbStates SYMBSTATES;
-    typedef std::unordered_set<unsigned> HashSet;
-    friend class SYMBSTATES;
-  private:
-    decltype(mkChipRegisters()) chipregs; // initialize first!
-    SYMBSTATES *ssym;
-    std::vector<RegId> scalars;
-  protected:
-    std::map<RegId, std::forward_list<unsigned>> regmap;
-    std::map<symId, RegId> symmap;
-    std::vector<RegId> mt;      ///< empty
-  public:
-    void assign(unsigned const symId, RegId
-  public:
-    Regset(SYMBSTATES *ssym, int nScalars)
-        : chipregs(mkChipRegisters())
-          , ssym(ssym)
-          , scalars(init_some_scalars(nScalars))
-          , regmap(init_regmap())
-          , symmap()
-          , mt()
-    {}
-    Regset(SYMBSTATES *ssym)
-        : chipregs(mkChipRegisters())
-          , ssym(ssym)
-          , scalars(init_scalars())
-          , regmap(init_regmap())
-          , symmap()
-          , mt()
-    {}
-
-    std::vector<RegId> const&
-        Mt() const {
-            return mt;}
-    std::forward_list<unsigned> const&
-        symIds(RegId const r) const {
-            assert( valid(r) );
-            auto found = regmap.find(r);
-            if (found==regmap.end()){
-                THROW("Regset::symIds(RegId="<<r<<") does not know about that RegId");
-            }
-            assert( scalars.find(r) != scalars.end() );
-            chk(); }
-
-  private:
-    bool 
-    void chk(){
-        assert( scalars.size() == regmap.size() );
-        assert( mt.size() <= scalars.size() );
-        // A symbol can never be in 2 forward_lists,
-        // and (stronger) can never occur twice in any list
-        std::unordered_set<unsigned> seen;
-        for(auto const& m: regmap){
-            for(auto const& s: m->second){
-                assert( seen.find(s) == seen.end() );
-                seen.insert(s);
-            }
-        }
-        // strong- or weak-assigned symbols here MUST have getREG state true
+    bool has(RegId const r) const{
+        return std::find(scalars.begin(), scalars.end(), RegId(r)) != scalars.end();
     }
     auto getFreeScalarRegs(){
-        std::vector<uint32_t> ret;
+        std::vector<RegId> ret;
+        decltype(mkChipRegisters()) chipregs(mkChipRegisters()); // all
         for(uint32_t i=0U; i<chipregs.size(); ++i){
             RegisterBase const& rb = chipregs(i);
             if( rb.cls() == Rb::Cls::scalar && rb.free()
@@ -268,31 +175,107 @@ class RegsetScopedSpillable {
                     && !isPreserved(RegId(i), Abi::c) ){
                 std::cout<<" Free Scalar Reg: "<<chipregs(i)<<" asmname "<<asmname(rb.rid)<<std::endl;
                 std::cout.flush();
-                ret.push_back(i);
+                ret.push_back(RegId(i));
             }
         }
         return ret;
     }
-    auto init_scalars(){
+    SetType init_scalars(){
         std::vector<RegId> ret;
-        std::vector<uint32_t> const regs = getFreeScalarRegs();
+        std::vector<RegId> const regs = getFreeScalarRegs();
         std::transform( regs.begin(), regs.end(),
                 std::back_inserter(ret),
-                [](uint32_t const r) {return RegId(r);} );
+                [](RegId const r) {return r;} );
         return ret;
     }
-    auto init_some_scalars(unsigned nScalarRegs){
+    SetType init_scalars(unsigned nScalarRegs){
         std::vector<RegId> ret;
         auto const regs = getFreeScalarRegs();
         for(unsigned cnt=0U; cnt<nScalarRegs && cnt<regs.size(); ++cnt){
-            ret.push_back(RegId(regs(cnt)));
+            ret.push_back(regs.at(cnt));
         }
         return ret;
     }
-    std::map<RegId, std::forward_list<unsigned>> init_regmap(){
-        std::map<RegId, std::forward_list<unsigned>> ret;
-        for(auto const r: scalars) ret.emplace(r,std::forward_list());
+  private:
+    SetType const scalars;   ///< internal set of registers
+    int pos_;                ///< round-robin index, for \c next()
+};
+
+
+template<class SYMBSTATES> // hard-wired to DemoSymbStates
+class RegsetScopedSpillable {
+  public:
+    typedef unsigned Sid;
+    typedef RegisterBase Rb;
+    //typedef DemoSymbStates SYMBSTATES;
+    typedef std::unordered_set<unsigned> HashSet;
+    friend SYMBSTATES;
+  private:
+    decltype(mkChipRegisters()) chipregs; // initialize first!
+    SYMBSTATES *ssym;
+    std::vector<RegId> scalars;
+  protected:
+  public:
+    void mkStrong(Sid const sid, RegId const rid) {
+        assert( regset.valid(rid) );
+        sr.mkStrong(sid,rid); }
+  public:
+    RegsetScopedSpillable(SYMBSTATES *ssym, Regset regset)
+        : regset(regset)
+          , ssym(ssym)
+          , sr()
+    {}
+
+    //@{
+    /** retrieve all registers without strong-assigned symbols.
+     * weak-assigned registers are OK. */
+    std::vector<RegId> avail() const {
+        std::vector<RegId> ret; ret.reserve(regset.size());
+        for(auto const r: regset)
+            if (!sr.isStrong(r))
+                ret.push_back(r);
         return ret;
+    }
+    /** faster */
+    std::vector<RegId>& avail(std::vector<RegId>& ret) const {
+        ret.clear();
+        for(auto const r: regset)
+            if (!sr.isStrong(r))
+                ret.push_back(r);
+        return ret;
+    }
+    //@}
+    //@{
+    /** retrieve all registers with neither strong- nor weak-assigned symbols.
+     * These are <em>even more empty</em> than \c avail() registers. */
+    std::vector<RegId> mt() const {
+        std::vector<RegId> ret; ret.reserve(regset.size());
+        for(auto const r: regset)
+            if (!sr.isStrong(r) && !sr.isWeak(r))
+                ret.push_back(r);
+        return ret;
+    }
+    /** faster */
+    std::vector<RegId>& mt(std::vector<RegId>& ret) const {
+        ret.clear();
+        for(auto const r: regset)
+            if (!sr.isStrong(r) && !sr.isWeak(r))
+                ret.push_back(r);
+        return ret;
+    }
+    //@}
+    /** return strong-symbol of r, or S2R::sBad (0) */
+    unsigned strong(RegId const r){
+        assert( regset.valid(r) );
+        return sr.strong(r);
+    }
+
+  private:
+    Regset const regset;     ///< set of allowed registers
+    S2R sr;                  ///< symbol<-->register links (fwd=injective, bidirectional, strong/weak/old link type)
+    void chk(){
+        ; // TODO
+        // strong- or weak-assigned symbols here MUST have getREG state true
     }
 };
 
@@ -347,14 +330,14 @@ class DemoSymbStates
     // Can we store Rs instead of Base in SymbStates::syms ??
   public:
     Rs const& rsym(unsigned symId);
-    Regset<DemoSymbStates> regset; ///< hard-wired to a set of scalar regs now.
+    Regset regset; ///< hard-wired to a set of scalar regs now.
 
   public:
     friend class ve::Spill<DemoSymbStates>;
 
     DemoSymbStates(unsigned nScalars=4U)
         : Ssym(),
-        regset(this),
+        regset(nScalars),
         spill(this)
     {
         //init_scalars(nScalars);

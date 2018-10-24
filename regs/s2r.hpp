@@ -185,11 +185,27 @@ class S2R
      */
     RegId mkWeak(Sid const s);
 #endif
+  public:
+    /** \group generate compile-time errors if use RegId instead of Sid arg
+     * - This can happen unintentionally if you 'auto' things.
+     * - You need to RegId(i) to convert int_type i to RegId.
+     * - Sid-->RegId does not occur because RegId is a \e nice typed enum.
+     * - But RegId-->Sid conversion happens automatically.
+     * - So to avoid RegId-->Sid conversions resulting from typing errors...
+     */
+    //@{ compile-time error for potential typos
+    // A RegId \e could
+    bool isStrong(RegId const r) const = delete;
+    bool isWeak  (RegId const r) const = delete;
+    bool isOld   (RegId const r) const = delete;
+    RegId  reg   (RegId const r) const = delete;;
+    //@}
 };
 
 inline RegId
 S2R::reg(Sid const s) const {
     auto const sr = sReg_.find(s);
+    assert( !( s==sBad && sr!=sReg_.end() ) );
     return sr==sReg_.end()? rBad: sr->second;
 }
 inline S2R::Sid
@@ -205,8 +221,8 @@ S2R::weaks(RegId const r) const{
 }
 inline bool
 S2R::isStrong(Sid const s) const {
-    auto const r = reg(s); // reg(s) is rBad if s completely unknown
-    return r != rBad && strong(r) == s; // strong(r) is sBad if r is not in strong_
+    auto const r = reg(s); // reg(s) is rbad if s completely unknown
+    return r != rBad && strong(r) == static_cast<Sid>(s); // strong(r) is sbad if r is not in strong_
 }
 inline bool
 S2R::isWeak(Sid const s) const {
@@ -482,7 +498,7 @@ void S2rTester::test1() {
             assert(!sr.isOld(i) );
         }
     }
-    TEST("unique strong-assign registers");
+    TEST("unique strong-assign registers: expect strongs");
     {
         S2R sr;
         // r 0 is valid reg number, symbols start at 1
@@ -509,7 +525,7 @@ void S2rTester::test1() {
             assert(!sr.isOld(100+i) );
         }
     }
-    TEST("twice-assigned registers");
+    TEST("twice-assigned registers: expect strongs and weaks");
     {
         S2R sr;
         // r 0 is valid reg number, symbols start at 1
@@ -547,7 +563,7 @@ void S2rTester::test1() {
             assert(!sr.isOld(200+i) );
         }
     }
-    TEST("thrice-assigned registers");
+    TEST("thrice-assigned registers: expect strongs and 2 weaks");
     {
         S2R sr;
         // r 0 is valid reg number, symbols start at 1
@@ -606,7 +622,7 @@ void S2rTester::test1() {
             assert(!sr.isOld(300+i) );
         }
     }
-    TEST("thrice-strong, then unmap strongs");
+    TEST("thrice-strong, then unmap strongs: expect 2 weaks and 1 old");
     {
         S2R sr;
         // r 0 is valid reg number, symbols start at 1
@@ -673,7 +689,7 @@ void S2rTester::test1() {
             assert( sr.isOld(300+i) );
         }
     }
-    TEST("thrice-assigned, unmap+strong again");
+    TEST("thrice-assigned, unmap+strong again: expect 1 strong, 2 weaks again");
     {
         S2R sr;
         // r 0 is valid reg number, symbols start at 1
@@ -747,7 +763,7 @@ void S2rTester::test1() {
             assert(!sr.isOld(300+i) );
         }
     }
-    TEST("thrice-assigned, unmap, wk-->strong");
+    TEST("thrice-assigned, unmap, wk-->strong: expect 1 each strong,weak,old");
     {
         S2R sr;
         // r 0 is valid reg number, symbols start at 1
@@ -806,7 +822,7 @@ void S2rTester::test1() {
             assert( sr.reg(300+i) == RegId(i) );
         }
     }
-    TEST("thrice-assigned, erase strong, wk-->strong");
+    TEST("thrice-assigned, erase strong, wk-->strong: expect 1 strong, 1 weak (erase is a private fn!)");
     {
         S2R sr;
         // r 0 is valid reg number, symbols start at 1
@@ -860,6 +876,22 @@ void S2rTester::test1() {
             assert(!sr.isOld(400+i) );
             assert( sr.reg(400+i) == rBad );
         }
+    }
+    TEST("Regid arg when symbol id expected (now a compile-time error)");
+    {
+        S2R sr;
+        // even better than throwing, can catch at compile time
+        // error: use of deleted function ‘bool S2R::isStrong(RegId) const
+        //ASSERTTHROW( sr.isStrong(rBad) );
+
+        // also a compile-time error (cannot check nicely in tests)
+        //ASSERTTHROW( sr.isStrong(RegId(17)) );
+
+        // also a compile-time error
+        //ASSERTTHROW( sr.isStrong(RegId(sr.reg(S2R::sBad))) );
+
+        RegId r = sr.reg(S2R::sBad);
+        assert( r == rBad );
     }
 }
 int main(int,char**)
