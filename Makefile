@@ -11,6 +11,18 @@ CC:=ncc-1.2.4
 CXX:=nc++-1.2.4
 CC:=ncc-1.5.2
 CXX:=nc++-1.5.2
+
+CC:=ncc
+CXX:=nc++
+
+vejit.tar.gz: asmfmt.hpp asmfmt_fwd.hpp jitpage.h libjit1.a
+	rm -rf vejit
+	mkdir vejit
+	mkdir vejit/include
+	mkdir vejit/bin
+	cp -av asmfmt*.hpp jitpage.h vejit/include/
+	cp -av libjit1.a vejit/bin/
+	tar czf $@ vejit
 #
 # Aurora assembler.S: cpp->.asm, $(CC)->.o, nobjcopy->.bin, .bin-->.dump
 # Actually, jitpage.h (newer version of ve_util.h) will use 'bin.mk' makefile
