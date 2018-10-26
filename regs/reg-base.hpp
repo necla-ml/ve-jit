@@ -87,6 +87,9 @@ class RegisterBase {
   public: // const data member
     RegId const rid;
 
+    /** a RegisterBase is convertible-to RegId */
+    operator RegId() const { return this->rid; }
+
     /** \group bit flag types */
     //@{
     typedef uint_least32_t flags_t; ///< short for Flags::StorageType

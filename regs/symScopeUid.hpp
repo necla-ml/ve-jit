@@ -25,9 +25,9 @@
 #include <algorithm> // sort
 #include <typeinfo> // debug!
 
-//fwd decl
-//template<class SYMBSTATES> class Regset;
+//fwd decl for friendship only
 class Regset;
+//template<class SYMBSTATES> class Regset;
 
 namespace ve {
 // fwd decl for friend status w/ ParSymbol and SymbStates
@@ -227,7 +227,7 @@ class SymScopeUid {
 //===================================================================================//
 /** ParSymbol provides uid+scope and an active flag (\e only).
  * Other details are handled by the \tparm BASE class, that gets passed an
- * arg pack.
+ * arg pack.  Ex. BASE=ScopedSpillableBase.
  */
 template<class BASE>
 class ParSymbol : public BASE {

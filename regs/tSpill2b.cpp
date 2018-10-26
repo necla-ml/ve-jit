@@ -40,15 +40,17 @@ struct Tester{
     static void test3();
 };
 
-// I think I need to construct Psym first, then invoke RegSymbol(Psym&, ...)
-class RegSymbol :
+/** Add name, t_decl, t_sym (last use) to a symbol.
+ * <B>no tight register association yet</B>
+ */
+class Symbol :
     public scope::ParSymbol<ScopedSpillableBase>
 {
   public:
     typedef RegisterBase Rb;
     typedef Rb::Cls      Cls; // Cls::scalar Cls::vector Cls::mask Cls::none
     typedef scope::ParSymbol<ScopedSpillableBase> Psym;
-    friend std::ostream& operator<<(std::ostream& os, RegSymbol const& x);
+    friend std::ostream& operator<<(std::ostream& os, Symbol const& x);
     friend DemoSymbStates;
 
     // republish...
@@ -59,25 +61,26 @@ class RegSymbol :
         t_decl = tick;
     }
 
-    // create RegSymbol active, but no assigned register
+    // create Symbol active, but no assigned register
     template<typename... Arg>
-    RegSymbol(unsigned symId, unsigned scope
+    Symbol(unsigned symId, unsigned scope
             //,char const* name, uint64_t const tick//, RegId const regid
             , Arg&&... arg // even though always empty...
             )
-        : Psym(symId, scope, defBytes(Rb::Cls::scalar), defAlign(Rb::Cls::scalar)),
-        name_("huh?"),
-        t_decl(0U),
-        t_sym(0U),
-        regId_(invalidReg())
+        : Psym(symId, scope, defBytes(Rb::Cls::scalar), defAlign(Rb::Cls::scalar))
+        , name_("huh?")
+        , t_decl(0U)
+        , t_sym(0U)
+        //, regId_(invalidReg())
         { init(arg...); }
 
     char const* name() const {return name_;}
-    RegId regId() const      {return regId_;}
+    //RegId regId() const      {return regId_;}
     uint64_t tDecl() const   {return t_decl;}
     uint64_t tSym() const    {return t_sym;} // useful?
   protected:
-    RegSymbol& setReg(RegId const rid,uint64_t const tick){         ///< init or copy symbol --> register
+#if 0 // No. Not here.
+    Symbol& setReg(RegId const rid,uint64_t const tick){         ///< init or copy symbol --> register
         if(valid(rid)){
             regId_ = rid;
             t_sym = tick;
@@ -88,13 +91,14 @@ class RegSymbol :
             Psym::setREG(false);
         }
     }
-    RegSymbol& tRead(uint64_t const tick){      ///< annotate register read event
-        assert(getActive() && valid(regId_) && Psym::getREG() && "symbol not in register?");
+#endif
+    Symbol& tRead(uint64_t const tick){      ///< annotate register read event
+        assert(getActive() /*&& valid(regId_)*/ && Psym::getREG() && "symbol not in register?");
         assert( tick >= t_sym );
         t_sym = tick;
     }
-    RegSymbol& tWrite(uint64_t const tick){     ///< annotate register write event
-        assert(getActive() && valid(regId_) && Psym::getREG() && "symbol not in register?");
+    Symbol& tWrite(uint64_t const tick){     ///< annotate register write event
+        assert(getActive() /*&& valid(regId_)*/ && Psym::getREG() && "symbol not in register?");
         assert( tick >= t_sym );
         t_sym = tick;
     }
@@ -116,19 +120,34 @@ class RegSymbol :
 
   private:
     char const* name_;          ///< declared symbol name
-    uint64_t t_decl;      ///< declaration time tick
-    uint64_t t_sym;             ///< last-used tick
-    RegId regId_;               ///< register Id \sa reg-base.hpp
-    friend std::ostream& operator<<(std::ostream& os, RegSymbol const& x);
+    uint64_t t_decl;            ///< declaration time tick (set once, even inside loop)
+    uint64_t t_sym;             ///< last-used tick (set every write or read op)
+    //RegId regId_;               ///< register Id \sa reg-base.hpp
+    friend std::ostream& operator<<(std::ostream& os, Symbol const& x);
 };
 
-std::ostream& operator<<(std::ostream& os, RegSymbol const& x){
+std::ostream& operator<<(std::ostream& os, Symbol const& x){
     os<<" Rs{"<<x.name_<<",t"<<x.t_decl<<",u"<<x.t_sym<<",r";
-    if(x.regId_ == invalidReg()) os<<"?";
-    else                         os<<(int)x.regId_;
-    os<<"}'"<<dynamic_cast<RegSymbol::Psym const&>(x)<<"'"<<endl;
+    //if(x.regId_ == invalidReg()) os<<"?";
+    //else                         os<<(int)x.regId_;
+    os<<"}'"<<dynamic_cast<Symbol::Psym const&>(x)<<"'"<<endl;
     return os;
 }
+
+// custom specialization of std::hash can be injected in namespace std
+namespace std
+{
+template<> struct hash<Symbol>
+{
+    typedef Symbol argument_type;
+    typedef std::size_t result_type;
+    result_type operator()(argument_type const& s) const noexcept
+    {
+        return std::hash<unsigned>()(s.symId());
+    }
+};
+}
+
 
 /** Thin wrapper (example class) around std::vector that selects a subset of Registers.
  * This one selects scalar registers that are neither reserved nor preserved in C-abi.
@@ -137,33 +156,41 @@ class Regset {
   public:
     typedef RegisterBase Rb;
     typedef std::vector<RegId> SetType;
+    friend bool is_disjoint( Regset const& a, Regset const& b );
   public:
+    Regset(std::vector<RegId> const& r)
+        : registers(copy_sort(r)), pos_(-1) { /*assert( registers_allowed() );*/ }
     Regset(int nScalars)
-        : scalars(init_scalars(nScalars))   // subset
+        : registers(init_scalars(nScalars))   // up to nScalars scalar regs (to test spill code easier)
           , pos_(-1)
-    { assert( scalars.size() >= 0 ); }
+    { assert( registers.size() >= 0 ); }
     Regset()
-        : scalars(init_scalars())   // subset
+        : registers(init_scalars())   // a default subset is usable scalar regs
         , pos_(-1)
-    { assert( scalars.size() >= 0 ); }
+    { assert( registers.size() >= 0 ); }
 
     /** Since Regset is very simple, we have only a few exposed functions */
     SetType::const_iterator find(RegId const r) const {
-        return std::find(scalars.begin(), scalars.end(), RegId(r));
+        return std::find(registers.begin(), registers.end(), RegId(r));
     }
-    SetType::const_iterator begin() const { return scalars.begin(); }
-    SetType::const_iterator end()   const { return scalars.end(); }
+    SetType::const_iterator begin() const { return registers.begin(); }
+    SetType::const_iterator end()   const { return registers.end(); }
     bool valid(RegId const r)       const{ return find(RegId(r)) != end(); }
-    SetType::size_type size()       const{ return scalars.size(); }
-    RegId front()                   const {return scalars.front();}
-    RegId back()                    const {return scalars.back();}
+    SetType::size_type size()       const{ return registers.size(); }
+    RegId front()                   const {return registers.front();}
+    RegId back()                    const {return registers.back();}
     /** an internal round-robin next */
-    RegId next()                    {return scalars[++pos_ % scalars.size()];}
+    RegId next()                    {return registers[++pos_ % registers.size()];}
 
   private:
+    std::vector<RegId> copy_sort( std::vector<RegId> const& vr ){
+        std::vector<RegId> cpy{vr};
+        std::sort(cpy.begin(), cpy.end());
+        return cpy;
+    }
     /** idx of a RegId \c r within our set */
     bool has(RegId const r) const{
-        return std::find(scalars.begin(), scalars.end(), RegId(r)) != scalars.end();
+        return std::find(registers.begin(), registers.end(), RegId(r)) != registers.end();
     }
     auto getFreeScalarRegs(){
         std::vector<RegId> ret;
@@ -197,82 +224,157 @@ class Regset {
         return ret;
     }
   private:
-    SetType const scalars;   ///< internal set of registers
+    SetType const registers;   ///< internal set of registers
     int pos_;                ///< round-robin index, for \c next()
 };
 
+template<class Set1, class Set2> 
+bool is_disjoint(const Set1 &set1, const Set2 &set2)
+{
+    if(set1.empty() || set2.empty()) return true;
 
-template<class SYMBSTATES> // hard-wired to DemoSymbStates
+    typename Set1::const_iterator 
+        it1 = set1.begin(), 
+        it1End = set1.end();
+    typename Set2::const_iterator 
+        it2 = set2.begin(), 
+        it2End = set2.end();
+
+    if(*it1 > *set2.rbegin() || *it2 > *set1.rbegin()) return true;
+
+    while(it1 != it1End && it2 != it2End)
+    {
+        if(*it1 == *it2) return false;
+        if(*it1 < *it2) { it1++; }
+        else { it2++; }
+    }
+
+    return true;
+}
+bool is_disjoint( Regset const& a, Regset const& b ){
+    return is_disjoint( a.registers, b.registers );
+}
+    
+
+
+/** Symbols whose RegId is constrained to a given Regset.
+ * The regset is predefined (const) for now.
+ * Q: Use a RegsetScopedSpillable that is the union of all
+ *    RegsetScopedSpillable::regset (i.e. unconstrained RegId)?
+ *    Or just check all declared ResetScopedSpillable when checking
+ *    for Symbol name clashes? */
 class RegsetScopedSpillable {
   public:
     typedef unsigned Sid;
+    typedef Symbol symbol_type;
     typedef RegisterBase Rb;
-    //typedef DemoSymbStates SYMBSTATES;
     typedef std::unordered_set<unsigned> HashSet;
-    friend SYMBSTATES;
-  private:
-    decltype(mkChipRegisters()) chipregs; // initialize first!
-    SYMBSTATES *ssym;
-    std::vector<RegId> scalars;
-  protected:
+    typedef unordered_map<S2R::Sid,symbol_type> S2Symbol;
+    friend DemoSymbStates;
   public:
+    /** link s<-->r strongly. \pre r in regset. push out any former strong-assign. \sa S2R::mkStrong */
     void mkStrong(Sid const sid, RegId const rid) {
         assert( regset.valid(rid) );
         sr.mkStrong(sid,rid); }
+    /** return strong-symbol of r, or S2R::sBad (0). \pre r in regset. */
+    unsigned strong(RegId const r){
+        assert( regset.valid(r) );
+        return sr.strong(r); }
   public:
-    RegsetScopedSpillable(SYMBSTATES *ssym, Regset regset)
+    RegsetScopedSpillable(Regset regset)
         : regset(regset)
-          , ssym(ssym)
           , sr()
     {}
 
+    /** \group register retrieval/sort functions
+     * - Set vector<RegId> sorted in order of:
+     *   1. mt [=no strong|weak], avail [=no strong], strong
+     *   2. Symid (or sBad) of the symbol with latest [=highest] t_sym
+     */
     //@{
-    /** retrieve all registers without strong-assigned symbols.
-     * weak-assigned registers are OK. */
-    std::vector<RegId> avail() const {
-        std::vector<RegId> ret; ret.reserve(regset.size());
-        for(auto const r: regset)
-            if (!sr.isStrong(r))
-                ret.push_back(r);
+    typedef std::pair<RegId,Sid> PRS; ///< <B>P</B>air-<B>R</B>egister-<B>S</B>ymbol
+    typedef std::vector<std::pair<RegId,Sid>> VPRS; ///< <B>V</B>ector-<B>R</B>egister-<B>S</B>ymbol
+    std::vector<RegId>& getAvail(std::vector<RegId>& ret) const {
+        ret.clear();
+        VPRS vprs(regset.size());
+        this->sort(avail(vprs));
+        for(auto const& prs: vprs){
+            ret.push_back(prs.first);
+        }
         return ret;
     }
-    /** faster */
+
+  private:
+    struct CmpTsym{
+        S2R const& sr;
+        S2Symbol const& ss;
+        CmpTsym(S2R const& sr, S2Symbol const& ss) : sr(sr), ss(ss) {}
+        /** compare 1st@ strong > weak > old of s<-->r link, 2nd@ s.t_sym */
+        bool operator()( PRS const& a, PRS const& b ){
+            RegId const ra = a.first;
+            RegId const rb = b.first;
+            unsigned const sa = a.second;
+            unsigned const sb = b.second;
+            unsigned const sBad = S2R::sBad;
+            int ca, cb; // s<-->r association type:  0=[sBad] 1=old, 2=weak, 3=strong
+            ca = (sa==sBad? 0: sr.isOld(sa)? 1: sr.isWeak(sa)? 2: 3);
+            cb = (sb==sBad? 0: sr.isOld(sb)? 1: sr.isWeak(sb)? 2: 3);
+
+            if(ca+cb == 0) return ra<rb;
+            if(ca < cb) return true;
+            if(cb < ca) return false;
+            assert( sa != sBad && sb != sBad );
+
+            // ca==cb and no sBad.  compare tSyms
+            auto const ta = ss.at(sa).tSym();
+            auto const tb = ss.at(sb).tSym();
+            if(ta < tb) return true;
+            if(tb < ta) return false;
+            return ra<rb;
+        }
+    };
+    /** weakest linked, then LRU sort of Vector-Pair-Register-Symbol */
+    void sort( VPRS& vprs ) const { // vector<pair{register,symbol}>
+        std::sort( vprs.begin(), vprs.end(), CmpTsym(this->sr, this->syms) );
+    }
+    /** set arg vector to all on-strong regs and return that vector.
+     * returned registers can be weak-assigned, old or never-mapped.*/
     std::vector<RegId>& avail(std::vector<RegId>& ret) const {
         ret.clear();
         for(auto const r: regset)
-            if (!sr.isStrong(r))
+            if (!sr.hasStrong(r))
                 ret.push_back(r);
+        return ret;
+    }
+    VPRS& avail(VPRS& ret) const {
+        ret.clear();
+        for(auto const r: regset){
+            auto const s = sr.strong(r);
+            if (s != S2R::sBad){
+                ret.push_back({r,s});
+            }
+        }
         return ret;
     }
     //@}
     //@{
     /** retrieve all registers with neither strong- nor weak-assigned symbols.
      * These are <em>even more empty</em> than \c avail() registers. */
-    std::vector<RegId> mt() const {
-        std::vector<RegId> ret; ret.reserve(regset.size());
-        for(auto const r: regset)
-            if (!sr.isStrong(r) && !sr.isWeak(r))
-                ret.push_back(r);
-        return ret;
-    }
-    /** faster */
     std::vector<RegId>& mt(std::vector<RegId>& ret) const {
         ret.clear();
         for(auto const r: regset)
-            if (!sr.isStrong(r) && !sr.isWeak(r))
+            if (!sr.hasStrong(r) && !sr.hasWeak(r))
                 ret.push_back(r);
         return ret;
     }
     //@}
-    /** return strong-symbol of r, or S2R::sBad (0) */
-    unsigned strong(RegId const r){
-        assert( regset.valid(r) );
-        return sr.strong(r);
-    }
+    /** return registers sorted primarily by old/weak/strong,
+     * and then by [highest==latest, for weak/old] \c t_sym */
 
   private:
     Regset const regset;     ///< set of allowed registers
     S2R sr;                  ///< symbol<-->register links (fwd=injective, bidirectional, strong/weak/old link type)
+    S2Symbol syms;
     void chk(){
         ; // TODO
         // strong- or weak-assigned symbols here MUST have getREG state true
@@ -291,15 +393,15 @@ class Counters {
  * and an easier spill mechanism.
  */
 class DemoSymbStates
-    : protected scope::SymbStates<RegSymbol>
+    : protected scope::SymbStates<Symbol>
     , private Counters
 {
   public:
-    typedef scope::SymbStates<RegSymbol> Ssym;
+    typedef scope::SymbStates<Symbol> Ssym;
     //typedef Ssym::Psym Psym;
-    typedef RegSymbol Psym;
-    typedef RegSymbol Ppsym;
-    typedef RegSymbol Rs;
+    typedef Symbol Psym;
+    typedef Symbol Ppsym;
+    typedef Symbol Rs;
 
   public: // republish
     auto const& psym(unsigned s) const { return Ssym::psym(s);}
@@ -314,7 +416,7 @@ class DemoSymbStates
                 ) {
             auto const symId = Ssym::newsym( name, nextTick() );
             // this should call Ssym::Psym(symId,scope,name,tick);
-            // i.e. RegSymbol constructor
+            // i.e. Symbol constructor
             return symId;
         }
 
@@ -324,7 +426,7 @@ class DemoSymbStates
     //   ParSymbol:           uid/symId(), scope, getActive,
     //   ScopedSpillableBase: getREG, getMEM
     //   (Spillable:          getBytes, getAlign)
-    // rs (RegSymbol) map for:
+    // rs (Symbol) map for:
     //   name, RegId, staleness, 
     //std::map<unsigned, Rs> rsyms;
     // Can we store Rs instead of Base in SymbStates::syms ??
@@ -488,9 +590,9 @@ int main(int,char**){
  * What follows is a discussion of Use Cases, and how [some other class]
  * would use the low-level SymRegid data structure.
  *
- * State is synchronized by SYMBSTATES to match individual RegSymbol info.
- * SYMBSTATES::syms maps symId-->RegSymbol,
- * and you use SYMBSTATES::psym(symId) to obtain the RegSymbol.
+ * State is synchronized by SYMBSTATES to match individual Symbol info.
+ * SYMBSTATES::syms maps symId-->Symbol,
+ * and you use SYMBSTATES::psym(symId) to obtain the Symbol.
  *
  * - compare with:
  *   - \c SymbStates (\c DemoSymStates) symId<-->scope (high-level)
@@ -521,7 +623,7 @@ int main(int,char**){
  *   - a symId maps to a single RegId.
  *   - a symId can be reassigned to another RegId
  *   - a symId is still 'assigned' to a Reg when it is spilled
- *     - but RegSymbol::getREG() is false. See \ref ScopedSpillableBase.
+ *     - but Symbol::getREG() is false. See \ref ScopedSpillableBase.
  *   - a symId can be either \e strong-assigned or \e weak-assigned to reg.
  *     - (just like a symId can be in either \e active or \e stale scope)
  *
