@@ -1,4 +1,5 @@
 *.sw?
+vejit
 *.o
 *.lo
 *.a
@@ -12,6 +13,7 @@ log
 jit*.log
 mk*.log
 bld*.log
+vejit.tar.gz
 asmfmt.log
 asmkern.bin
 asmkern1.bin
