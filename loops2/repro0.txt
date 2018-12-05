@@ -1,0 +1,110 @@
+=== I64 const_0(0)                           c--- 0 --> 0 rhs:0 c:0          n:0                    e: decl:
+=== I64 const_1(1)                           c--- 1 --> 1 rhs:1 c:1          n:1                    e: decl:
+=== I64 sum_01(const_0+const_1)              c--- 1 --> 1 rhs:1 c:1          n:1                    e:0+1 decl:
+=== I64 sum_11(const_1+const_1)              c--- 2 --> 2 rhs:2 c:2          n:2                    e:1+1 decl:
+=== I64 x(I64(1)+I64(2)*I64(3)+I64(4))       c--- 11 --> 11 rhs:11 c:11         n:11                   e:7+4 decl:
+=== I64 cpy1(const_1)                        n1->v c--- 1 --> 1 rhs:1 c:1          n:1                    e: decl:
+=== I64 cpy13(I64(13))                       c--- 13 --> 13 rhs:13 c:13         n:13                   e: decl:
+=== I64 a(I64(1)+par(I64(2)+I64(3)))         n5->v c--- 6 --> 6 rhs:6 c:6          n:6                    e:1+5 decl:
+=== I64 b(par(I64(1)+par(I64(2)+I64(3))))    n5->v n6->v c--- 6 --> 6 rhs:6 c:6          n:6                    e:1+5 decl:
+=== I64 const_i(3,"i")                       cv-- i = 3 --> 3 rhs:3 c:3          n:i                    e: decl:int64_t const i = 3;
+=== I64 cpy_i(const_i)                       ni->v c--- 3 --> 3 rhs:3 c:3          n:3                    e: decl:
+=== I64 cpy_i(const_i,"cpy_i")               src={cv--3,i,,rhs=3} cv-- cpy_i = 3 --> 3 rhs:3 c:3          n:cpy_i                e:3 decl:int64_t const cpy_i = 3;
+=== I64 cpy_i(const_i,"cpy_i",CONST)         src={cv--3,i,,rhs=3} cv-- cpy_i = 3 --> 3 rhs:3 c:3          n:cpy_i                e:3 decl:int64_t const cpy_i = 3;
+=== I64 cpy_i(const_i,"cpy_i",NONCONST)      src={cv--3,i,,rhs=3} -v-- cpy_i = 3 --> 3 rhs:cpy_i c:3          n:cpy_i                e:3 decl:int64_t cpy_i = 3;
+=== I64 x(I64(2)*const_i+I64(4))             c--- 10 --> 10 rhs:10 c:10         n:10                   e:6+4 decl:
+=== I64 j(5,"j",NONCONST)                    -v-- j = 5 --> 5 rhs:j c:5          n:j                    e: decl:int64_t j = 5;
+=== I64 cpy_j(j,"cpy_j")                     src={-v--5,j,,rhs=j} -ve- cpy_j = j --> 5 rhs:cpy_j c:5          n:cpy_j                e:j decl:int64_t cpy_j = j;
+=== I64 x(j + I64(2))                        --e- j+2 --> 7 rhs:j+2 c:7          n:7                    e:j+2 decl:
+=== I64 x(I64(2)*j+I64(4))                   --e- 2*j+4 --> 14 rhs:2*j+4 c:14         n:14                   e:2*j+4 decl:
+=== I64 x(I64(2)*j+I64(4)+I64(5))            --e- 2*j+4+5 --> 19 rhs:2*j+4+5 c:19         n:19                   e:2*j+4+5 decl:
+=== I64 k(5,"k",NONCONST)                    -v-- k = 5 --> 5 rhs:k c:5          n:k                    e: decl:int64_t k = 5;
+=== I64 cpy_k(k,"cpy_k")                     src={-v--5,k,,rhs=k} -ve- cpy_k = k --> 5 rhs:cpy_k c:5          n:cpy_k                e:k decl:int64_t cpy_k = k;
+=== I64 x(k + I64(2))                        --e- k+2 --> 7 rhs:k+2 c:7          n:7                    e:k+2 decl:
+=== I64 J(j,"J")                             src={-v--5,j,,rhs=j} -ve- J = j --> 5 rhs:J c:5          n:J                    e:j decl:int64_t J = j;
+=== I64 x(J + const_1)                       --e- J+1 --> 6 rhs:J+1 c:6          n:6                    e:J+1 decl:
+=== I64 x(J * I64(2))                        --e- J*2 --> 10 rhs:J*2 c:10         n:10                   e:J*2 decl:
+=== I64 x(J / I64(3),"so3")                  -ve- so3 = J/3 --> 1 rhs:so3 c:1          n:so3                  e:J/3 decl:int64_t so3 = J/3;
+=== I64 x(J+const_1,"x",NONCONST)            -ve- x = J+1 --> 6 rhs:x c:6          n:x                    e:J+1 decl:int64_t x = J+1;
+=== x = (x+const_1)                          -ve- x = x+1 --> 7 rhs:x c:7          n:x                    e:x+1 decl:int64_t x = x+1;
+=== x = (x+const_1)                          -ve- x = x+1 --> 8 rhs:x c:8          n:x                    e:x+1 decl:int64_t x = x+1;
+=== I64 y(par(x = (x+const_1)),"y")          -ve- y = x+1 --> 9 rhs:y c:9          n:y                    e:x+1 decl:int64_t y = x+1;
+=== y = y+const_1                            -ve- y = y+1 --> 10 rhs:y c:10         n:y                    e:y+1 decl:int64_t y = y+1;
+=== I64 J(j,"J")                             src={-v--5,j,,rhs=j} -ve- J = j --> 5 rhs:J c:5          n:J                    e:j decl:int64_t J = j;
+=== I64 x(J,"x")                             src={-ve-5,J,j,rhs=J} -ve- x = J --> 5 rhs:x c:5          n:x                    e:J decl:int64_t x = J;
+=== I64 x(J,"x",CONST)                       src={-ve-5,J,j,rhs=J} cve- x = J --> 5 rhs:x c:5          n:x                    e:J decl:int64_t const x = J;
+=== I64 x(J,"x",NONCONST)                    src={-ve-5,J,j,rhs=J} -ve- x = J --> 5 rhs:x c:5          n:x                    e:J decl:int64_t x = J;
+=== I64 x(J + const_1)                       --e- J+1 --> 6 rhs:J+1 c:6          n:6                    e:J+1 decl:
+=== I64 x(J + I64(1))                        --e- J+1 --> 6 rhs:J+1 c:6          n:6                    e:J+1 decl:
+=== I64 x(J * I64(2))                        --e- J*2 --> 10 rhs:J*2 c:10         n:10                   e:J*2 decl:
+=== I64 x(J / I64(3))                        --e- J/3 --> 1 rhs:J/3 c:1          n:1                    e:J/3 decl:
+=== I64 x(J + const_1,"x")                   -ve- x = J+1 --> 6 rhs:x c:6          n:x                    e:J+1 decl:int64_t x = J+1;
+=== I64 x(J + I64(1),"x")                    -ve- x = J+1 --> 6 rhs:x c:6          n:x                    e:J+1 decl:int64_t x = J+1;
+=== I64 x(J * I64(2),"x")                    -ve- x = J*2 --> 10 rhs:x c:10         n:x                    e:J*2 decl:int64_t x = J*2;
+=== I64 x(J / I64(3),"x")                    -ve- x = J/3 --> 1 rhs:x c:1          n:x                    e:J/3 decl:int64_t x = J/3;
+=== I64 I(const_i,"J")                       src={cv--3,i,,rhs=3} cv-- J = 3 --> 3 rhs:3 c:3          n:J                    e:3 decl:int64_t const J = 3;
+=== I64 x(I,"x")                             src={cv--3,J,3,rhs=3} cv-- x = 3 --> 3 rhs:3 c:3          n:x                    e:3 decl:int64_t const x = 3;
+=== I64 x(I,"x",CONST)                       src={cv--3,J,3,rhs=3} cv-- x = 3 --> 3 rhs:3 c:3          n:x                    e:3 decl:int64_t const x = 3;
+=== I64 x(I,"x",NONCONST)                    src={cv--3,J,3,rhs=3} -v-- x = 3 --> 3 rhs:x c:3          n:x                    e:3 decl:int64_t x = 3;
+=== I64 x(I + 1)                             c--- 4 --> 4 rhs:4 c:4          n:4                    e:3+1 decl:
+=== I64 x(I + 1)                             c--- 4 --> 4 rhs:4 c:4          n:4                    e:3+1 decl:
+=== I64 x(I * 2)                             c--- 6 --> 6 rhs:6 c:6          n:6                    e:3*2 decl:
+=== I64 x(I / 3)                             c--- 1 --> 1 rhs:1 c:1          n:1                    e:3/3 decl:
+=== I64 x(I + 1,"x")                         cv-- x = 4 --> 4 rhs:4 c:4          n:x                    e:3+1 decl:int64_t const x = 4;
+=== I64 x(I + 1,"x")                         cv-- x = 4 --> 4 rhs:4 c:4          n:x                    e:3+1 decl:int64_t const x = 4;
+=== I64 x(I * 2,"x",NONCONST)                -v-- x = 6 --> 6 rhs:x c:6          n:x                    e:3*2 decl:int64_t x = 6;
+=== I64 x(I / 3,"x",NONCONST)                -v-- x = 1 --> 1 rhs:x c:1          n:x                    e:3/3 decl:int64_t x = 1;
+=== I64 sum(const_i+const_0)                 c--- 3 --> 3 rhs:3 c:3          n:3                    e:3+0 decl:
+=== I64 sum(const_i+const_1)                 c--- 4 --> 4 rhs:4 c:4          n:4                    e:3+1 decl:
+=== I64 sum(const_i+j+j)                     --e- 3+j+j --> 13 rhs:3+j+j c:13         n:13                   e:3+j+j decl:
+ a,b NONCONST
+=== I64 lin(I64(2)*a+I64(3)*b+const_1)       --e- 2*a+3*b+1 --> 1 rhs:2*a+3*b+1 c:1          n:1                    e:2*a+3*b+1 decl:
+=== I64 x(a+I64(3))                          --e- a+3 --> 3 rhs:a+3 c:3          n:3                    e:a+3 decl:
+=== I64 p(par(a+I64(3)))                     --ep (a+3) --> 3 rhs:(a+3) c:3          n:3                    e:a+3 decl:
+=== I64 c(I64(2)*par(a+I64(3))*par(b+const_1)) --e- 2*(a+3)*(b+1) --> 6 rhs:2*(a+3)*(b+1) c:6          n:6                    e:2*(a+3)*(b+1) decl:
+=== I64 d(I64(2)*par(a+I64(3))*par(b+const_1),"d") -ve- d = 2*(a+3)*(b+1) --> 6 rhs:d c:6          n:d                    e:2*(a+3)*(b+1) decl:int64_t d = 2*(a+3)*(b+1);
+=== I64 e(I64(2)*par(a+I64(3))*par(b+const_1),"e",CONST) cve- e = 2*(a+3)*(b+1) --> 6 rhs:e c:6          n:e                    e:2*(a+3)*(b+1) decl:int64_t const e = 2*(a+3)*(b+1);
+=== I64 f(I64(2)*par(a+I64(3))*par(b+const_1),"f",NONCONST) -ve- f = 2*(a+3)*(b+1) --> 6 rhs:f c:6          n:f                    e:2*(a+3)*(b+1) decl:int64_t f = 2*(a+3)*(b+1);
+ a,b, CONST [default]
+=== I64 lin(I64(2)*a+I64(3)*b+const_1)       c--- 9 --> 9 rhs:9 c:9          n:9                    e:8+1 decl:
+=== I64 x(a+I64(2))                          c--- 3 --> 3 rhs:3 c:3          n:3                    e:1+2 decl:
+=== I64 p(par(a+I64(2)))                     n3->v c--- 3 --> 3 rhs:3 c:3          n:3                    e:1+2 decl:
+=== I64 q(par(b+const_1))                    n3->v c--- 3 --> 3 rhs:3 c:3          n:3                    e:2+1 decl:
+=== I64 c(I64(1)*par(a+I64(2))*par(b+const_1)) n3->v n3->v c--- 9 --> 9 rhs:9 c:9          n:9                    e:3*3 decl:
+=== I64 d(I64(1)*par(a+I64(2))*par(b+const_1),"d") n3->v n3->v cv-- d = 9 --> 9 rhs:9 c:9          n:d                    e:3*3 decl:int64_t const d = 9;
+=== I64 e(I64(1)*par(a+I64(2))*par(b+const_1),"e",CONST) n3->v n3->v cv-- e = 9 --> 9 rhs:9 c:9          n:e                    e:3*3 decl:int64_t const e = 9;
+=== I64 f(I64(1)*par(a+I64(2))*par(b+const_1),"f",NONCONST) n3->v n3->v -v-- f = 9 --> 9 rhs:f c:9          n:f                    e:3*3 decl:int64_t f = 9;
+ n9->vint64_t  c;
+c = 9;
+ n0->v n1->vint64_t  zero;
+ int64_t  one;
+zero = 0;
+ one = 1;
+I64 a(2,"a",CONST)                      cv-- int64_t const a = 2;
+I64 b(3,"b",CONST)                      cv-- int64_t const b = 3;
+I64 i(0,"i",NONCONST)                   -v-- int64_t i = 0;
+I64 j(0,"j",NONCONST)                   -v-- int64_t j = 0;
+I64 k(a*i+b*j+ I64(1),"k")              -ve- int64_t k = 2*i+3*j+1;
+i=i+I64(1)                              -ve- i = i+1
+j=j+I64(1)                              -ve- j = j+1
+k = a*i+b*j+1                           -ve- k = 2*i+3*j+1
+i=13                                    -v-- i = 13
+j=i                                     -ve- j = i
+k = a*par(i+b)*par(j-5)                 -ve- k = 2*(i+3)*(j-5)
+j=b                                     -v-- j = 3
+j=0+1+i+1+2                             -ve- j = 1+i+1+2
+I64 a(2,"a")                            cv-- int64_t const a = 2;
+I64 b(3,"b")                            cv-- int64_t const b = 3;
+I64 i(0,"i",NONCONST)                   -v-- int64_t i = 0;
+I64 j(0,"j",NONCONST)                   -v-- int64_t j = 0;
+I64 k(a*i+b*j+1,"k",NONCONST)           -ve- int64_t k = 2*i+3*j+1;
+i = i+1                                 -ve- i = i+1
+j = j+1                                 -ve- j = j+1
+k = a*i+b*j+1                           -ve- k = 2*i+3*j+1
+i = 13                                  -v-- i = 13
+j = i                                   -ve- j = i
+k = a*par(i+b)*par(j-5)                 -ve- k = 2*(i+3)*(j-5)
+j = b                                   -v-- j = 3
+j = 0+1+i+1+2                           -ve- j = 1+i+1+2
+
+Goodbye!
