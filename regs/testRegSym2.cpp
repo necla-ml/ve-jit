@@ -89,14 +89,14 @@ class SpillableRegSym : public RegSymbol
     SpillableRegSym( char const* name, RegisterBase::Cls cls = RegisterBase::Cls::scalar )
         : RegSymbol( (name? name: randName()), cls)
         {
-            std::cout<<" +SRS(tDecl="<<tDecl()<<",name="<<name<<",cls="<<cls<<")"<<std::endl;
+            std::cout<<" +SRS-a(tDecl="<<tDecl()<<",name="<<name<<",cls="<<cls<<")"<<std::endl;
         }
 
     /** Given a free RegId [from Spill?], declare symbol and mark it assigned to RegId. */
     SpillableRegSym( char const* name, RegId const rid)
         : RegSymbol((name? name: randName()), rid)
         {
-            std::cout<<" +SRS(tSym="<<tSym()<<",name="<<name<<",rid="<<rid<<")"<<std::endl;
+            std::cout<<" +SRS-b(tSym="<<tSym()<<",name="<<name<<",rid="<<rid<<")"<<std::endl;
         }
 
 };
@@ -749,9 +749,16 @@ void Tester::test1(){
         Ssym ssym;
         auto s=[&ssym](auto symId)->Ssym::Psym& {return ssym.psym(symId);};
         ASSERTTHROW( ssym.psym(1U).getActive() );
+        cout<<" invalidReg() = "<<invalidReg()<<endl;
+        static_assert( ! valid(invalidReg()), "Issues with reg-aurora/reg-base.hpp?");
         auto const x = ssym.decl("x");          // declare unattached symbol
         cout<<" ssym.decl(\"x\") --> x="<<x<<", s(x)="<<s(x)<<endl;
         cout<<" decl "<<x<<"  "<<ssym.psym(x)<<endl;
+        cout<<" s(x):"<<s(x)<<endl;
+        cout<<" valid(s(x).regId()):"<<valid(s(x).regId())<<endl;
+        cout<<" s(x).regId():"<<s(x).regId()<<endl;
+        cout<<" asmname(s(x).regId()):"<<(valid(s(x).regId())? asmname(s(x).regId()): string("no_register"))<<endl;
+        cout.flush();
         assert(x==1);
         assert( !valid(s(x).regId()) );
         assert(ssym.nActiveRegs() == 0);        // x is active, but NOT in register

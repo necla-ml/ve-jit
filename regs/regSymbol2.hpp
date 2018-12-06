@@ -64,7 +64,7 @@ class RegSymbol :
         t_decl(RegSymbol::nextTick()),
         t_sym(0U)
     {
-        //std::cout<<" +RS-a:"<<*this<<std::endl;
+        std::cout<<" +RS-a:"<<*this<<std::endl;
         assert(name_!=nullptr);
     }
     static int const a = 13;
@@ -118,7 +118,7 @@ class RegSymbol :
         : SpillableBase(symId, ve::bytes(ve::defReg_t(regid)), ve::align(ve::defReg_t(regid))),
         name_(name), regid_(regid), rtype_(ve::defReg_t(regid)), t_decl(0U), t_sym(0U)
     {
-        //std::cout<<" +RS-c:"<<*this<<std::endl;
+        std::cout<<" +RS-c:"<<*this<<std::endl;
         assert(name_!=nullptr);
     }
 #endif

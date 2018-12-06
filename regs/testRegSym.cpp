@@ -1,5 +1,5 @@
 /** \file
- * Basic \ref regSymbol2.hpp tests with a DemoSymbStates class.
+ * Basic \ref regSymbol.hpp tests with a DemoSymbStates class.
  *
  * First thing I noticed was some need to define register sets.
  * Original work had the symbol state object construct dummy

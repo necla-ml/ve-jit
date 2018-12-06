@@ -1,5 +1,8 @@
 #ifndef REG_AURORA_HPP
 #define REG_AURORA_HPP
+#if defined(REGDEFS_HPP)
+#error "regDefs.hpp has been split into reg-base.hpp + reg-aurora.hpp"
+#endif
 /** \file
  * Implement standard register definition functions for Aurora.
  */
@@ -35,9 +38,10 @@ constexpr RegId IDnone        = Regid(IDlast);               // 144
 
 /** \group Aurora standard functions */
 //@{
-inline constexpr bool isReg(RegId const r){ return r<Regid(IDlast); }
-inline constexpr bool valid(RegId const r){ return r<Regid(IDlast); }
-//inline constexpr RegId invalidReg(){ return Regid(IDlast); }
+inline constexpr bool isReg(RegId const r){ return (unsigned)r<(unsigned)Regid(IDlast); }
+inline constexpr bool valid(RegId const r){ return (unsigned)r<(unsigned)Regid(IDlast); }
+//inline constexpr RegId invalidReg(){ return Regid(IDlast); } // now -1, in reg-base.hpp
+static_assert( !valid(invalidReg()), "invalidReg() tests as valid()!");
 
 #if 0
 // naive impls, somewhat generic

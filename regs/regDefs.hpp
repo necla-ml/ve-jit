@@ -1,5 +1,8 @@
 #ifndef REGDEFS_HPP
 #define REGDEFS_HPP
+#if defined(REG_BASE_HPP) || defined(REG_AURORA_HPP)
+#error "regDefs.hpp has been split into reg-base.hpp + reg-aurora.hpp"
+#endif
 /** \file
  * \todo split regDefs.hpp into generic and processor-specific bits.  This has
  *       begun in reg-base.hpp and reg-aurora.hpp (testRegBase.cpp)

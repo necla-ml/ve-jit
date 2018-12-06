@@ -4,7 +4,7 @@
  * Spill area tracking: template functions.
  *
  * This is used by spill-impl.hpp, which is tested by testSpill2,
- * testSpill3 and testRegSym
+ * testSpill3 and testRegSym2
  *
  * \todo Spill.hpp should use reg-base.hpp instead of the grab-bag regDefs.hpp
  */

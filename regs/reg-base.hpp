@@ -1,5 +1,8 @@
 #ifndef REG_BASE_HPP
 #define REG_BASE_HPP
+#if defined(REGDEFS_HPP)
+#error "regDefs.hpp has been split into reg-base.hpp + reg-aurora.hpp"
+#endif
 /** \file
  * This file has generic chipset flags, and forward declarations of functions that all
  * chipsets should implement.
