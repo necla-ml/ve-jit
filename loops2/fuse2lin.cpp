@@ -79,7 +79,7 @@ std::vector<Vab> ref_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
         int const bignum = std::max( ii, jj );
         int const wide = 1 + (bignum<10? 1: bignum <100? 2: bignum<1000? 3: 4);
 
-        for(int l=0; l<vabs.size(); ++l){
+        for(decltype(vabs)::size_type l=0; l<vabs.size(); ++l){
             auto const& a = vabs[l].a;
             auto const& b = vabs[l].b;
             auto const& vl = vabs[l].vl;
@@ -114,10 +114,10 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
     // generate reference index outputs
     std::vector<Vab> vabs = ref_vloop2(vlen, ii, jj, 1/*verbose*/);
     assert( vabs.size() > 0 );
-    assert(vabs.size() == ((ii*jj) +vlen -1) / vlen);
+    assert(vabs.size() == decltype(vabs)::size_type(((ii*jj) +vlen -1) / vlen));
     // generate reference set of offset vectors
     std::vector<std::vector<Lpi>> offs;
-#define FOR(I,VL) for(int I=0;I<VL;++I)
+#define FOR(I,VL) for(Lpi I=0;I<VL;++I)
     for(auto const& vab: vabs){
         std::vector<Lpi> offsets(vlen);
         auto const& a = vab.a;
@@ -127,7 +127,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
         offs.push_back(offsets);
         cout<<"offs: "<<vecprt(n,wide+2,offsets,vl)<<endl;
     }
-    for(int i=0; i<offs.size(); ++i){
+    for(size_t i=0; i<offs.size(); ++i){
         auto const vl = vabs[i].vl;
         cout<<"offs: "<<vecprt(n,wide+2,offs[i],vl)<<endl;
     }
@@ -141,12 +141,11 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
     //     - \c cnt 0.. \c iijj, and \c vl (for jit, iijj is CCC (compile-time-const))
     //     - get final \c vl from cnt, vl and iij)
     register uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
-    register int vl = vlen;
+    register Lpi vl = (Lpi)vlen;
     register uint64_t cnt = 0UL;
     //if (cnt+vl > iijj) vl = iijj - cnt;  // simplifies for cnt=0
-    if (vl > iijj) vl = iijj;
+    if (vl > Lpi(iijj)) vl = iijj;
 
-#define FOR(I,VL) for(int I=0;I<VL;++I)
     if(0){
         cout<<"   ii="<<ii<<"   jj="<<jj<<"   iijj="<<iijj<<endl;
         //cout<<" vcnt="<<vcount<<" vcnt'"<<vcount_next<<endl;
@@ -221,7 +220,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
         assert( vl == vabs[iloop].vl );
         FOR(i,vl) assert( a[i] == vabs[iloop].a[i] );
         FOR(i,vl) assert( b[i] == vabs[iloop].b[i] );
-        FOR(i,vl) assert( o[i] == offs[iloop][i] );
+        FOR(i,vl) assert( o[i] == (Vlpi)offs[iloop][i] );
         ++iloop; // just for above debug assertions
         //cout<<" next loop??? cnt+vl="<<cnt+vl<<" iijj="<<iijj<<endl;
 #undef FOR
@@ -334,9 +333,9 @@ void test_vloop2_no_unroll(Lpi const vlen, Lpi const ii, Lpi const jj)
     cout<<"=== //        %bA, %bD : vector : tmp regs"<<endl;
     cout<<"=== // scalar init:"<<endl;
     register uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
-    register int vl = vlen;
+    register Lpi vl = vlen;
     register uint64_t cnt = 0UL;
-    if (vl > iijj) vl = iijj; //in general: if (cnt+vl > iijj) vl=iijj-cnt;
+    if (vl > (Lpi)iijj) vl = iijj; //in general: if (cnt+vl > iijj) vl=iijj-cnt;
     cout<<"===   lea %iijj, 0,"<<ii<<"(,0)"<<endl;
     cout<<"===   lea %vl,   0,"<<jj<<"(,0) // vl used as tmp reg"<<endl;
     cout<<"===   mulu.l %iijj, %iijj, %vl  // opt last 3 for small ii, jj !"<<endl;
@@ -411,7 +410,7 @@ int main(int argc,char**argv){
     int vl = 8;
     int ii=20, jj=3;
     int aa=100, bb=2, cc=1;
-    int a=0, opt_h=0;
+    int a=0; //, opt_h=0;
     if(argc > 1){
         if (argv[1][0]=='-'){
             char *c = &argv[1][1];
@@ -422,7 +421,7 @@ int main(int argc,char**argv){
                 cout<<"   J    = 2nd loop b=0..J-1"<<endl;
                 cout<<" double loop --> loop over vector registers a[VLEN], b[VLEN]"<<endl;
                 cout<<" A,B,C  = calc lin comb Aa + Bb + C"<<endl;
-                opt_h = 1;
+                //opt_h = 1;
             }
             ++a; // one extra arg was used up
         }

@@ -79,7 +79,7 @@ std::vector<Vab> ref_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
         int const bignum = std::max( ii, jj );
         int const wide = 1 + (bignum<10? 1: bignum <100? 2: bignum<1000? 3: 4);
 
-        for(int l=0; l<vabs.size(); ++l){
+        for(decltype(vabs)::size_type l=0; l<vabs.size(); ++l){
             auto const& a = vabs[l].a;
             auto const& b = vabs[l].b;
             auto const& vl = vabs[l].vl;
@@ -114,7 +114,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     // generate reference index outputs
     std::vector<Vab> vabs = ref_vloop2(vlen, ii, jj, 1/*verbose*/);
     assert( vabs.size() > 0 );
-    assert(vabs.size() == ((ii*jj) +vlen -1) / vlen);
+    assert(vabs.size() == decltype(vabs)::size_type(((ii*jj) +vlen -1) / vlen));
 
     cout<<"Verify-------"<<endl;
     // Have reference vabs vectors. Now we try induction way.
@@ -124,12 +124,12 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     //     - \c cnt 0.. \c iijj, and \c vl (for jit, iijj is CCC (compile-time-const))
     //     - get final \c vl from cnt, vl and iij)
     register uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
-    register int vl = vlen;
+    register Lpi vl = (Lpi)vlen;
     register uint64_t cnt = 0UL;
     //if (cnt+vl > iijj) vl = iijj - cnt;  // simplifies for cnt=0
-    if (vl > iijj) vl = iijj;
+    if (vl > (Lpi)iijj) vl = iijj;
 
-#define FOR(I,VL) for(int I=0;I<VL;++I)
+#define FOR(I,VL) for(Lpi I=0;I<VL;++I)
     if(0){
         cout<<"   ii="<<ii<<"   jj="<<jj<<"   iijj="<<iijj<<endl;
         //cout<<" vcnt="<<vcount<<" vcnt'"<<vcount_next<<endl;
@@ -299,9 +299,9 @@ void test_vloop2_no_unroll(Lpi const vlen, Lpi const ii, Lpi const jj)
     cout<<"=== //        %bA, %bD : vector : tmp regs"<<endl;
     cout<<"=== // scalar init:"<<endl;
     register uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
-    register int vl = vlen;
+    register Lpi vl = (Lpi)vlen;
     register uint64_t cnt = 0UL;
-    if (vl > iijj) vl = iijj; //in general: if (cnt+vl > iijj) vl=iijj-cnt;
+    if (vl > (Lpi)iijj) vl = iijj; //in general: if (cnt+vl > iijj) vl=iijj-cnt;
     cout<<"===   lea %iijj, 0,"<<ii<<"(,0)"<<endl;
     cout<<"===   lea %vl,   0,"<<jj<<"(,0) // vl used as tmp reg"<<endl;
     cout<<"===   mulu.l %iijj, %iijj, %vl  // opt last 3 for small ii, jj !"<<endl;
