@@ -97,6 +97,9 @@ namespace detail {
  * it is up to the user to maintain proper nestedness, by
  * reactivating innermost scopes first.
  *
+ * While parent scope for active scopes is implicit in the stack structure
+ * (forward_list), stale scopes \b forget any notion of parent scope.
+ *
  */
 class SymScopeUid {
   public:
@@ -220,6 +223,7 @@ class SymScopeUid {
     void prtCurrentSymbols() const;
     /** sorted symIds of all symbols in active scopes */
     std::vector<unsigned> symIdAnyScopeSorted() const;
+    std::vector<unsigned> symIdStaleSorted() const;
 };
 
 }//detail::
@@ -236,6 +240,7 @@ class ParSymbol : public BASE {
     typedef ParSymbol<BASE> Psym;
     friend BASE;
     friend SymbStates<ParSymbol<BASE>>;
+    friend class DemoSymbStates;
     template<class SYMSTATE> friend class detail::SymStates; // for testSymScopeUid.cpp
 
     virtual ~ParSymbol() {}
@@ -287,6 +292,7 @@ class SymbStates{
     typedef PARSYMBOL Psym;
     typedef SymbStates<PARSYMBOL> Ssym;
     typedef typename PARSYMBOL::Base Base;
+    typedef std::unordered_map<unsigned/*symId*/,Psym> SymIdMap;
 
     //friend Base;
     //friend ve::Spill<SymbStates<Base>>;
@@ -297,7 +303,7 @@ class SymbStates{
     detail::SymScopeUid ssu;
     /** symbol uid --> external symbol state.  This data structure \em owns all the
      * Psym objects. */
-    std::unordered_map<unsigned/*symId*/,Psym> syms;
+    SymIdMap syms;
   public:
     //
     //  TODO expose getting list of active scopes from ssu.scopes (by checking ssu.activeSco[scope])
@@ -338,6 +344,9 @@ class SymbStates{
     /** since beginning of time. \c delsym and \c end_scope deactivate, but don't remove. */
     size_t nSymbols() { return syms.size(); }
     void prtCurrentSymbols(int verbose=0) const;
+    /** global sets of active/stale symbols */
+    std::vector<unsigned> symIdAnyScopeSorted() const {return ssu.symIdAnyScopeSorted();}
+    std::vector<unsigned> symIdStaleSorted() const {return ssu.symIdStaleSorted();}
 
     /** tricky behavior, try to stick with begin/end_scope */
     void activate_scope(unsigned const stale) {
@@ -502,6 +511,24 @@ inline std::vector<unsigned> detail::SymScopeUid::symIdAnyScopeSorted() const {
     std::sort(ret.begin(), ret.end());
     return ret;
 }
+inline std::vector<unsigned> detail::SymScopeUid::symIdStaleSorted() const {
+    size_t nSym = 0U;
+    size_t nSta = 0U;
+    for(auto const& sta: stales){
+        ++nSta;
+        nSym += sta.syms.size();
+    }
+    std::cout<<" count "<<nSym<<" syms in "<<nSta<<" stale scopes"<<std::endl;
+    std::vector<unsigned> ret;
+    ret.reserve(nSym);
+    for(auto const& sta: stales){
+        for(unsigned sym: sta.syms){
+            ret.push_back(sym);
+        }
+    }
+    std::sort(ret.begin(), ret.end());
+    return ret;
+}
 
 template<class BASE>
     template<typename... Arg> inline
@@ -548,7 +575,7 @@ unsigned SymbStates<PARSYMBOL>::newsym(Arg&&... arg) {
         uid_psyms.reserve(uids.size());
         for(auto u: uids) {
             if (u!=ps.symId()){
-                std::cout<<" nameclash checking "<<this->psym(u)<<std::endl; std::cout.flush();
+                //std::cout<<" nameclash checking "<<this->psym(u)<<std::endl; std::cout.flush();
                 uid_psyms.push_back(&(this->psym(u)));
             }
         }
@@ -561,6 +588,7 @@ unsigned SymbStates<PARSYMBOL>::newsym(Arg&&... arg) {
     try{
         // construct ParSymbol symbol+scope (and user's BASE state)
         Psym psym{symId,scope,arg...};
+        //std::cout<<" newsym-->"<<psym<<std::endl;
         nameclash(psym, ssu.scopes.front().syms);
         // finalize the symbol
         syms.emplace( std::make_pair(symId, std::move(psym)) ); // ???

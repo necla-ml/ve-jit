@@ -76,6 +76,8 @@ class ScopedSpillableBase {
     }
     typedef scope::SymbStates<scope::ParSymbol<ScopedSpillableBase>> Ss;
     friend Ss;
+    friend class RegSymbol;
+    friend class SpillableRegSym;
 #if 0
     /** might return null */
     Ss const *symids() const {

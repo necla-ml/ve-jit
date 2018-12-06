@@ -53,7 +53,7 @@ class RegSymbol :
      * With symbol scopes, \c regid might come from \c SymScopeUid::newsym()
      */
     explicit RegSymbol(char const* const name,
-            Rb::Cls const rtype = Rb::Cls::none
+            Rb::Cls const rtype = Rb::Cls::scalar /*was 'none'*/
             //, Rb::Sub const rsub = Rb::Sub::def
             )
         : Base(nextSym(), 1/*scope*/, defBytes(rtype), defAlign(rtype)),
@@ -64,10 +64,25 @@ class RegSymbol :
         t_decl(RegSymbol::nextTick()),
         t_sym(0U)
     {
-        std::cout<<" +RS-a:"<<*this<<std::endl;
+        std::cout<<" +RS-a:"<<*this<<"rtype="<<(int)rtype_<<"/"<<(int)rsub_<<std::endl;
         assert(name_!=nullptr);
     }
-    static int const a = 13;
+    explicit RegSymbol(unsigned uid, unsigned scope,
+            char const* const name,
+            Rb::Cls const rtype = Rb::Cls::scalar /*was 'none'*/
+            //, Rb::Sub const rsub = Rb::Sub::def
+            )
+        : Base(uid, scope, defBytes(rtype), defAlign(rtype)),
+        name_(name),
+        regid_(invalidReg()),
+        rtype_(rtype),
+        rsub_(Rb::Sub::def),
+        t_decl(RegSymbol::nextTick()),
+        t_sym(0U)
+    {
+        std::cout<<" +RS-b:"<<*this<<"rtype="<<(int)rtype_<<"/"<<(int)rsub_<<std::endl;
+        assert(name_!=nullptr);
+    }
     /** <em>Declare and assign</em> symbol to user register.
      * \c regid is from some register allocator [maybe a \c Spill object],
      * while \c symId is a [unique] forward counter value
@@ -90,7 +105,21 @@ class RegSymbol :
           ,t_sym(0U)
           {
               if(valid(regid_)){setREG(true); t_sym=t_decl;}
-              std::cout<<" +RS-b "<<*this<<std::endl;
+              std::cout<<" +RS-c "<<*this<<std::endl;
+              assert(name_!=nullptr);
+              assert(valid(regid_));
+          }
+    explicit RegSymbol( unsigned uid, unsigned scope,
+            char const* const name, RegId const regid)
+        : Base(uid, scope, defBytes(regid), defAlign(regid))
+          ,name_(name)
+          ,regid_(valid(regid)? regid: invalidReg())
+          ,rtype_(cls(regid))
+          ,t_decl(RegSymbol::nextTick())
+          ,t_sym(0U)
+          {
+              if(valid(regid_)){setREG(true); t_sym=t_decl;}
+              std::cout<<" +RS-d "<<*this<<std::endl;
               assert(name_!=nullptr);
               assert(valid(regid_));
           }
@@ -143,6 +172,7 @@ class RegSymbol :
     //
     Where getWhere() const              {return Base::getWhere();}
     unsigned symId() const              {return Base::symId();}
+    unsigned scope() const              {return Base::scope();}
     bool getActive() const              {return Base::getActive();}
     int getBytes() const                {return Base::getBytes();}
     int getAlign() const                {return Base::getAlign();}
@@ -244,7 +274,7 @@ std::ostream& operator<<(std::ostream& os, RegSymbol const& x){
     os<<"RegSymbol{"
         <<(x.name()!=nullptr? x.name(): "?")<<":"
         <<(x.getActive()?"+":"-")
-        <<x.symId()
+        <<x.symId()<<"§"<<x.scope()
         ;
     if(x.getREG())
         os<<"R"; else os<<"~R";

@@ -5,7 +5,13 @@
  * scope::ParSymbol<ScopedSpillableBase>.
  *
  * It tests out functions like scope::symbStates, but adds setting
- * an actual RegId, and free a reasonable spill symbol if asked.
+ * an actual RegId, and frees a reasonable spill symbol if asked.
+ *
+ * \note \ref s2r.hpp provides more refined symbol to register associations.
+ * \sa tSpill2b.cpp
+ *
+ * \note \ref symScopeUid.hpp for symbol <---> scope association
+ * We use SymbStates here to provide the "scope" concepts (compile with SCOPED==1)
  *
  */
 #include "regSymbol2.hpp"
@@ -24,6 +30,10 @@
 #include <unordered_set>
 using namespace std;
 using namespace ve;
+
+#ifndef SCOPED
+#define SCOPED 1
+#endif
 
 class SpillableRegSym;
 class DemoSymbStates;
@@ -99,6 +109,28 @@ class SpillableRegSym : public RegSymbol
             std::cout<<" +SRS-b(tSym="<<tSym()<<",name="<<name<<",rid="<<rid<<")"<<std::endl;
         }
 
+    // req'd for SymbStates<SpillableRegSym>::newsym ...
+    template<typename... Arg>
+        SpillableRegSym(unsigned uid, unsigned scope, Arg&&... arg)
+        : RegSymbol(uid, scope, std::forward<Arg>(arg)...)
+        {
+            std::cout<<" +SRS-c(tSym="<<tSym()<<",name="<<name()<<",regId:"<<regId()<<",symId:"<<symId()<<")"<<std::endl;
+        }
+    // req'd for SymbStates<SpillableRegSym>::newsym ...
+    /** \throw if any psym in SET of ptrs-to-us matches our name() and has different symId() */
+    template<typename SET>
+        void chk_different_name(SET const& psyms) const{
+            for( auto psym: psyms ){
+                //std::cout<<" psym"<<psym; std::cout.flush();
+                if( this->symId() == psym->symId() )
+                    continue; // we can never clash with ourself (safety)
+                char const* existing_name = psym->name();
+                if( strcmp(this->name(), existing_name) == 0 ){
+                    THROW("Symbol "<<name()<<" already exists in current scope");
+                }
+            }
+        }
+
 };
 
 /** represent a range of registers, a set of temporary registers. */
@@ -142,25 +174,54 @@ struct Counters {
 #endif
 
 /** Spillable objects need a way to convert symbol Ids into SpillableRegSym */
-struct DemoSymbStates : public Counters {
-    typedef SpillableRegSym Psym;  // "parent" symbol class
+struct DemoSymbStates : public Counters
+#if SCOPED
+                        , protected scope::SymbStates<SpillableRegSym>
+#endif
+{
     typedef ve::Spill<DemoSymbStates> SpillType;
-    typedef map<unsigned,Psym> SymIdMap;
+#if SCOPED // augment map:symId->object with "scope management"
+    typedef scope::SymbStates<SpillableRegSym> Base;
+    typedef Base::Psym Psym;
+    friend class Tester;
+    friend SpillType;
+  private:
+    // for bkwd compat with std::map code, just ref our Base map
+    SymIdMap & psyms; // --> SymbStates<SpillableRegSym>::syms
+  protected:
+    Psym & psym(unsigned const symId) { return Base::psym(symId); }
+    Psym & fpsym(unsigned const symId) { return Base::fpsym(symId); }
+  public:
+    Psym const& psym(unsigned const symId) const { return Base::psym(symId); }
 
+    template<typename...Args>
+    auto decl(Args&&... otherPsymArgs)
+    // C++11 **should** deduce'auto' return type from return statements,
+    // but nc++ needs -std=c++17, so... uglify by stating...
+    -> decltype( Psym::uid )
+    {
+        auto const symId = Base::newsym(otherPsymArgs...);
+        // newsym is fairly complicated, compared with unscoped 'decl'
+        return symId;
+    }
+    struct AutoScope {
+        AutoScope(Base& ss) : ss(ss), scope_(ss.begin_scope()) {}
+        ~AutoScope() {ss.end_scope();}
+        unsigned scope() const {return scope_;}
+      private:
+        Base & ss;
+      public:
+        unsigned const scope_;
+    };
+    /** end_scope invoked automatically when scope object is destructed.
+     * Pairs up calls to SymbStates<>::begin_scope(),end_scope(). */
+    AutoScope mkscope() {return AutoScope(*this);}
+#else
+    typedef SpillableRegSym Psym;  // "parent" symbol class
+
+    typedef map<unsigned/*symId*/,Psym> SymIdMap;
     SymIdMap psyms;   ///< symId-->Psym (Psym=SpillableRegSym)
-
-    // new: move nextTick into RegSymbol
-    static uint64_t nextTick() { return RegSymbol::nextTick(); }
-
-    DemoSymbStates()
-        : Counters(), psyms(), spill(this) {
-            //RegSymbol::t=0U; // symIds start from 1 again, thank-you.
-            //RegSymbol::resetSyms();
-        }
-
-    /** The spill manager lifetime should be less than the psyms map lifetime */
-    SpillType spill;
-
+    //
     // NO: only supported 1 REG <==> 1 SYMBOL (KISS)
     //map<RegId,std::vector<unsigned>> regidMap;
 
@@ -178,17 +239,6 @@ struct DemoSymbStates : public Counters {
     }
     // Later addition to help compiler disambiguate the non-const (to-be-protected) version
     Psym & fpsym(unsigned const symId) { return psym(symId); }
-
-    template<typename T, typename U>
-        typename std::pair<T,U>
-        // c++14 allows simpler: decltype(auto)
-        make_pair_wrapper(T&& t, U&& u)
-        {
-                return std::make_pair(std::forward<T>(t),
-                                                  std::forward<U>(u));
-        }
-
-    void dump() const;
 
     /** declare a symbol. It is active, but in neither REG nor MEM.
      * - \em all your Psym should be constructed via \c decl !
@@ -210,6 +260,47 @@ struct DemoSymbStates : public Counters {
         psyms.emplace(SymIdMap::value_type{symId, std::move(s)});
         return symId;
     }
+    struct AutoScope { // we do not really support scope
+        AutoScope(Base& ss) : ss(ss), scope_(1) {}
+        unsigned scope() const {return scope_;}
+      private:
+        Base & ss;
+      public:
+        unsigned const scope_;
+    };
+    AutoScope mkscope() {return AutoScope(*this);}
+#endif
+
+
+    // new: move nextTick into RegSymbol
+    static uint64_t nextTick() { return RegSymbol::nextTick(); }
+
+    DemoSymbStates()
+        : Counters()
+#if SCOPED
+          , SymbStates<SpillableRegSym>()
+              , psyms(SymbStates<SpillableRegSym>::syms)
+#else
+          , psyms()
+#endif
+          , spill(this) {
+            //RegSymbol::t=0U; // symIds start from 1 again, thank-you.
+            //RegSymbol::resetSyms();
+        }
+
+    /** The spill manager lifetime should be less than the psyms map lifetime */
+    SpillType spill;
+
+    template<typename T, typename U>
+        typename std::pair<T,U>
+        // c++14 allows simpler: decltype(auto)
+        make_pair_wrapper(T&& t, U&& u)
+        {
+                return std::make_pair(std::forward<T>(t),
+                                                  std::forward<U>(u));
+        }
+
+    void dump() const;
 
     /// \group utils
     ///@{
@@ -219,7 +310,7 @@ struct DemoSymbStates : public Counters {
         //
         symids.clear();
 #if 1
-        for(auto& s: psyms)
+        for(auto const& s: psyms)
             if(s.second.regId() == r)
                 symids.push_back(s.first);
 #else // c++17, but not supported by nc++
@@ -230,7 +321,7 @@ struct DemoSymbStates : public Counters {
     }
     void syms_active(RegId const r, std::vector<unsigned>& symids){
         symids.clear();
-        for(auto& s: psyms){
+        for(auto const& s: psyms){
             auto const& sObj = s.second;
             if(sObj.regId() == r && sObj.getActive())
                 symids.push_back( /*symId*/s.first );
@@ -238,7 +329,7 @@ struct DemoSymbStates : public Counters {
     }
     void syms_activeREG(RegId const r, std::vector<unsigned>& symids){
         symids.clear();
-        for(auto& s: psyms){
+        for(auto const& s: psyms){
             auto const& sObj = s.second;
             if(sObj.regId() == r && sObj.getActive() && sObj.getREG())
                 symids.push_back( /*symId*/s.first );
@@ -627,7 +718,18 @@ struct DemoSymbStates : public Counters {
     /** (test code) Say symbol is in reg, but only 4 registers available.
      * \c use4 assigns a register to \c symId if necessary.  If the 4 registers
      * in this pool are already used for other symbols, we spill one to memory.
-     * This could mimic a <em>set of temporary registers</em>. */
+     * This could mimic a <em>set of temporary registers</em>.
+     *
+     * - XXX modify: input = RegSymbol.  output= best register.
+     * - if currently in register, return current register
+     * - if currently in MEM, return old register if old reg is free.
+     *      else set hint1
+     * - if unassigned and stale scope has symbol of same name,
+     *      and stale register is not in-use, set hint2
+     * - if free regs, use any free one (prefer hints, then oldest)
+     * - if regs w/ OK mem cpy, use any one (prefer hints, then oldest)
+     * - use reg w/ oldest access time, oldes scope, or ???
+     */
     void use4(unsigned const symId){
         int const maxRegs=4;
         Psym &s = psym(symId);
@@ -675,6 +777,8 @@ struct DemoSymbStates : public Counters {
         auto r = find_if( psyms.begin(), psyms.end(),
                 [](map<unsigned,Psym>::value_type const& v)
                 { return v.second.getREG(); } );
+        // TWEAK: if a stale scope has a symbol of same name, and has a register,
+        //        maybe we can re-use the same register again?
         assert( r !=  psyms.end() );
         cout<<"< use4:(spill "<<r->first<<"):"<<symId<<" "; cout.flush();
         spill.spill(r->first);          // 'r' --> RM
@@ -685,10 +789,20 @@ struct DemoSymbStates : public Counters {
 };// end DemoSymbStates
 
 void DemoSymbStates::dump() const {
+#if SCOPED
+    cout<<" DemoSymbStates: all "<<psyms.size()<<" symbols:"<<endl;
+    for(auto const& s: Base::symIdAnyScopeSorted()){
+        cout<<"\t+"<<s<<"\t"<<psym(s)<<endl;
+    }
+    for(auto const& s: Base::symIdStaleSorted()){
+        cout<<"\t-"<<s<<"\t"<<psym(s)<<endl;
+    }
+#else
     cout<<" DemoSymbStates: all "<<psyms.size()<<" symbols:"<<endl;
     for(auto const& p: psyms){
         cout<<"\t\t"<<p.second<<endl;
     }
+#endif
 }
 
 bool chk_order(DemoSymbStates const& ssym, std::initializer_list<unsigned> const& i){
@@ -741,6 +855,7 @@ static int testNum=0;
 
 void Tester::test1(){
     typedef DemoSymbStates Ssym;
+    typedef RegisterBase Rb;
     //typedef Ssym::Psym Psym;
     TEST("Construct some symbols");
     {
@@ -755,11 +870,15 @@ void Tester::test1(){
         cout<<" ssym.decl(\"x\") --> x="<<x<<", s(x)="<<s(x)<<endl;
         cout<<" decl "<<x<<"  "<<ssym.psym(x)<<endl;
         cout<<" s(x):"<<s(x)<<endl;
+        cout<<" (Rb::Cls::none) = "<<int(Rb::Cls::none)<<endl;
+        cout<<" defBytes(Rb::Cls::none) = "<<defBytes(Rb::Cls::none)<<endl;
+        // RegSymbol{x:+1§1~Rl8a8Sd1u0}*
+        // symId 1, scope 1, R l8a8(unassigned) Scalar defined(t=1) usage(0)
         cout<<" valid(s(x).regId()):"<<valid(s(x).regId())<<endl;
         cout<<" s(x).regId():"<<s(x).regId()<<endl;
         cout<<" asmname(s(x).regId()):"<<(valid(s(x).regId())? asmname(s(x).regId()): string("no_register"))<<endl;
         cout.flush();
-        assert(x==1);
+        assert(x==1);                           // symIds start at 1
         assert( !valid(s(x).regId()) );
         assert(ssym.nActiveRegs() == 0);        // x is active, but NOT in register
 
@@ -905,10 +1024,10 @@ void Tester::test1(){
             ssym.psym(symId).setReg( rid, ssym.nextTick() );
         };
 #define R4(varname) auto const varname = r4(#varname)
-        R4(a);  // asm::mov(a,1)
-        R4(b);  // asm::mov(b,77)
-        R4(c);  // asm::add(c,a,b)
-        R4(d);  // asm::add(d,a,b)
+        R4(a);
+        R4(b);
+        R4(c);
+        R4(d);
         //ssym.spillOne({2,3},1);
         if(1){ cout<<a<<b<<c<<d<<" "<<r(a)<<" "<<r(b)<<" "<<r(c)<<" "<<r(d)<<endl; }
         assert( ssym.nActiveRegs() == 4 );
@@ -932,6 +1051,79 @@ void Tester::test1(){
 
         ssym.dump();
         assert(ssym.nActiveRegs() == 4);   // OHOH, 5 is more than the 4 registers available
+    }
+#endif
+#if SCOPED
+    TEST("dumb scope demo (just do not use a register allocator)");
+    {
+        Ssym ssym;
+        auto r = [&ssym](auto symId)->RegId       { return ssym.psym(symId).regId(); };
+        auto newsym = [&ssym](auto name) { return ssym.decl(name); };
+#define SYM(varname) auto const varname = /*symid*/newsym(#varname)
+        SYM(a);
+        SYM(b);
+        if(0){ cout<<a<<b<<" "<<r(a)<<" "<<r(b)<<endl; }
+        {
+            auto inner = ssym.mkscope();
+            cout<<">>> inner scope = "<<inner.scope()<<" all symbols active '+'"<<endl;
+            SYM(c);
+            SYM(d);
+        if(1){ cout<<a<<b<<c<<d<<" "<<r(a)<<" "<<r(b)<<" "<<r(c)<<" "<<r(d)<<endl; }
+            ssym.dump();
+        }
+        cout<<">>> after inner scope RegSymbol{NAME:+/-....} +/- is active/inactive"<<endl;
+        ssym.dump();
+        {
+            auto inner2 = ssym.mkscope();
+            cout<<">>> inner2 scope = "<<inner2.scope()<<endl;
+            SYM(e);
+            SYM(c); // old 'c' defunct (no clash). this one has new symId, maybe difft reg
+            SYM(f);
+        if(1){ cout<<a<<b<<e<<c<<f<<" "<<r(a)<<" "<<r(b)<<" "<<r(e)<<" "<<r(c)<<" "<<r(f)<<endl; }
+            ssym.dump();
+        }
+        cout<<">>> back to a,b - scope, again"<<endl;
+        ssym.dump();
+#undef SYM
+    }
+#endif
+#if SCOPED
+    TEST("4-register scope demo (nextRid4 assigns cyclic next-register)");
+    {
+        Ssym ssym;
+        //auto s = [&ssym](auto symId)->Ssym::Psym& { return ssym.fpsym(symId); };
+        auto r = [&ssym](auto symId)->RegId       { return ssym.psym(symId).regId(); };
+        //auto decl = [&ssym](auto name) { return ssym.decl(name); };
+        auto r4 = [&ssym](auto name) { return ssym.decl(name,ssym.nextRid4()); };
+        //auto rset = [&ssym](RegId const rid, unsigned symId){
+        //    ssym.psym(symId).setReg( rid, ssym.nextTick() );
+        //};
+#define R4(varname) auto const varname = r4(#varname)
+        R4(a);
+        R4(b);
+        if(0){ cout<<a<<b<<" "<<r(a)<<" "<<r(b)<<endl; }
+        {
+            auto inner = ssym.mkscope();
+            cout<<">>> inner scope = "<<inner.scope()<<" all symbols active '+'"<<endl;
+            R4(c);
+            R4(d);
+        if(1){ cout<<a<<b<<c<<d<<" "<<r(a)<<" "<<r(b)<<" "<<r(c)<<" "<<r(d)<<endl; }
+            ssym.dump();
+        }
+        cout<<">>> after inner scope RegSymbol{NAME:+/-....} +/- is active/inactive"<<endl;
+        ssym.dump();
+        {
+            auto inner2 = ssym.mkscope();
+            cout<<">>> inner2 scope = "<<inner2.scope()<<endl;
+            R4(e);
+            R4(c); // old 'c' defunct (no clash). this one has new symId, maybe difft reg
+            R4(f);
+        if(1){ cout<<a<<b<<e<<f<<" "<<r(a)<<" "<<r(b)<<" "<<r(e)<<" "<<r(f)<<endl; }
+            ssym.dump();
+        }
+        cout<<">>> back to a,b - scope, again"<<endl;
+        ssym.dump();
+#undef R4
     }
 #endif
 #if 1
@@ -1098,7 +1290,7 @@ void Tester::test1(){
     }
 #endif
 }
-#if 0 // API does not have some of these fns anymore
+#if 1 // API does not have some of these fns anymore
 void Tester::test2(){
     typedef DemoSymbStates Ssym;
     typedef Ssym::Psym Psym;
