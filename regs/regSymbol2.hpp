@@ -3,7 +3,7 @@
 
 #define OLD 0
 
-#include "spill-impl2.hpp"
+#include "spill2-impl.hpp"
 #include "symScopeUid.hpp"
 #include "scopedSpillableBase.hpp"
 class RegSymbol; // SpillableBase + name, rtype and regId()

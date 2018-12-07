@@ -5,12 +5,15 @@
 # It compiles under g++-5.4.0 with -std=c++11 some gnu extensions.
 # For ncc, the same nice features need -std=c++14 or -std=c++17.
 #
-TARGETS:=testSpill-old testSymbStates-old \
-	oldSpill2 oldSpill3 oldRegSym \
+TARGETS:=oldSpill oldSymbStates oldSpill oldSpill2 oldSpill3 oldRegSym \
 	testRegBase prt_regnames testSymScopeUid testScopedSpill0 \
-	tSpill2 regSymbol2-hdr.o spill-impl2-hdr.o testRegSym2 \
-	tSpill2b s2r
-all: $(TARGETS) Goodbye
+	regSymbol2.chk spill2-impl.chk \
+	tSpill2 tSpill2b s2r testRegSym2
+LIBOBJECTS:=spill2.o reg-base.o reg-aurora.o 
+all: libjitregs.a $(TARGETS) Goodbye
+
+libjitregs.a: $(LIBOBJECTS)
+	$(AR) rcs $@ $^
 
 PHONY: Goodbye
 Goodbye:
@@ -66,10 +69,28 @@ C11Y:=-std=gnu++1z
 C11X:=-std=c++14
 C11Y:=-std=c++14
 
-asm-old.o: asm-old.cpp old/asm-old.hpp throw.hpp
+reg-base.o: reg-base.cpp reg-base.hpp bitfield.hpp throw.hpp
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) -c $<
+reg-aurora.o: reg-aurora.cpp reg-aurora.hpp reg-base.hpp bitfield.hpp throw.hpp
+	$(CXX) -o $@ $(CXXFLAGS) $(C11Y) -c $<
+spill2.o: spill2.cpp spill2.hpp spill2-impl.hpp throw.hpp reg-base.hpp
+	$(CXX) -o $@ $(CXXFLAGS) $(C11X) -c $<
+
+# header compilation check:
+regSymbol2.chk: regSymbol2.hpp # see if the header makes sense: what is missing?
+	$(CXX) -o $<.o $(CXXFLAGS) $(C11X) -c $<
+	rm -f $<.o; touch $@
+spill2-impl.chk: spill2-impl.hpp # see if the header makes sense: what is missing?
+	$(CXX) -o $<.o $(CXXFLAGS) $(C11X) -c $<
+	rm -f %<.o; touch $@
+oldSymbStates.chk: oldSymbStates-hdr.cpp old/symbStates-old.hpp throw.hpp
+	$(CXX) -o $<.o $(CXXFLAGS) -std=gnu++11 -c $<
+	rm -f $<.o; touch $@
+
+old-asm.o: old-asm.cpp old/asm-old.hpp throw.hpp
 	$(CXX) -o $@ $(CXXFLAGS) -c $<
 
-testSpill-old: testSpill-old.cpp asm-old.o
+oldSpill: oldSpill.cpp old-asm.o
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $^
 	$(call vg,$@)
 
@@ -84,28 +105,20 @@ testScopedSpill0: testScopedSpill0.cpp symScopeUid.hpp scopedSpillableBase.hpp t
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^) && echo YAY
 	$(call vg)
 
-spill.o: spill.cpp old/spill.hpp old/spill-impl.hpp old/symbStates-old.hpp throw.hpp old/regDefs.hpp
-	$(CXX) -o $@ $(CXXFLAGS) $(C11X) -c $<
-spill2.o: spill2.cpp spill2.hpp spill-impl2.hpp throw.hpp reg-base.hpp
-	$(CXX) -o $@ $(CXXFLAGS) $(C11X) -c $<
-# header compilation check:
-regSymbol2-hdr.o: regSymbol2.hpp # see if the header makes sense: what is missing?
-	$(CXX) -o $@ $(CXXFLAGS) $(C11X) -c $<
-# header compilation check:
-spill-impl2-hdr.o: spill-impl2.hpp # see if the header makes sense: what is missing?
+old-spill.o: old-spill-hdr.cpp old/spill.hpp old/spill-impl.hpp old/symbStates-old.hpp throw.hpp old/regDefs.hpp
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) -c $<
 
 # test based on spillable-base.hpp
-oldSpill2: oldSpill2.cpp spill.cpp old/spill-impl.hpp old/spill.hpp throw.hpp old/regDefs.hpp
+oldSpill2: oldSpill2.cpp old-spill-hdr.cpp old/spill-impl.hpp old/spill.hpp throw.hpp old/regDefs.hpp
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^)
 	$(call vg)
 # new version...
-tSpill2: tSpill2.cpp spill2.o spill-impl2.hpp spill2.hpp throw.hpp reg-base.hpp symScopeUid.hpp
+tSpill2: tSpill2.cpp spill2.o spill2-impl.hpp spill2.hpp throw.hpp reg-base.hpp symScopeUid.hpp
 	$(CXX) -o $@.i $(CXXFLAGS) $(C11X) -dD -E $<
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
 # new: add name and register support to scoped symbols (expand basic symScopeUid functions)
-tSpill2b: tSpill2b.cpp spill2.o reg-aurora.o reg-base.o spill-impl2.hpp spill2.hpp throw.hpp reg-base.hpp symScopeUid.hpp
+tSpill2b: tSpill2b.cpp spill2.o reg-aurora.o reg-base.o spill2-impl.hpp spill2.hpp throw.hpp reg-base.hpp symScopeUid.hpp
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
 
@@ -113,42 +126,36 @@ oldStates.o: oldStates.cpp old/regStates.hpp throw.hpp
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) -c $<
 
 # test based on regSymbol.hpp
-oldSpill3: oldSpill3.cpp spill.o oldStates.o old/spill-impl.hpp old/spill.hpp throw.hpp old/regDefs.hpp
+oldSpill3: oldSpill3.cpp old-spill.o oldStates.o old/spill-impl.hpp old/spill.hpp throw.hpp old/regDefs.hpp
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
 
 # test based on regSymbol.hpp, register name and register id operations
-oldRegSym: oldRegSym.cpp spill.o oldStates.o old/spill-impl.hpp old/spill.hpp throw.hpp old/regDefs.hpp
+oldRegSym: oldRegSym.cpp old-spill.o oldStates.o old/spill-impl.hpp old/spill.hpp throw.hpp old/regDefs.hpp
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
 # test based on regSymbol2.hpp, register name and register id operations
-testRegSym2: testRegSym2.cpp reg-base.o reg-aurora.o spill2.o regSymbol2.hpp spill-impl2.hpp spill2.hpp throw.hpp reg-base.hpp
+testRegSym2: testRegSym2.cpp reg-base.o reg-aurora.o spill2.o regSymbol2.hpp spill2-impl.hpp spill2.hpp throw.hpp reg-base.hpp
 	# old/regStates.hpp (seems like an old idea, defunct?)
 	$(CXX) -o $@.i $(CXXFLAGS) $(C11X) -dD -E $<
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
 
-symbStates-old.o: symbStates-old.cpp old/symbStates-old.hpp throw.hpp
-	$(CXX) -o $@ $(CXXFLAGS) -std=gnu++11 -c $<
-reg-base.o: reg-base.cpp reg-base.hpp bitfield.hpp throw.hpp
-	$(CXX) -o $@ $(CXXFLAGS) $(C11X) -c $<
-testSymbStates-old: testSymbStates-old.cpp symbStates-old.o oldStates.o reg-base.o spill.o old/symbStates-old.hpp old/spill.hpp throw.hpp symScopeUid.hpp
+oldSymbStates: oldSymbStates.cpp oldStates.o reg-base.o old-spill.o old/symbStates-old.hpp old/spill.hpp throw.hpp symScopeUid.hpp
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $^
 	$(call vg)
 
 prt_regnames: prt_regnames.cpp reg-base.o reg-base.hpp bitfield.hpp throw.hpp
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
-reg-aurora.o: reg-aurora.cpp reg-aurora.hpp reg-base.hpp bitfield.hpp throw.hpp
-	$(CXX) -o $@ $(CXXFLAGS) $(C11Y) -c $<
 testRegBase.asm: testRegBase
 	$(CXX) $(CXXFLAGS) $(C11X) -Wa,-adhln $^.cpp > $@
 testRegBase: testRegBase.cpp reg-base.o reg-aurora.o reg-base.hpp bitfield.hpp throw.hpp
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
 
-.PRECIOUS: asm-old.o oldStates.o symbStates-old.o
+.PRECIOUS: old-asm.o oldStates.o oldSymbStates-hdr.o
 clean:
-	rm -f *.o *.lo *.i $(TARGETS) mk*.log bld*.log
+	rm -f *.o *.lo *.i $(TARGETS) mk*.log bld*.log *.bld
 realclean: clean
 	rm -f $(patsubst %,%.vg,$(TARGETS))
 #

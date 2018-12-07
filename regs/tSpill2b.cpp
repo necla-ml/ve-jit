@@ -1,5 +1,5 @@
 
-#include "spill-impl2.hpp"
+#include "spill2-impl.hpp"
 #include "symScopeUid.hpp"
 #include "scopedSpillableBase.hpp"
 #include "s2r.hpp"
@@ -165,7 +165,7 @@ class Regset {
     Regset(int nScalars)
         : registers(init_scalars(nScalars))   // up to nScalars scalar regs (to test spill code easier)
           , pos_(-1)
-    { assert(nScalars >= 0); assert( registers.size() <= nScalars ); }
+    { assert(nScalars >= 0); assert( registers.size() <= (size_t)nScalars ); }
     Regset()
         : registers(init_scalars())   // a default subset is usable scalar regs
         , pos_(-1)
