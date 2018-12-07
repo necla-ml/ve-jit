@@ -1,10 +1,14 @@
 # We assume $(CC) is ncc/nc++
+LIBRARY:=libjitregs.a
 TARGETS:=oldSpill oldSymbStates oldSpill oldSpill2 oldSpill3 oldRegSym \
 	testRegBase prt_regnames testSymScopeUid testScopedSpill0 \
-	regSymbol2.chk spill2-impl.chk \
+	regSymbol2.chk spill2-impl.chk $(LIBRARY) \
 	tSpill2 tSpill2b s2r testRegSym2
 LIBOBJECTS:=spill2.o reg-base.o reg-aurora.o 
-all: libjitregs.a $(TARGETS) Goodbye
+all: $(TARGETS) Goodbye
+
+$(LIBRARY): $(LIBOBJECTS)
+	$(AR) rcs $@ $^
 
 PHONY: Goodbye
 Goodbye:
@@ -158,5 +162,5 @@ testRegBase: testRegBase.cpp reg-base.o reg-aurora.o reg-base.hpp bitfield.hpp t
 clean:
 	rm -f *.o *.lo *.i $(TARGETS) mk*.log bld*.log *.bld
 realclean: clean
-	rm -f $(patsubst %,%.vg,$(TARGETS))
+	rm -f $(patsubst %,%.vg,$(TARGETS)) *.vg
 #

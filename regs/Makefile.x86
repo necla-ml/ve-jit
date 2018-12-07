@@ -5,14 +5,15 @@
 # It compiles under g++-5.4.0 with -std=c++11 some gnu extensions.
 # For ncc, the same nice features need -std=c++14 or -std=c++17.
 #
+LIBRARY:=libjitregs.a
 TARGETS:=oldSpill oldSymbStates oldSpill oldSpill2 oldSpill3 oldRegSym \
 	testRegBase prt_regnames testSymScopeUid testScopedSpill0 \
-	regSymbol2.chk spill2-impl.chk \
+	regSymbol2.chk spill2-impl.chk $(LIBRARY) \
 	tSpill2 tSpill2b s2r testRegSym2
 LIBOBJECTS:=spill2.o reg-base.o reg-aurora.o 
-all: libjitregs.a $(TARGETS) Goodbye
+all: $(TARGETS) Goodbye
 
-libjitregs.a: $(LIBOBJECTS)
+$(LIBRARY): $(LIBOBJECTS)
 	$(AR) rcs $@ $^
 
 PHONY: Goodbye
