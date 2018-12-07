@@ -3,6 +3,9 @@
 *.exe
 *.vg
 .*.sw?
+*.chk
+oldSpill
+oldSymbStates
 mk.log
 oldRegSym
 oldSpill2
