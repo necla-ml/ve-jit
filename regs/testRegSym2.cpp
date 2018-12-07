@@ -103,8 +103,13 @@ class SpillableRegSym : public RegSymbol
      *   - so printout says %XX unless register id is explicitly set
      *
      * - Note: Cls ~ none has no length set, so it can't be spilled.
+     *
+     * To force a test to assign a real register, either
+     *    specify something like \c Rb::Cls::scalar explicitly,
+     *    or use hard-code some explicit \c RegId (other constructor)
+     * (default is "none", which is fine if you intend to output only 'C' code)
      * */
-    SpillableRegSym( char const* name, RegisterBase::Cls cls = RegisterBase::Cls::scalar )
+    SpillableRegSym( char const* name, RegisterBase::Cls cls = RegisterBase::Cls::none )
         : RegSymbol( (name? name: randName()), cls)
         {
             std::cout<<" +SRS-a(tDecl="<<tDecl()<<",name="<<name<<",cls="<<cls<<")"<<std::endl;
@@ -1311,6 +1316,8 @@ void Tester::test2(){
         //        spill(1) : spill symbol 1
         //          dump() : print spill region symbol assignments
         // 1 is a local tag, and NOT the actual symId.
+        // To make this more legit, ask for real Rb::Cls::scalar register assignments
+        // (default is "no register", which is fine if you intend to output only 'C' code)
         std::map<unsigned,unsigned> tag2sid; // tag to symId
         //typedef Ssym::Psym S; // Symbol object
         auto s = [&ssym](auto symId)->Ssym::Psym& { return ssym.fpsym(symId); };
@@ -1319,7 +1326,7 @@ void Tester::test2(){
         auto dump=[&ssym]()->void           {return ssym.spill.dump();};
         auto decl = [&ssym]() { return ssym.decl(randName(),Rb::Cls::scalar); };
         auto declRM = [&ssym,&s,&spill]() {
-            unsigned symId = ssym.decl(randName());
+            unsigned symId = ssym.decl(randName(),Rb::Cls::scalar);
             s(symId).setREG(true);
             spill(symId);
             return symId;
