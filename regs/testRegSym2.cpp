@@ -45,6 +45,13 @@ struct Tester{
     static void test3();
 };
 
+/** print various things, one per line */
+template<typename...Args> void prtline(std::string pfx, Args&&...t){
+    std::ostringstream oss(pfx);
+    (void)std::initializer_list<int>{((void)(oss<<pfx<<t<<endl),0)...}; // (safety hacks)
+    cout<<oss.str();
+}
+
 // I don't care about register names, make them all tmpFoo.
 std::vector<char const*> randNames;
 char const* randName(){
@@ -1292,12 +1299,6 @@ void Tester::test1(){
 }
 // ssym.add(symId) no longer exists.  instead use ssym.decl(tmp(symId))
 //char const* var(unsigned id) {std::ostringstream oss; oss<<"tmp"<<id; return oss.str().c_str();}
-/** print various things, one per line */
-template<typename...Args> void prtline(std::string pfx, Args&&...t){
-    std::ostringstream oss(pfx);
-    (void)std::initializer_list<int>{(oss<<pfx<<t<<endl,0)...};
-    cout<<oss.str();
-}
 void Tester::test2(){
     typedef DemoSymbStates Ssym;
     //typedef Ssym::Psym Psym;
@@ -1316,21 +1317,21 @@ void Tester::test2(){
         //auto r = [&ssym](auto symId)->RegId       { return ssym.psym(symId).regId(); };
         auto spill=[&ssym](auto symId)  {ssym.spill.spill(symId);};
         auto dump=[&ssym]()->void           {return ssym.spill.dump();};
-        auto decl = [&ssym](auto name) { return ssym.decl(name,Rb::Cls::scalar); };
-        auto declRM = [&ssym,&s,&spill](auto name) {
-            unsigned symId = ssym.decl(name);
+        auto decl = [&ssym]() { return ssym.decl(randName(),Rb::Cls::scalar); };
+        auto declRM = [&ssym,&s,&spill]() {
+            unsigned symId = ssym.decl(randName());
             s(symId).setREG(true);
             spill(symId);
             return symId;
         };
 
-        auto const s1 = decl("s1");     // symId 1 declare
+        auto const s1 = decl();     // symId 1 declare
         s(1).setREG(true);              // symId 1 --> value in register
         spill(s1);                      // symId 1 --> spill to mem (1 --> RM)
-        cout<<"\tdecl(\"s1\"),setREG(true),spill... "<<s(s1)<<endl; dump();
-        auto const s2 = declRM("s2");   // symId 2 --> RM (declare, ->REG, ->MEM)
-        auto const s3 = declRM("s3");   // symId 3 --> RM
-        auto const s4 = declRM("s4");   // symId 4 --> RM
+        cout<<"\tdecl(),setREG(true),spill... "<<s(s1)<<endl; dump();
+        auto const s2 = declRM();   // symId 2 --> RM (declare, ->REG, ->MEM)
+        auto const s3 = declRM();   // symId 3 --> RM
+        auto const s4 = declRM();   // symId 4 --> RM
         s(s1).setREG(true);
         s(s2).setREG(true);
         cout<<"\nInitial spill begins with 2 stale slots (s3 & s4):"<<endl;
@@ -1341,9 +1342,9 @@ void Tester::test2(){
         assert( s(s2).getREG() && s(s2).getMEM() );
         dump(); prtline("  ","Syms s1..s4 after spill(s2)",s(s1),s(s2),s(s3),s(s4));
         cout<<" new symbol 5";
-        auto const s5 = declRM("s5"); // spill(5); OHOH, spilled and not stale! maybe should not spill!
+        auto const s5 = declRM(); // spill(5); OHOH, spilled and not stale! maybe should not spill!
         assert( s(s5).getREG() && s(s5).getMEM() );
-        dump(); prtline("    ","Syms s1..s5 after declRM(\"s5\")",s(s1),s(s2),s(s3),s(s4),s(s5));
+        dump(); prtline("    ","Syms s1..s5 after declRM()",s(s1),s(s2),s(s3),s(s4),s(s5));
         cout<<" respill 1: ";
         spill(s1);
         assert( s(1).getREG() && s(1).getMEM() );

@@ -1,10 +1,12 @@
 all: fuse2 fuse2lin
+CFLAGS:=-I../regs	
 fuse2: fuse2.cpp
-	g++ -Wall -std=c++11 -O3 $< -o $@
+	g++ $(CFLAGS) -Wall -std=c++11 -O3 $< -o $@
 %: %.cpp
-	g++ -Wall -std=c++11 -O3 -E $< -o $@.i
-	g++ -Wall -std=c++11 -O3 $< -o $@
+	g++ $(CFLAGS) -Wall -std=c++11 -O3 -E $< -o $@.i
+	g++ $(CFLAGS) -Wall -std=c++11 -O3 $< -o $@
 clean:
-	rm -f *.i *.o fuse2 fuse2lin repro *.log
+	rm -f *.i *.o fuse2 fuse2lin repro rep4 \
+		*.log *.vg
 realclean: clean	
 #	

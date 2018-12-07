@@ -96,11 +96,13 @@ class Symbol :
         assert(getActive() /*&& valid(regId_)*/ && Psym::getREG() && "symbol not in register?");
         assert( tick >= t_sym );
         t_sym = tick;
+        return *this;
     }
     Symbol& tWrite(uint64_t const tick){     ///< annotate register write event
         assert(getActive() /*&& valid(regId_)*/ && Psym::getREG() && "symbol not in register?");
         assert( tick >= t_sym );
         t_sym = tick;
+        return *this;
     }
         
   public:
@@ -163,11 +165,11 @@ class Regset {
     Regset(int nScalars)
         : registers(init_scalars(nScalars))   // up to nScalars scalar regs (to test spill code easier)
           , pos_(-1)
-    { assert( registers.size() >= 0 ); }
+    { assert(nScalars >= 0); assert( registers.size() <= nScalars ); }
     Regset()
         : registers(init_scalars())   // a default subset is usable scalar regs
         , pos_(-1)
-    { assert( registers.size() >= 0 ); }
+    { assert( registers.size() > 0 ); } // init_scalars had better not be completely empty
 
     /** Since Regset is very simple, we have only a few exposed functions */
     SetType::const_iterator find(RegId const r) const {

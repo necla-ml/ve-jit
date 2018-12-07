@@ -1,6 +1,6 @@
 #ifndef REGSTATES_HPP
 #define REGSTATES_HPP
-#include "regDefs.hpp"
+#include "old/regDefs.hpp"
 #include <forward_list>
 
 class Tester;   ///< fwd decl, use to test private methods

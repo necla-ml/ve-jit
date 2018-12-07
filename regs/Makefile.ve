@@ -57,7 +57,7 @@ else
 vg = $(VE_EXEC) ./$@ > $@.vg
 endif
 
-asm-old.o: asm-old.cpp asm-old.hpp throw.hpp
+asm-old.o: asm-old.cpp old/asm-old.hpp throw.hpp
 	$(CXX) -o $@ $(CXXFLAGS) -c $<
 
 testSpill-old: testSpill-old.cpp asm-old.o
@@ -75,7 +75,7 @@ testScopedSpill0: testScopedSpill0.cpp symScopeUid.hpp scopedSpillableBase.hpp t
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
 
-spill.o: spill.cpp old/spill.hpp old/spill-impl.hpp symbStates-old.hpp throw.hpp regDefs.hpp
+spill.o: spill.cpp old/spill.hpp old/spill-impl.hpp old/symbStates-old.hpp throw.hpp old/regDefs.hpp
 	$(CXX) -o $@ $(CXXFLAGS) -c $<
 # new header arrangement...
 spill2.o: spill2.cpp spill2.hpp spill-impl2.hpp throw.hpp reg-base.hpp
@@ -88,7 +88,7 @@ spill-impl2-hdr.o: spill-impl2.hpp # see if the header makes sense: what is miss
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) -c $<
 
 # test based on spillable-base.hpp
-oldSpill2: oldSpill2.cpp spill.cpp old/spill-impl.hpp old/spill.hpp throw.hpp regDefs.hpp
+oldSpill2: oldSpill2.cpp spill.cpp old/spill-impl.hpp old/spill.hpp throw.hpp old/regDefs.hpp
 	$(CXX) -o $@ $(CXXFLAGS) $(filter %.cpp,$^)
 	$(call vg)
 # new version...
@@ -101,11 +101,11 @@ tSpill2b: tSpill2b.cpp spill2.o reg-aurora.o reg-base.o spill-impl2.hpp spill2.h
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
 
-regStates.o: regStates.cpp regStates.hpp throw.hpp
+oldStates.o: oldStates.cpp old/regStates.hpp throw.hpp
 	$(CXX) -o $@ $(CXXFLAGS) -c $<
 
 # test based on regSymbol.hpp
-oldSpill3: oldSpill3.cpp spill.o regStates.o old/spill-impl.hpp old/spill.hpp throw.hpp regDefs.hpp
+oldSpill3: oldSpill3.cpp spill.o oldStates.o old/spill-impl.hpp old/spill.hpp throw.hpp old/regDefs.hpp
 	#
 	# for(s: randNames) is non-standard (gnu?), so changed to official
 	# for(auto [const] [&] var: container) {...} form
@@ -114,7 +114,7 @@ oldSpill3: oldSpill3.cpp spill.o regStates.o old/spill-impl.hpp old/spill.hpp th
 	$(call vg)
 
 # test based on regSymbol.hpp, register name and register id operations
-oldRegSym: oldRegSym.cpp spill.o regStates.o old/spill-impl.hpp old/spill.hpp throw.hpp regDefs.hpp
+oldRegSym: oldRegSym.cpp spill.o oldStates.o old/spill-impl.hpp old/spill.hpp throw.hpp old/regDefs.hpp
 	#
 	# This really is c++14 because of decltype(auto) which deduces the return type
 	# base on the return statement.
@@ -123,16 +123,16 @@ oldRegSym: oldRegSym.cpp spill.o regStates.o old/spill-impl.hpp old/spill.hpp th
 	$(call vg)
 # test based on regSymbol2.hpp, register name and register id operations
 testRegSym2: testRegSym2.cpp reg-base.o reg-aurora.o spill2.o regSymbol2.hpp spill-impl2.hpp spill2.hpp throw.hpp reg-base.hpp
-	# regStates.hpp (seems like an old idea, defunct?)
+	# old/regStates.hpp (seems like an old idea, defunct?)
 	$(CXX) -o $@.i $(CXXFLAGS) $(C11X) -dD -E $<
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
 
-symbStates-old.o: symbStates-old.cpp symbStates-old.hpp throw.hpp
+symbStates-old.o: symbStates-old.cpp old/symbStates-old.hpp throw.hpp
 	$(CXX) -o $@ $(CXXFLAGS) -c $<
 reg-base.o: reg-base.cpp reg-base.hpp bitfield.hpp throw.hpp
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) -c $<
-testSymbStates-old: testSymbStates-old.cpp symbStates-old.o regStates.o reg-base.o spill.o symbStates-old.hpp old/spill.hpp throw.hpp
+testSymbStates-old: testSymbStates-old.cpp symbStates-old.o oldStates.o reg-base.o spill.o old/symbStates-old.hpp old/spill.hpp throw.hpp
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
 
@@ -152,7 +152,7 @@ testRegBase: testRegBase.cpp reg-base.o reg-aurora.o reg-base.hpp bitfield.hpp t
 	$(CXX) -o $@ $(CXXFLAGS) $(C11X) $(filter %.cpp,$^) $(filter %.o,$^)
 	$(call vg)
 
-.PRECIOUS: asm-old.o regStates.o symbStates-old.o
+.PRECIOUS: asm-old.o oldStates.o symbStates-old.o
 clean:
 	rm -f *.o *.lo *.i $(TARGETS) mk*.log bld*.log
 realclean: clean

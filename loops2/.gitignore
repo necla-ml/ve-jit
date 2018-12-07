@@ -1,6 +1,7 @@
 fuse2
 fuse2lin
 repro
+rep4
 *.log
 *.bld
 *.i

@@ -2,7 +2,7 @@
  * \deprecated because symbStates.hpp has been replaced with symScopeUid.hpp and
  *             its \e official scope::SymbStates class now.  (renamed as -old files)
  */
-#include "symbStates-old.hpp"
+#include "old/symbStates-old.hpp"
 
 #include <iostream>
 using namespace std;

@@ -1,7 +1,7 @@
 /** \file
  * \deprecated because asm.hpp has been split into several components
  */
-#include "asm-old.hpp"
+#include "old/asm-old.hpp"
 
 #include <iostream>
 using namespace std;
