@@ -33,7 +33,7 @@ char* bin2jitpage(char const* basename, struct JitPage *jitpage, int const v){
     char file_bin[50];
     FILE* f_bin = NULL;
     if(ok){
-        snprintf(&file_bin[0],50,"%s.bin\0",basename);
+        snprintf(&file_bin[0],50,"%s.bin",basename); file_bin[50-1]='\0'/*paranoia*/;
         if(v>=2){ printf("opening %s\n",file_bin); fflush(stdout); }
         f_bin = fopen(file_bin,"rb");
         if( f_bin==NULL ){

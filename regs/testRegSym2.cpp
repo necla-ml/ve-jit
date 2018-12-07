@@ -30,6 +30,7 @@
 #include <unordered_set>
 using namespace std;
 using namespace ve;
+typedef RegisterBase Rb;
 
 #ifndef SCOPED
 #define SCOPED 1
@@ -855,7 +856,6 @@ static int testNum=0;
 
 void Tester::test1(){
     typedef DemoSymbStates Ssym;
-    typedef RegisterBase Rb;
     //typedef Ssym::Psym Psym;
     TEST("Construct some symbols");
     {
@@ -1118,7 +1118,7 @@ void Tester::test1(){
             R4(e);
             R4(c); // old 'c' defunct (no clash). this one has new symId, maybe difft reg
             R4(f);
-        if(1){ cout<<a<<b<<e<<f<<" "<<r(a)<<" "<<r(b)<<" "<<r(e)<<" "<<r(f)<<endl; }
+        if(1){ cout<<a<<b<<e<<c<<f<<" "<<r(a)<<" "<<r(b)<<" "<<r(e)<<" "<<r(c)<<" "<<r(f)<<endl; }
             ssym.dump();
         }
         cout<<">>> back to a,b - scope, again"<<endl;
@@ -1290,52 +1290,68 @@ void Tester::test1(){
     }
 #endif
 }
-#if 1 // API does not have some of these fns anymore
+// ssym.add(symId) no longer exists.  instead use ssym.decl(tmp(symId))
+//char const* var(unsigned id) {std::ostringstream oss; oss<<"tmp"<<id; return oss.str().c_str();}
+/** print various things, one per line */
+template<typename...Args> void prtline(std::string pfx, Args&&...t){
+    std::ostringstream oss(pfx);
+    (void)std::initializer_list<int>{(oss<<pfx<<t<<endl,0)...};
+    cout<<oss.str();
+}
 void Tester::test2(){
     typedef DemoSymbStates Ssym;
-    typedef Ssym::Psym Psym;
+    //typedef Ssym::Psym Psym;
+
+#if 1 // API does not have some of these fns anymore
     TEST("respill, no gc (re-use existing mem slots)");
     {
         Ssym ssym;
         // Shortcuts: s(1) : ref to symbol object 1
         //        spill(1) : spill symbol 1
         //          dump() : print spill region symbol assignments
-        typedef Ssym::Psym S; // Symbol object
-        auto s=[&ssym](unsigned symId)->S&  {return ssym.psym(symId);};
-        auto spill=[&ssym](unsigned symId)  {ssym.spill.spill(symId);};
+        // 1 is a local tag, and NOT the actual symId.
+        std::map<unsigned,unsigned> tag2sid; // tag to symId
+        //typedef Ssym::Psym S; // Symbol object
+        auto s = [&ssym](auto symId)->Ssym::Psym& { return ssym.fpsym(symId); };
+        //auto r = [&ssym](auto symId)->RegId       { return ssym.psym(symId).regId(); };
+        auto spill=[&ssym](auto symId)  {ssym.spill.spill(symId);};
         auto dump=[&ssym]()->void           {return ssym.spill.dump();};
-        auto newscalar=[&ssym](unsigned id) {return ssym.add(Psym(id));};
-        auto newscalarRM=[&ssym,&s,&spill](unsigned id) {
-            ssym.add(Psym(id));
-            s(id).setREG(true);
-            spill(id);
+        auto decl = [&ssym](auto name) { return ssym.decl(name,Rb::Cls::scalar); };
+        auto declRM = [&ssym,&s,&spill](auto name) {
+            unsigned symId = ssym.decl(name);
+            s(symId).setREG(true);
+            spill(symId);
+            return symId;
         };
 
-        newscalar(1);                   // symId 1 declare
+        auto const s1 = decl("s1");     // symId 1 declare
         s(1).setREG(true);              // symId 1 --> value in register
-        spill(1);                       // symId 1 --> spill to mem (1 --> RM)
-        newscalarRM(2);                 // symId 2 --> RM (declare, ->REG, ->MEM)
-        newscalarRM(3);                 // symId 3 --> RM
-        newscalarRM(4);                 // symId 4 --> RM
-        s(1).setREG(true);
-        s(2).setREG(true);
-        cout<<"\nInitial spill begins with 2 stale slots:"<<endl;
+        spill(s1);                      // symId 1 --> spill to mem (1 --> RM)
+        cout<<"\tdecl(\"s1\"),setREG(true),spill... "<<s(s1)<<endl; dump();
+        auto const s2 = declRM("s2");   // symId 2 --> RM (declare, ->REG, ->MEM)
+        auto const s3 = declRM("s3");   // symId 3 --> RM
+        auto const s4 = declRM("s4");   // symId 4 --> RM
+        s(s1).setREG(true);
+        s(s2).setREG(true);
+        cout<<"\nInitial spill begins with 2 stale slots (s3 & s4):"<<endl;
         dump();
-        cout<<"\nrespill 2, new symbol 5, and 1:"<<endl;
+        cout<<"\n\trespill 2, new symbol 5, and respill 1..."<<endl;
         cout<<"\nrespill 2: ";
-        spill(2);
-        assert( s(2).getREG() && s(2).getMEM() );
-        dump(); for(unsigned i=1U; i<=4U; ++i) cout<<s(i)<<endl;
+        spill(s2);
+        assert( s(s2).getREG() && s(s2).getMEM() );
+        dump(); prtline("  ","Syms s1..s4 after spill(s2)",s(s1),s(s2),s(s3),s(s4));
         cout<<" new symbol 5";
-        newscalarRM(5); // spill(5); OHOH, spilled and not stale! maybe should not spill!
-        assert( s(5).getREG() && s(5).getMEM() );
-        dump(); for(unsigned i=1U; i<=5U; ++i) cout<<s(i)<<endl;
+        auto const s5 = declRM("s5"); // spill(5); OHOH, spilled and not stale! maybe should not spill!
+        assert( s(s5).getREG() && s(s5).getMEM() );
+        dump(); prtline("    ","Syms s1..s5 after declRM(\"s5\")",s(s1),s(s2),s(s3),s(s4),s(s5));
         cout<<" respill 1: ";
-        spill(1);
+        spill(s1);
         assert( s(1).getREG() && s(1).getMEM() );
-        dump(); for(unsigned i=1U; i<=5U; ++i) cout<<s(i)<<endl;
+        dump(); prtline("    ","Syms s1..s5 after spill(s1)",s(s1),s(s2),s(s3),s(s4),s(s5));
         cout<<endl;
-        THROW_UNLESS( chk_order(ssym,{1,2,3,4,5}), "Unexpected Spill Region Order" );
+        // THROW_UNLESS( chk_order(ssym,{1,2,3,4,5}), "Unexpected Spill Region Order" );
+        //safer...
+        THROW_UNLESS( chk_order(ssym,{s1,s2,s3,s4,s5}), "Unexpected Spill Region Order" );
         try{
             THROW_UNLESS( chk_order(ssym,{1,1,1,1,1}), "Unexpected Spill Region Order" );
         }catch(std::exception const& e){
@@ -1344,6 +1360,8 @@ void Tester::test2(){
         }
         cout<<"Continuing..."<<endl;
     }
+#endif
+#if 0
     TEST("gc a begin-spill hole and reuse");
     {
         Ssym ssym;
@@ -1354,9 +1372,9 @@ void Tester::test2(){
         auto s=[&ssym](unsigned symId)->S&  {return ssym.psym(symId);};
         auto spill=[&ssym](unsigned symId)  {ssym.spill.spill(symId);};
         auto dump=[&ssym]()->void           {return ssym.spill.dump();};
-        //auto newscalar=[&ssym](unsigned id) {return ssym.add(Psym(id));};
+        //auto newscalar=[&ssym](unsigned id) {return ssym.decl(Psym(var(id)));};
         auto newscalarRM=[&ssym,&s,&spill](unsigned id) {
-            ssym.add(Psym(id));
+            ssym.decl(Psym(var(id)));
             s(id).setREG(true);
             spill(id);
         };
@@ -1396,9 +1414,9 @@ void Tester::test2(){
         auto s=[&ssym](unsigned symId)->S&  {return ssym.psym(symId);};
         auto spill=[&ssym](unsigned symId)  {ssym.spill.spill(symId);};
         auto dump=[&ssym]()->void           {return ssym.spill.dump();};
-        //auto newscalar=[&ssym](unsigned id) {return ssym.add(Psym(id));};
+        //auto newscalar=[&ssym](unsigned id) {return ssym.decl(Psym(tmp(id)));};
         auto newscalarRM=[&ssym,&s,&spill](unsigned id) {
-            ssym.add(Psym(id));
+            ssym.decl(Psym(var(id)));
             s(id).setREG(true);
             spill(id);
         };
@@ -1430,7 +1448,7 @@ void Tester::test2(){
         auto s=[&ssym](unsigned symId)->S&  {return ssym.psym(symId);};
         auto spill=[&ssym](unsigned symId)  {ssym.spill.spill(symId);};
         auto dump=[&ssym]()->void           {return ssym.spill.dump();};
-        auto newscalar=[&ssym](unsigned id) {return ssym.add(Psym(id));};
+        auto newscalar=[&ssym](unsigned id) {return ssym.decl(Psym(var(id)));};
 
         newscalar(1);                   // symId 1
         s(1).setREG(true);              // say value is "in register"
@@ -1457,8 +1475,8 @@ void Tester::test2(){
         cout<<endl;
         THROW_UNLESS( chk_order(ssym,{1,4,3,2,5}), "Unexpected Spill Region Order" );
     }
-}
 #endif
+}
 #if 0
 void Tester::test3(){
     typedef DemoSymbStates Ssym;
@@ -1473,9 +1491,9 @@ void Tester::test3(){
         auto s=[&ssym](unsigned symId)->S&  {return ssym.psym(symId);};
         //auto spill=[&ssym](unsigned symId)  {ssym.spill.spill(symId);};
         auto dump=[&ssym]()->void           {return ssym.spill.dump();};
-        auto newscalar=[&ssym](unsigned id) {return ssym.add(Psym(id));};
+        auto newscalar=[&ssym](unsigned id) {return ssym.decl(Psym(var(id)));};
         //auto newscalarRM=[&ssym,&s,&spill](unsigned id) {
-        //    ssym.add(Psym(id));
+        //    ssym.decl(Psym(var(id)));
         //    s(id).setREG(true);
         //    spill(id);
         //};
@@ -1517,7 +1535,7 @@ void Tester::test3(){
         auto s=[&ssym](unsigned symId)->S&  {return ssym.psym(symId);};
         //auto spill=[&ssym](unsigned symId)  {ssym.spill.spill(symId);};
         auto dump=[&ssym]()->void           {return ssym.spill.dump();};
-        auto newscalar=[&ssym](unsigned id) {return ssym.add(Psym(id));};
+        auto newscalar=[&ssym](unsigned id) {return ssym.decl(Psym(var(id)));};
         for(unsigned i=1U; i<=10U; ++i) newscalar(i); // DECLARE 10 scalars
         for(unsigned i=1U; i<=10U; ++i){
             ssym.use4(i);                       // (max 4 registers)
@@ -1558,7 +1576,7 @@ void Tester::test3(){
         auto s=[&ssym](unsigned symId)->S&  {return ssym.psym(symId);};
         //auto spill=[&ssym](unsigned symId)  {ssym.spill.spill(symId);};
         auto dump=[&ssym]()->void           {return ssym.spill.dump();};
-        auto newscalar=[&ssym](unsigned id) {return ssym.add(Psym(id));};
+        auto newscalar=[&ssym](unsigned id) {return ssym.decl(Psym(var(id)));};
         for(unsigned i=1U; i<=10U; ++i) newscalar(i); // DECLARE 10 scalars
         for(unsigned i=1U; i<=10U; ++i){
             ssym.use4(i);                       // (max 4 registers)
@@ -1597,8 +1615,8 @@ void Tester::test3(){
 int main(int,char**){
     cout<<"======== test1() ==========="<<endl;
     Tester::test1();
-    //cout<<"======== test2() ==========="<<endl;
-    //Tester::test2();
+    cout<<"======== test2() ==========="<<endl;
+    Tester::test2();
     //cout<<"======== test3() ==========="<<endl;
     //Tester::test3();
     for(auto s: randNames) delete[](s);

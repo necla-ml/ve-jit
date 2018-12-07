@@ -98,7 +98,7 @@ AsmFmtCols::~AsmFmtCols(){
         this->write();
     }
 }
-static inline void throw_if_written( AsmFmtCols const* asmfmt, string const& cannot ){
+inline void throw_if_written( AsmFmtCols const* asmfmt, string const& cannot ){
     if( asmfmt->written ){
         throw runtime_error( string{"AsmFmtCols already written - cannot "} + cannot );
     }

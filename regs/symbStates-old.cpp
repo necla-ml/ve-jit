@@ -1,4 +1,4 @@
 
-#include "symbStates-old.hpp"
+#include "old/symbStates-old.hpp"
 
 template class SymbStates<>;

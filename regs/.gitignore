@@ -4,6 +4,9 @@
 *.vg
 .*.sw?
 mk.log
+oldRegSym
+oldSpill2
+oldSpill3
 testSymbStates
 testSpill
 testSymScopeUid

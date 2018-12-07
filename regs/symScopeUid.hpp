@@ -29,10 +29,12 @@
 class Regset;
 //template<class SYMBSTATES> class Regset;
 
+// fwd decls for friend status w/ ParSymbol or SymbStates
+class DemoSymbStates; // for development & test progs
 namespace ve {
-// fwd decl for friend status w/ ParSymbol and SymbStates
 template<class SYMBSTATES> class Spill;
 }
+
 namespace scope {
 
 // todo use this typedef in this file!
@@ -240,7 +242,7 @@ class ParSymbol : public BASE {
     typedef ParSymbol<BASE> Psym;
     friend BASE;
     friend SymbStates<ParSymbol<BASE>>;
-    friend class DemoSymbStates;
+    friend class ::DemoSymbStates; // for development & test progs
     template<class SYMSTATE> friend class detail::SymStates; // for testSymScopeUid.cpp
 
     virtual ~ParSymbol() {}
@@ -296,7 +298,7 @@ class SymbStates{
 
     //friend Base;
     //friend ve::Spill<SymbStates<Base>>;
-    friend ve::Spill<Ssym>;
+    friend ::ve::Spill<Ssym>;
     //template<class SYMBSTATES> friend class ::Regset;
     friend class ::Regset;
   protected:

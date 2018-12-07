@@ -21,7 +21,7 @@ struct ExecutablePage {
     void *addr() const {return page.mem;}
 
     JitPage const page;
-    static const verbosity=0; 
+    static const int verbosity=0; 
 };
 
 /** assemble a .S file to a .bin file and load it into an ExecutablePage */

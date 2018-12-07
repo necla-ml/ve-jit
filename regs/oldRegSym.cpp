@@ -42,8 +42,8 @@
  * Some register-state checkers need to be runtime-definable.
  * Ex. function arg registers
  */
-#include "regSymbol.hpp"
-#include "spill-impl.hpp"
+#include "old/regSymbol-old.hpp"
+#include "old/spill-impl.hpp"
 #include "throw.hpp"
 #include <cassert>
 #include <iostream>

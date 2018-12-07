@@ -1,18 +1,13 @@
 
-#include "regSymbol.hpp"
-#include "spill-impl.hpp"
+#include "spillable-base.hpp"
+#include "old/spill-impl.hpp"
 #include "throw.hpp"
 #include <cassert>
 #include <iostream>
 #include <map>
-#include <string>
-#include <cstdlib>         // rand
-#include <vector>
-#include <cstring>
 using namespace std;
-using namespace ve;
 
-class SpillableRegSym;
+class SpillableSym;
 class DemoSymbStates;
 
 struct Tester{
@@ -20,26 +15,6 @@ struct Tester{
     static void test2();
     static void test3();
 };
-
-// I don't care about register names, make them all tmpFoo.
-std::vector<char const*> randNames;
-char const* randName(){
-    {
-        std::ostringstream oss;
-        oss<<"tmp"
-            <<static_cast<char>('A'+std::rand()%26)
-            <<static_cast<char>('A'+std::rand()%26)
-            <<static_cast<char>('A'+std::rand()%26)
-            ;
-        char * s = new char[oss.str().size()+1];
-        strcpy(s, oss.str().c_str());
-        randNames.push_back(s);
-        using namespace std;
-        //cout<<" tmp["<<randNames.size()<<"]"; cout.flush();
-    }
-    return randNames.back();
-}
-
 
 /** Function arg symbols may not need spilling to a spill region.
  * 'C' ABI say where function args are in register and/or memory.
@@ -51,42 +26,35 @@ char const* randName(){
  * Spill memory max size is tracked so that function prologue can
  * set up a large-enough stack frame upon function entry.
  *
- * For assembly kernels, we also want to consider:
- *
- * - register args, including mask and vector[+len?]
- * - symbolic vs hardcoded register variables.
- *
  * ===
  *
  * For test purposes, we don't need any extras,
  * like preserved/reserved registers, 
  * or actual register mappings.
  *
- * An actual "Parent" RegSymbol class would add more features!
+ * An actual "Parent" symbol class would add more features!
  */
-class SpillableRegSym : public RegSymbol
+class SpillableSym : public SpillableBase
 {
   public:
-    friend class Tester;
-    static uint64_t nextTick(){
-        static uint64_t t=0U;
-        return ++t;
-    }
-    /** just declare a symbol [default: unassigned scalar register with tmp name].
-     * - A real program would provide useful names (here we autogenerate "tmpXYZ")
-     *   - perhaps same as the symbol object variable?
-     * - For demo, we also never need to assign an actual \c RegId,
-     *   - so printout says %XX unless register id is explicitly set
-     * */
-    SpillableRegSym(unsigned const symId, char const* name=nullptr, Reg_t const rtype=REG_T(FREE|SCALAR))
-        : RegSymbol(symId, nextTick(), (name? name: randName()), rtype)
-        {}
+      friend class Tester;
+
+      SpillableSym(/*DemoSymbStates *ssym,*/ unsigned const uid, int bytes, int align)
+          : SpillableBase(uid,bytes,align) /*, ssym(ssym), staleness(0)*/ {}
+
+      // /** map Region::symId to SpillableSym */
+      // DemoSymbStates *ssym;
+      //----
+      //void scope_enter() {assert(getActive()==false); setActive(true);}
+      //void scope_exit() {setActive(false);}
+      //bool isSpillable() const { return (REG&getWhere()); }
+      //Where w(int const i) const {return static_cast<Where>(i); }
 };
 
-/** Spillable objects need a way to convert symbol Ids into SpillableRegSym */
+/** Spillable objects need a way to convert symbol Ids into SpillableSym */
 struct DemoSymbStates {
-    typedef SpillableRegSym Psym;  // "parent" symbol class
-    map<unsigned,Psym> psyms;
+    typedef SpillableSym Psym;  // "parent" symbol class
+    map<unsigned,Psym> psyms;   // symId --> symbol info
 
     DemoSymbStates()
         : psyms(), spill(this) {}
@@ -190,7 +158,7 @@ bool chk_order(DemoSymbStates const& ssym, std::initializer_list<unsigned> const
 static int testNum=0;
 #define TEST(MSG) do{ \
     ++testNum; \
-    std::cout<<"@@@ TEST "<<testNum<<" @@@ "; \
+    std::cout<<"\n@@@ TEST "<<testNum<<" @@@ "; \
     if(MSG) std::cout<<MSG; \
     std::cout<<std::endl; \
 }while(0)
@@ -212,9 +180,9 @@ void Tester::test1(){
     {
         Ssym ssym;
         ASSERTTHROW( ssym.psym(1U).getActive() );
-        ssym.add(Psym(1U));  // symId 1, len=8, align=8 (64-bit register)
+        ssym.add(Psym(1U,8,8));  // symId 1, len=8, align=8 (64-bit register)
         assert( ssym.psym(1U).uid == 1U );
-        ssym.add(Psym(2U));  // symId 1, len=8, align=8 (64-bit register)
+        ssym.add(Psym(2U,8,8));  // symId 1, len=8, align=8 (64-bit register)
         assert( ssym.psym(2U).uid == 2U );
         cout<<ssym.psym(1U)<<endl;
         cout<<ssym.psym(2U)<<endl;
@@ -240,9 +208,9 @@ void Tester::test1(){
     {
         Ssym ssym;
         ASSERTTHROW( ssym.psym(1U).getActive() );
-        ssym.add(Psym(1U));  // symId 1, len=8, align=8 (64-bit register)
+        ssym.add(Psym(1U,8,8));  // symId 1, len=8, align=8 (64-bit register)
         assert( ssym.psym(1U).uid == 1U );
-        ssym.add(Psym(2U));  // symId 2, len=8, align=8 (64-bit register)
+        ssym.add(Psym(2U,8,8));  // symId 2, len=8, align=8 (64-bit register)
         assert( ssym.psym(2U).uid == 2U );
         ssym.spill.spill(1);
         ssym.spill.spill(2);
@@ -254,7 +222,7 @@ void Tester::test1(){
         auto s=[&ssym](unsigned symId)->Ssym::Psym &
         {return ssym.psym(symId);};
         ASSERTTHROW( s(1) );
-        ssym.add(Psym(1));  // symId 1
+        ssym.add(Psym(1,8,8));  // symId 1
         cout<<" add 1    : "<<s(1)<<endl;
         assert(s(1).getREG()==false);
         assert(s(1).getMEM()==false);
@@ -274,7 +242,7 @@ void Tester::test1(){
         assert(s(1).getMEM()==true);
         assert(s(1).getStale()==0);
         assert(ssym.spill.getBottom() == -8);
-        ssym.add(Psym(2));  // symId 2
+        ssym.add(Psym(2,8,8));  // symId 2
         s(2).setREG(true);   // say value is "in register"
         ssym.spill.spill(2);
         assert(s(1).getREG()==true);
@@ -295,10 +263,10 @@ void Tester::test1(){
         auto s=[&ssym](unsigned symId)->Ssym::Psym &
         {return ssym.psym(symId);};
 
-        ssym.add(Psym(1));  // symId 1
+        ssym.add(Psym(1,8,8));  // symId 1
         s(1).setREG(true);      // say value is "in register"
         ssym.spill.spill(1);
-        ssym.add(Psym(2));  // symId 2
+        ssym.add(Psym(2,8,8));  // symId 2
         s(2).setREG(true);      // say value is "in register"
         ssym.spill.spill(2);
         ssym.spill.dump(); cout<<s(1)<<endl; cout<<s(2)<<endl;
@@ -335,9 +303,9 @@ void Tester::test2(){
         auto s=[&ssym](unsigned symId)->S&  {return ssym.psym(symId);};
         auto spill=[&ssym](unsigned symId)  {ssym.spill.spill(symId);};
         auto dump=[&ssym]()->void           {return ssym.spill.dump();};
-        auto newscalar=[&ssym](unsigned id) {return ssym.add(Psym(id));};
+        auto newscalar=[&ssym](unsigned id) {return ssym.add(Psym(id,8,8));};
         auto newscalarRM=[&ssym,&s,&spill](unsigned id) {
-            ssym.add(Psym(id));
+            ssym.add(Psym(id,8,8));
             s(id).setREG(true);
             spill(id);
         };
@@ -385,9 +353,9 @@ void Tester::test2(){
         auto s=[&ssym](unsigned symId)->S&  {return ssym.psym(symId);};
         auto spill=[&ssym](unsigned symId)  {ssym.spill.spill(symId);};
         auto dump=[&ssym]()->void           {return ssym.spill.dump();};
-        //auto newscalar=[&ssym](unsigned id) {return ssym.add(Psym(id));};
+        //auto newscalar=[&ssym](unsigned id) {return ssym.add(Psym(id,8,8));};
         auto newscalarRM=[&ssym,&s,&spill](unsigned id) {
-            ssym.add(Psym(id));
+            ssym.add(Psym(id,8,8));
             s(id).setREG(true);
             spill(id);
         };
@@ -427,9 +395,9 @@ void Tester::test2(){
         auto s=[&ssym](unsigned symId)->S&  {return ssym.psym(symId);};
         auto spill=[&ssym](unsigned symId)  {ssym.spill.spill(symId);};
         auto dump=[&ssym]()->void           {return ssym.spill.dump();};
-        //auto newscalar=[&ssym](unsigned id) {return ssym.add(Psym(id));};
+        //auto newscalar=[&ssym](unsigned id) {return ssym.add(Psym(id,8,8));};
         auto newscalarRM=[&ssym,&s,&spill](unsigned id) {
-            ssym.add(Psym(id));
+            ssym.add(Psym(id,8,8));
             s(id).setREG(true);
             spill(id);
         };
@@ -461,7 +429,7 @@ void Tester::test2(){
         auto s=[&ssym](unsigned symId)->S&  {return ssym.psym(symId);};
         auto spill=[&ssym](unsigned symId)  {ssym.spill.spill(symId);};
         auto dump=[&ssym]()->void           {return ssym.spill.dump();};
-        auto newscalar=[&ssym](unsigned id) {return ssym.add(Psym(id));};
+        auto newscalar=[&ssym](unsigned id) {return ssym.add(Psym(id,8,8));};
 
         newscalar(1);                   // symId 1
         s(1).setREG(true);              // say value is "in register"
@@ -502,9 +470,9 @@ void Tester::test3(){
         auto s=[&ssym](unsigned symId)->S&  {return ssym.psym(symId);};
         //auto spill=[&ssym](unsigned symId)  {ssym.spill.spill(symId);};
         auto dump=[&ssym]()->void           {return ssym.spill.dump();};
-        auto newscalar=[&ssym](unsigned id) {return ssym.add(Psym(id));};
+        auto newscalar=[&ssym](unsigned id) {return ssym.add(Psym(id,8,8));};
         //auto newscalarRM=[&ssym,&s,&spill](unsigned id) {
-        //    ssym.add(Psym(id));
+        //    ssym.add(Psym(id,8,8));
         //    s(id).setREG(true);
         //    spill(id);
         //};
@@ -512,6 +480,7 @@ void Tester::test3(){
         for(unsigned i=1U; i<=10U; ++i){
             cout<<"\nUse symbol "<<i<<endl;     // assign register to 'i'
             ssym.use4(i);                       // (max 4 registers)
+            cout<<"\nsyms{"; for(unsigned i=1U; i<=10U; ++i){cout<<"\n\t"<<i<<"\t"<<s(i);} cout<<"\n}"<<endl;
             dump();
         }
         cout<<"All symbols:"<<endl;
@@ -546,7 +515,7 @@ void Tester::test3(){
         auto s=[&ssym](unsigned symId)->S&  {return ssym.psym(symId);};
         //auto spill=[&ssym](unsigned symId)  {ssym.spill.spill(symId);};
         auto dump=[&ssym]()->void           {return ssym.spill.dump();};
-        auto newscalar=[&ssym](unsigned id) {return ssym.add(Psym(id));};
+        auto newscalar=[&ssym](unsigned id) {return ssym.add(Psym(id,8,8));};
         for(unsigned i=1U; i<=10U; ++i) newscalar(i); // DECLARE 10 scalars
         for(unsigned i=1U; i<=10U; ++i){
             ssym.use4(i);                       // (max 4 registers)
@@ -587,16 +556,18 @@ void Tester::test3(){
         auto s=[&ssym](unsigned symId)->S&  {return ssym.psym(symId);};
         //auto spill=[&ssym](unsigned symId)  {ssym.spill.spill(symId);};
         auto dump=[&ssym]()->void           {return ssym.spill.dump();};
-        auto newscalar=[&ssym](unsigned id) {return ssym.add(Psym(id));};
+        auto newscalar=[&ssym](unsigned id) {return ssym.add(Psym(id,8,8));};
         for(unsigned i=1U; i<=10U; ++i) newscalar(i); // DECLARE 10 scalars
         for(unsigned i=1U; i<=10U; ++i){
             ssym.use4(i);                       // (max 4 registers)
         }
         dump();
         cout<<"All symbols:"<<endl; for(unsigned i=1U; i<=10U; ++i) cout<<s(i)<<endl;
+        THROW_UNLESS( chk_order(ssym,{1,2,3,4,5,6}), "Unexpected Spill Region Order" );
 
         cout<<" 5 and 8 symbols forgotten (but still active)"<<endl;
         s(5).setREG(false).setMEM(false);
+        s(8).setREG(false).setMEM(false);
         dump();
         cout<<"All symbols:"<<endl; for(unsigned i=1U; i<=10U; ++i) cout<<s(i)<<endl;
 
@@ -649,8 +620,6 @@ int main(int,char**){
     Tester::test2();
     cout<<"======== test3() ==========="<<endl;
     Tester::test3();
-    for(auto s: randNames) delete[](s);
-    randNames.clear();
     cout<<"\nGoodbye - " __FILE__ " ran "<<testNum<<" tests"<<endl;
     return 0;
 }

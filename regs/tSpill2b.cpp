@@ -350,7 +350,7 @@ class RegsetScopedSpillable {
         ret.clear();
         for(auto const r: regset){
             auto const s = sr.strong(r);
-            if (s != S2R::sBad){
+            if (s == S2R::sBad){
                 ret.push_back({r,s});
             }
         }

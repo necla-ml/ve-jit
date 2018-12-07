@@ -196,7 +196,6 @@ bool chk_order(DemoSymbStates const& ssym, std::initializer_list<unsigned> const
 //}//scope::
 using namespace scope;
 
-
 #include <typeinfo>
 void Tester::test1(){
     typedef DemoSymbStates Ssym;
