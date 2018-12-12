@@ -83,7 +83,7 @@ regSymbol2.chk: regSymbol2.hpp # see if the header makes sense: what is missing?
 	rm -f $<.o; touch $@
 spill2-impl.chk: spill2-impl.hpp # see if the header makes sense: what is missing?
 	$(CXX) -o $<.o $(CXXFLAGS) $(C11X) -c $<
-	rm -f %<.o; touch $@
+	rm -f $<.o; touch $@
 oldSymbStates.chk: oldSymbStates-hdr.cpp old/symbStates-old.hpp throw.hpp
 	$(CXX) -o $<.o $(CXXFLAGS) -std=gnu++11 -c $<
 	rm -f $<.o; touch $@

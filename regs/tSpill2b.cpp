@@ -41,6 +41,8 @@ struct Tester{
     static void test3();
 };
 
+struct RegsetId { size_t rsid; };
+
 /** Add name, t_decl, t_sym (last use) to a symbol.
  * <B>no tight register association yet</B>
  */
@@ -59,6 +61,19 @@ class Symbol :
 
     void init(char const* name, uint64_t const tick){
         name_ = name;
+        rsid_ = RegsetId{0}; // scalar
+        t_decl = tick;
+        t_sym = tick;
+    }
+    void init(char const* name, uint64_t const tick, Rb::Cls const cls){
+        name_ = name;
+        rsid_ = RegsetId{(cls==Rb::Cls::vector? size_t{1}: cls==Rb::Cls::mask? size_t{2}: /*scalar*/size_t{0})};
+        t_decl = tick;
+        t_sym = tick;
+    }
+    void init(char const* name, uint64_t const tick, RegsetId const rsid){
+        name_ = name;
+        rsid_ = rsid;
         t_decl = tick;
         t_sym = tick;
     }
@@ -76,26 +91,18 @@ class Symbol :
         , t_decl(0U)
         , t_sym(0U)
         //, regId_(invalidReg())
-        { init(arg...); std::cout<<"+\""<<name_<<"\",t"<<t_sym; }
+        { init(arg...);
+            size_t const rsid = rsid_.rsid;
+            if(rsid<=2) std::cout<<(rsid==0?"S":rsid==1?"V":rsid==2?"VM":"");
+            else std::cout<<rsid;
+            std::cout<<"\""<<name_<<"\",t"<<t_sym; }
 
-    char const* name() const {return name_;}
-    //RegId regId() const      {return regId_;}
-    uint64_t tDecl() const   {return t_decl;}
-    uint64_t tSym() const    {return t_sym;} // useful?
+    char const* name() const  {return name_;}
+    //RegId regId() const       {return regId_;}
+    uint64_t tDecl() const    {return t_decl;}
+    uint64_t tSym() const     {return t_sym;}
+    RegsetId regsetId() const {return rsid_;}
   protected:
-#if 0 // No. Not here. (more related to s2r.hpp I think)
-    Symbol& setReg(RegId const rid,uint64_t const tick){         ///< init or copy symbol --> register
-        if(valid(rid)){
-            regId_ = rid;
-            t_sym = tick;
-            assert( tick >= t_sym );
-            Psym::setREG(true);
-        }else{
-            regId_ = invalidReg();
-            Psym::setREG(false);
-        }
-    }
-#endif
     Symbol& tRead(uint64_t const tick){      ///< annotate register read event
         assert(getActive() /*&& valid(regId_)*/ && Psym::getREG() && "symbol not in register?");
         assert( tick >= t_sym );
@@ -123,9 +130,9 @@ class Symbol :
             }
         }
 
-
   private:
     char const* name_;          ///< declared symbol name
+    RegsetId rsid_;               ///< register class hint
     uint64_t t_decl;            ///< declaration time tick (set once, even inside loop)
     uint64_t t_sym;             ///< last-used tick (set every write or read op)
     // We DO NOT have RegId here --- s2r.hpp will now handle register mapping?
@@ -134,8 +141,12 @@ class Symbol :
 };
 
 std::ostream& operator<<(std::ostream& os, Symbol const& x){
-    os<<" Rs{"<<x.name_<<",t"<<x.t_decl<<",u"<<x.t_sym<<",r";
-    //if(x.regId_ == invalidReg()) os<<"?";
+    os<<" Rs{"<<x.name_<<",t"<<x.t_decl<<",u"<<x.t_sym<<",";//<<x.cls_;
+    size_t const rsid = x.rsid_.rsid;
+    if(rsid<=2) os<<(rsid==0?"S":rsid==1?"V":"VM");
+    else os<<rsid;
+    os<<"\""<<x.name_<<"\",t"<<x.t_sym;
+    //if(x.regId_ == invalidReg()) os<<"?";             // we DO NOT maintain regid here
     //else                         os<<(int)x.regId_;
     os<<"}'"<<dynamic_cast<Symbol::Psym const&>(x)<<"'"<<endl;
     return os;
@@ -468,18 +479,38 @@ class DemoSymbStates
     auto & fpsym(unsigned s)      { return Ssym::fpsym(s);}
 
   public: // change!!!
-    /** DECLARE a symbol in current scope. \return symbol Id */
+    /** DECLARE a symbol in current scope. \return symbol Id.
+     * Examples:
+     * newsym("x")
+     * newsym("x",Rb::Cls::vector)
+     * newsym("x",RegsetId const rsid) <-- this one must also "assign" the register.
+     */
     template<typename... Arg> // Arg actually unused
-        inline unsigned newsym(
+        inline auto newsym(
                 char const* name
-                //, Arg&&... arg
-                ) {
-            auto const symId = Ssym::newsym( name, nextTick() );
-            // Ex. call Ssym::Psym(symId,scope,name,tick);
-            // i.e. Symbol constructor
+                , Arg&&... arg
+                ) -> decltype( Psym::uid ) // C++11 *should* deduce 'auto', but sometimes needs help
+        {
+            auto const symId = Ssym::newsym( name, nextTick(), arg... );
+            // Ex. call Ssym::Psym(symId,scope,name,tick); i.e. Symbol constructor
+            // do NOT call assign to get a register (C output does not need register assignment)
             return symId;
         }
-    struct RegsetId { size_t rsid; };
+    /** specialization with error-check for RegsetId arg. \throw if bad. */
+    template<typename... Arg> // Arg actually unused
+        inline auto newsym(
+                char const* name
+                , RegsetId const rsid
+                , Arg&&... arg
+                ) -> decltype( Psym::uid ) // C++11 *should* deduce 'auto', but sometimes needs help
+        {
+            if(!(rsid.rsid < regsets.size()))
+                THROW("newsym(\""<<name<<"\",RegsetId,...) RegsetId "<<rsid.rsid<<" out of range");
+            auto const symId = Ssym::newsym( name, nextTick(), arg... );
+            // Ex. call Ssym::Psym(symId,scope,name,tick); i.e. Symbol constructor
+            // do NOT call assign to get a register (C output does not need register assignment)
+            return symId;
+        }
     /** Add another pool of registers. \return handle to Regset */
     struct RegsetId add(Regset &&rs) {
         regsets.push_back(RegsetScopedSpillable(rs,&this->s2r,(Ssym*)this));
@@ -609,6 +640,7 @@ using namespace scope;
 
 #include <typeinfo>
 void Tester::test1(){
+    typedef RegisterBase Rb;
     typedef DemoSymbStates Ssym;
     typedef Ssym::Psym Psym;
     TEST("Construct some symbols");
@@ -760,19 +792,28 @@ void Tester::test1(){
         delete psr;
         delete psss;
     }
-    TEST("Construct some symbols and assign to registers");
+    TEST("various Symbol constructors");
     {
         Ssym ssym;
-        auto x = ssym.newsym("x");
+        auto x = ssym.newsym("x");                      // defaults to "scalar"
         assert(x==1U);
         //ASSERTTHROW( ssym.psym(1U).getActive() );
-        auto y = ssym.newsym("y");
+        auto y = ssym.newsym("y",Rb::Cls::vector);      // override as "vector"
         assert(y==2U);
+        try{
+            ssym.newsym("z",RegsetId{3}); // 3 is out-of-range!
+        }catch(...){ cout<<"Good, caught bad RegsetId"; }
+        auto z = ssym.newsym("z",RegsetId{2});          // custom regset (here, just "vector mask")
+        assert(y==2U);
+        // ??? vector + vector length should also be possible
+        // TODO add vl() vector length to Symbol class, w/ dynamic_vl flag to allow setVl()
+        //      [default should be vl=256 dynamic_vl=false]
         cout<<endl;
         assert( ssym.psym(1U).symId() == 1U );
         assert( ssym.psym(2U).symId() == 2U );
-        cout<<ssym.psym(1U)<<endl; cout.flush();
-        cout<<ssym.psym(2U)<<endl; cout.flush();
+        cout<<ssym.psym(x)<<endl; cout.flush();
+        cout<<ssym.psym(y)<<endl; cout.flush();
+        cout<<ssym.psym(z)<<endl; cout.flush();
     }
 }
 
