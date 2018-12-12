@@ -88,7 +88,7 @@ class S2R
     S2R()               = default;
     S2R(S2R const&)     = delete;
   public:
-    void dump(); // to cout
+    void dump() const; // to cout
     //@{
     /** Symbols have 4 disjoint states: strong, weak, unmapped, or
      * absent (ie not in our data structure).  We retain unmapped
@@ -119,6 +119,7 @@ class S2R
     Sid                     strong (RegId const r) const; ///< \return sBad if none
     std::vector<Sid> const& weaks  (RegId const r) const; ///< \return empty vector if none
     std::vector<Sid>        old    (RegId const r) const; ///< \return empty vector if none
+    std::unordered_map<Rid,Sid> const& strongs() const {return strong_;}
     //@}
 
   public: // modifying operations
@@ -358,7 +359,7 @@ S2R::mkWeak(Sid const s){
     return rid;
 }
 #endif
-void S2R::dump() {
+void S2R::dump() const {
     std::cout<<" Reg   Syms..."<<std::endl;
     std::unordered_set<Rid> rDone;
     std::unordered_set<Sid> ss; // Sids appear once

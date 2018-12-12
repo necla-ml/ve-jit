@@ -231,6 +231,7 @@ class RegSymbol :
 
 inline RegSymbol& RegSymbol::setReg(RegId const rid, uint64_t const tick)
 {
+    std::cout<<" setReg(rid,tick)";
     if( valid(rid) ){
         assert( tick >= t_sym );
         //t_sym = tick;
@@ -245,6 +246,7 @@ inline RegSymbol& RegSymbol::setReg(RegId const rid, uint64_t const tick)
 }
 inline RegSymbol& RegSymbol::setReg(RegId const rid)
 {
+    std::cout<<" setReg(rid)";
     if( valid(rid) ){
         auto const tick = nextTick();
         assert( tick >= t_sym );

@@ -27,6 +27,7 @@
 
 //fwd decl for friendship only
 class Regset;
+class RegsetScopedSpillable;
 //template<class SYMBSTATES> class Regset;
 
 // fwd decls for friend status w/ ParSymbol or SymbStates
@@ -226,6 +227,7 @@ class SymScopeUid {
     /** sorted symIds of all symbols in active scopes */
     std::vector<unsigned> symIdAnyScopeSorted() const;
     std::vector<unsigned> symIdStaleSorted() const;
+    std::vector<unsigned> scopeSymbols() const;
 };
 
 }//detail::
@@ -287,7 +289,7 @@ class ParSymbol : public BASE {
  */
 //template<class BASE/*=ExBaseSym*/> //, bool ordered/*=0*/ >
 template<class PARSYMBOL>
-class SymbStates{
+class SymbStates {
   public:
     //typedef ParSymbol<BASE> Psym;
     //typedef SymbStates<BASE> Ssym;
@@ -301,6 +303,7 @@ class SymbStates{
     friend ::ve::Spill<Ssym>;
     //template<class SYMBSTATES> friend class ::Regset;
     friend class ::Regset;
+    friend class ::RegsetScopedSpillable;
   protected:
     detail::SymScopeUid ssu;
     /** symbol uid --> external symbol state.  This data structure \em owns all the
@@ -349,6 +352,8 @@ class SymbStates{
     /** global sets of active/stale symbols */
     std::vector<unsigned> symIdAnyScopeSorted() const {return ssu.symIdAnyScopeSorted();}
     std::vector<unsigned> symIdStaleSorted() const {return ssu.symIdStaleSorted();}
+    /** just the symbols in current [innermost] scope */
+    std::vector<unsigned> scopeSymbols() const {return ssu.scopeSymbols();}
 
     /** tricky behavior, try to stick with begin/end_scope */
     void activate_scope(unsigned const stale) {
@@ -389,7 +394,7 @@ class SymbStates{
         assert( ret == ssu.active(symId) );
         return ret;
     }
-    /** Look up symId, returning ParSymbol<BASE> */
+    /** Look up symId, returning ParSymbol<BASE>. \throw is symId is not found. */
     Psym const& psym(unsigned const symId) const {
         auto const psym = syms.find(symId);
         if( psym == syms.end() ){
@@ -435,7 +440,7 @@ class SymbStates{
         return scop_psyms;
     }
 #endif
-  protected:
+  public:
     Psym      & psym(unsigned const symId)       {
         auto const psym = syms.find(symId);
         if( psym == syms.end() ){
@@ -444,6 +449,7 @@ class SymbStates{
         assert( psym != syms.end() );
         return psym->second;
     }
+  protected:
     /** "friend psym", to help compiler know the non-const psym is really needed :( */
     Psym      & fpsym(unsigned const symId)      {
         auto const psym = syms.find(symId);
@@ -510,6 +516,12 @@ inline std::vector<unsigned> detail::SymScopeUid::symIdAnyScopeSorted() const {
             ret.push_back(sym);
         }
     }
+    std::sort(ret.begin(), ret.end());
+    return ret;
+}
+inline std::vector<unsigned> detail::SymScopeUid::scopeSymbols() const {
+    HashSet const& curSyms = scopes.front().syms;
+    std::vector<unsigned> ret(curSyms.begin(), curSyms.end());
     std::sort(ret.begin(), ret.end());
     return ret;
 }

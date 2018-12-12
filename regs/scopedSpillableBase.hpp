@@ -22,7 +22,7 @@ class ScopedSpillableBase; // active state and symbol id to be managed by scope:
 class RegSymbol;           // fwd decl of testing class (friend)
 
 /** This simplifies \c SpillableBase by removing 'active' and 'uid' from
- * a spillable symbols domain.
+ * the spillable symbols domain.
  *
  *
  * In contrast to \c SpillableBase, for \c ScopedSpillableBase the uid is assigned by
