@@ -968,6 +968,49 @@ void Tester::test1(){
         // TODO add vl() vector length to Symbol class, w/ dynamic_vl flag to allow setVl()
         //      [default should be vl=256 dynamic_vl=false]
     }
+    TEST("begin_/end_scope test with register assignments");
+    {
+        DSS ssym;
+        cout<<"ssym.regsets.size() = "<<ssym.regsets.size()<<endl;
+        for(size_t i=0; i<ssym.regsets.size(); ++i){
+            cout<<"ssym.regsets["<<i<<"]"<<endl;
+            cout<<ssym.regsets[i]<<endl;
+        }
+        auto s=[&ssym](unsigned symId) {return ssym.psym(symId);};
+        auto assign=[&ssym](unsigned symId) {return ssym.assign(symId);};
+        unsigned x,y,z;
+        cout<<assign(x=ssym.newsym("x"))<<endl; // defaults to "scalar"
+        assert(x==1U);
+        //ASSERTTHROW( ssym.psym(1U).getActive() );
+
+        auto yscope = ssym.begin_scope();
+        cout<<assign(y = ssym.newsym("y",Rb::Cls::vector))<<endl; // override as "vector"
+        assert(y==2U);
+
+        auto zscope = ssym.begin_scope();
+        try{
+            ssym.newsym("z",RegsetId{3}); // 3 is out-of-range!
+        }catch(...){ cout<<"Good, caught bad RegsetId"<<endl; }
+        cout<<assign(z = ssym.newsym("z",RegsetId{2}))<<endl; // custom regset (here, just "vector mask")
+        cout<<"Symbols x,y,z = "<<x<<","<<y<<","<<z<<endl;
+        cout<<s(x)<<s(y)<<s(z)<<endl;
+        ssym.s2r.dump();
+        assert( s(x).getActive() && s(y).getActive() && s(z).getActive() );
+        ssym.end_scope(zscope);
+
+        cout<<s(x)<<s(y)<<s(z)<<endl;
+        ssym.s2r.dump();
+        assert( s(x).getActive() && s(y).getActive() && !s(z).getActive() );
+        ssym.end_scope(yscope);
+
+        // at this point only x is active.
+        cout<<s(x)<<s(y)<<s(z)<<endl;
+        ssym.s2r.dump();
+        assert( s(x).getActive() && !s(y).getActive() && !s(z).getActive() );
+        // ??? vector + vector length should also be possible
+        // TODO add vl() vector length to Symbol class, w/ dynamic_vl flag to allow setVl()
+        //      [default should be vl=256 dynamic_vl=false]
+    }
 }
 
 int main(int,char**){
