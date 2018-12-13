@@ -143,6 +143,15 @@ class S2R
      */ 
     void mkStrong(Sid const s, RegId const r);
 
+    /** Given a symbol \c s ensure its register pairing is weak.
+     * - If in \c strong_, the symbol moves \c weak_ [appended]
+     * - If already \c weak_, do nothing.  [ ? reposition at end ? ]
+     * \throw if \c s has no register info or is unmapped.
+     * \return \c s's paired register.
+     * When paired with some 'end_scope' all scope symbols transition strong-->weak
+     */
+    RegId mkWeak(Sid const s);
+
     /** unmap symbol \c s from any strong/weak register associations.
      * - if already \c isOld(s) or \c s has no info, do nothing.
      * - else move \c (s,\f$r_prev\f$) to unmapped symbol, removing its
@@ -176,15 +185,6 @@ class S2R
 #if 0
     /** return a sorted list of all RegId for which we have some information. */
     std::vector<RegId> allKnownRegs() const;
-#endif
-#if 0 // Perhaps the only user-visible reason to mkWeak is mkStrong...
-    /** Given a symbol \c s ensure its register pairing is weak.
-     * - If in \c strong_, the symbol moves \c weak_ [appended]
-     * - If already \c weak_, do nothing.  [ ? reposition at end ? ]
-     * \throw if \c s has no register info or is unmapped.
-     * \return \c s's paired register.
-     */
-    RegId mkWeak(Sid const s);
 #endif
   public:
     /** \group generate compile-time errors if use RegId instead of Sid arg
@@ -343,31 +343,37 @@ S2R::unmap(Sid const s){
     assert(!isWeak(s) );
     return r;
 }
-#if 0
+#if 1
 inline RegId
 S2R::mkWeak(Sid const s){
     auto const sr = sReg_.find(s);
     if (sr==sReg_.end())
-        THROW("Cannot mkWeak(unknown symbol "<<s);
+        THROW("Cannot mkWeak(unknown symbol "<<s<<")");
     if (isOld(s))
-        THROW("Cannot mkWeak(unmapped symbol "<<s);
+        THROW("Cannot mkWeak(unmapped symbol "<<s<<")");
     RegId rid = sr->second;
     if (isStrong(s)){
         strong_.erase(rid);
-        weak_[rid].push_back(rid);
+        weak_[rid].push_back(s);
+        sWeak_.insert(s);
+        assert( !isStrong(s) );
+        assert( isWeak(s) );
+        assert( !hasStrong(rid) );
+        assert( hasWeak(rid) );
+        //std::cout<<" Yay. Sid "<<s<<" is now weakly attached to "<<rid<<std::endl;
     }
     return rid;
 }
 #endif
 void S2R::dump() const {
-    std::cout<<" Reg   Syms..."<<std::endl;
+    std::cout<<" Reg      Syms... (S~Strong, W~Weak, O~Old)"<<std::endl;
     std::unordered_set<Rid> rDone;
     std::unordered_set<Sid> ss; // Sids appear once
     for(auto const& rs: strong_){
         Rid const r = rs.first;
         Sid const s = rs.second;
         ss.insert(s);
-        std::cout<<std::setw(4)<<r<<" S "<<std::setw(4)<<s;
+        std::cout<<std::setw(4)<<r<<" "<<std::setw(4)<<asmname(r)<<" S "<<std::setw(4)<<s;
         assert( isStrong(s) );
         assert( !isWeak(s) );
         assert( !isOld(s) );
@@ -401,17 +407,18 @@ void S2R::dump() const {
     for (auto const& rw: weak_){
         Rid const r = rw.first;
         if (rDone.count(r) == 0){
-            std::cout<<std::setw(4)<<r<<" W ";
+            std::cout<<std::setw(4)<<r<<" "<<std::setw(4)<<asmname(r)<<" W ";
             std::cout.flush();
-            auto const& ws = rw.second;
+            auto const& ws = rw.second;         // vector<Sid>
             for(auto const wk: ws){
                 std::cout<<" "<<std::setw(3)<<wk;
                 std::cout.flush();
                 assert( ss.count(wk) == 0 );
-                assert( !isStrong(wk) );
-                assert( isWeak(wk) );
-                assert( !isOld(wk) );
                 ss.insert(wk);
+                assert( !isStrong(wk) );
+                assert( !isOld(wk) );
+                //std::cout<<std::endl<<" isWeak("<<wk<<") ??? "; std::cout.flush();
+                assert( isWeak(wk) );
             }
             auto oldr = old(r);
             if( oldr.size() ){
@@ -435,7 +442,7 @@ void S2R::dump() const {
         assert( sr != sReg_.end() );
         Rid const r = sr->second;
         if (rDone.count(r) == 0){
-            std::cout<<std::setw(4)<<r<<" O "<<std::setw(4)<<s;
+            std::cout<<std::setw(4)<<r<<" "<<std::setw(4)<<asmname(r)<<" O "<<std::setw(4)<<s;
             std::cout.flush();
             assert( ss.count(s) == 0 );
             assert( !isStrong(s) );
@@ -446,6 +453,7 @@ void S2R::dump() const {
             std::cout<<std::endl; std::cout.flush();
         }
     }
+    std::cout<<std::endl;
 }
 //
 // ------------------------------- done header : self-test follows -------------------------

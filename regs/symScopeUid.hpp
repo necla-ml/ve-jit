@@ -28,6 +28,7 @@
 //fwd decl for friendship only
 class Regset;
 class RegsetScopedSpillable;
+class Symbol;
 //template<class SYMBSTATES> class Regset;
 
 // fwd decls for friend status w/ ParSymbol or SymbStates
@@ -244,6 +245,7 @@ class ParSymbol : public BASE {
     typedef ParSymbol<BASE> Psym;
     friend BASE;
     friend SymbStates<ParSymbol<BASE>>;
+    friend SymbStates<Symbol>;
     friend class ::DemoSymbStates; // for development & test progs
     template<class SYMSTATE> friend class detail::SymStates; // for testSymScopeUid.cpp
 
@@ -318,11 +320,12 @@ class SymbStates {
     void end_scope() {
         assert( !ssu.scopes.empty() );
         for(auto symId: ssu.scopes.front().syms){ // from current scope
-            auto const& psym = syms.find(symId);
-            assert( psym != syms.end() );
-            //assert(psym.getActive() == true); // you can delsym(symId)
-            std::cout<<" end"<<symId<<" "<<psym->second<<std::endl; std::cout.flush();
-            psym->second.setActive(false);
+            auto const& found = syms.find(symId);
+            assert( found != syms.end() );
+            //assert(found.getActive() == true); // you can delsym(symId)
+            std::cout<<" end"<<symId<<" "<<found->second<<std::endl; std::cout.flush();
+            PARSYMBOL & psym = found->second;
+            psym.setActive(false);
         }
         // next line last to retain more invariants
         ssu.end_scope(); // NOW [after deactivating] move ssu current scope to ssu.stales

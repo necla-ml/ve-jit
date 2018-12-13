@@ -64,18 +64,21 @@ class Symbol :
         rsid_ = RegsetId{0}; // scalar
         t_decl = tick;
         t_sym = tick;
+        std::cout<<" Rs::init(name,tick)..rsid_="<<rsid_.rsid;
     }
     void init(char const* name, uint64_t const tick, Rb::Cls const cls){
         name_ = name;
         rsid_ = RegsetId{(cls==Rb::Cls::vector? size_t{1}: cls==Rb::Cls::mask? size_t{2}: /*scalar*/size_t{0})};
         t_decl = tick;
         t_sym = tick;
+        std::cout<<" Rs::init(name,tick,Cls)..rsid_="<<rsid_.rsid;
     }
     void init(char const* name, uint64_t const tick, RegsetId const rsid){
         name_ = name;
         rsid_ = rsid;
         t_decl = tick;
         t_sym = tick;
+        std::cout<<" Rs::init(name,tick,rsid)..rsid_="<<rsid_.rsid;
     }
 
     // create Symbol active, but no assigned register
@@ -91,11 +94,13 @@ class Symbol :
         , t_decl(0U)
         , t_sym(0U)
         //, regId_(invalidReg())
-        { init(arg...);
+        {
+            init(arg...);
             size_t const rsid = rsid_.rsid;
             if(rsid<=2) std::cout<<(rsid==0?"S":rsid==1?"V":rsid==2?"VM":"");
             else std::cout<<rsid;
-            std::cout<<"\""<<name_<<"\",t"<<t_sym; }
+            std::cout<<"\""<<name_<<"\",t"<<t_sym;
+        }
 
     char const* name() const  {return name_;}
     //RegId regId() const       {return regId_;}
@@ -338,6 +343,7 @@ class RegsetScopedSpillable {
           , sr(psr)
           , sss(psss)
     {}
+    friend std::ostream& operator<<(std::ostream& os, RegsetScopedSpillable const& rss);
 
   protected:
     /** \group register retrieval/sort functions
@@ -449,6 +455,14 @@ class RegsetScopedSpillable {
         // strong- or weak-assigned symbols here MUST have getREG state true
     }
 };
+inline std::ostream& operator<<(std::ostream& os, RegsetScopedSpillable const& rss){
+    os<<" RegsetScopedSpillable={";
+    for(auto const r: rss.regset){
+        os<<" "<<r;
+    }
+    os<<" }"<<std::endl;
+    return os;
+}
 
 class Counters {
   public:
@@ -473,12 +487,19 @@ class DemoSymbStates
     typedef Symbol Ppsym;
     typedef Symbol Rs;
 
+    // Scope support functions ------------------------------------------------
+    // psym/fpsym is ParSymbol<ScopedSpillableBase> with:
+    //   ParSymbol:           uid/symId(), scope, getActive,
+    //   ScopedSpillableBase: getREG, getMEM
+    //   (Spillable:          getBytes, getAlign)
+    // Ssym::syms = SymbStates::syms is (Symbol) map for:
+    //   name, RegId, staleness, 
   public: // republish
     auto const& psym(unsigned s) const { return Ssym::psym(s);}
     auto & psym(unsigned s)       { return Ssym::psym(s);}
     auto & fpsym(unsigned s)      { return Ssym::fpsym(s);}
 
-  public: // change!!!
+  public:
     /** DECLARE a symbol in current scope. \return symbol Id.
      * Examples:
      * newsym("x")
@@ -506,11 +527,55 @@ class DemoSymbStates
         {
             if(!(rsid.rsid < regsets.size()))
                 THROW("newsym(\""<<name<<"\",RegsetId,...) RegsetId "<<rsid.rsid<<" out of range");
-            auto const symId = Ssym::newsym( name, nextTick(), arg... );
+            auto const symId = Ssym::newsym( name, nextTick(), rsid, arg... );
             // Ex. call Ssym::Psym(symId,scope,name,tick); i.e. Symbol constructor
             // do NOT call assign to get a register (C output does not need register assignment)
             return symId;
         }
+#if 0 // where did this one come from?
+    template<typename... Arg>
+        unsigned newsym(Arg&&... arg){
+            auto const symId = Ssym::newsym(arg..., nextTick());
+            return symId;
+        }
+#endif
+    struct AutoScope { // Ssym "scoped symbol" is scope::SymbStates<Symbol>
+        AutoScope(DemoSymbStates& dss) : dss(dss), scope_(dss.begin_scope()) {}
+        /** update s2r (sym:reg strongs-->weaks) and
+         * then end_scope (sym:scope --> stale scope) */
+        ~AutoScope() { dss.end_scope( scope_ ); }
+        unsigned scope() const {return scope_;}
+      private:
+        DemoSymbStates & dss;
+      public:
+        unsigned const scope_;
+    };
+    /** lifetime must not exceed that of DemoSymbStates.
+     * Usage:
+     * ```
+     * // DemoSymbStates dss;
+     * {
+     *     auto autoscope = dss::mkScope();
+     *     dss::newsym("x",...); // etc.
+     * } // autoscope invokes end_scope for you automatically. "x" moves to a stale scope
+     */
+    AutoScope mkScope() {return AutoScope(*this);}
+  private:
+    /** release any strong registers associated with \c symids */
+    void mkWeak( std::vector<unsigned> symids ){
+        //std::cout<<" mkWeak!"; std::cout.flush();
+        for(auto const s: symids){
+            //std::cout<<" psym type "<<typeid(psym(s)).name()<<std::endl; // "6Symbol"
+            if(s2r.isStrong(s)) {
+                //std::cout<<" mkWeak("<<s<<")"; std::cout.flush();
+                s2r.mkWeak(s);
+            }
+            //std::cout<<" weak("<<psym(s).name()<<psym(s).rid()<<")"
+        }
+        std::cout<<endl;
+    }
+  public:
+    // end scope-related fns --------------------------------------------------
     /** Add another pool of registers. \return handle to Regset */
     struct RegsetId add(Regset &&rs) {
         regsets.push_back(RegsetScopedSpillable(rs,&this->s2r,(Ssym*)this));
@@ -522,14 +587,25 @@ class DemoSymbStates
      * (and spilling them to memory).
      *
      * 'C' code should not need to assign, since registers and spilling are not required.
+     *
+     * At declaration time \c newsym will set the class, or rather a RegsetId hint, but
+     * will not actually make a register assignment (modifying \c s2r).
      */
+    RegId assign(unsigned sid){ // default = scalar reg
+        assert( psym(sid).getActive() ); // only active symbols can be strong-assigned a register
+        return assign(sid, psym(sid).regsetId());
+    }
     RegId assign(unsigned sid, RegsetId const rsid){ // default = scalar reg
+        assert( psym(sid).getActive() ); // only active symbols can be strong-assigned a register
         static std::vector<RegId> avail; // XXX thread_local
         auto &rs = regsets.at(rsid.rsid);
         rs.getAvail(avail);
         assert( !avail.empty() );
-        rs.mkStrong(sid, avail.at(0));
+        RegId ret = avail.at(0);
+        rs.mkStrong(sid, ret);
+        return ret;
     }
+#if 0
     RegId assign(unsigned sid, Rb::Cls const cls ){ // use one of the predefined Regsets
         RegsetId rsid;
         switch((int)cls){
@@ -540,14 +616,8 @@ class DemoSymbStates
         };
         this->assign(sid, rsid);
     }
+#endif
 
-  private:
-    // psym/fpsym is ParSymbol<ScopedSpillableBase> with:
-    //   ParSymbol:           uid/symId(), scope, getActive,
-    //   ScopedSpillableBase: getREG, getMEM
-    //   (Spillable:          getBytes, getAlign)
-    // Ssym::syms = SymbStates::syms is (Symbol) map for:
-    //   name, RegId, staleness, 
   public:
     Rs const& rsym(unsigned symId);
     static RegsetId constexpr regset_default = RegsetId{0};
@@ -584,13 +654,21 @@ class DemoSymbStates
     ~DemoSymbStates() {
         //Base::end_scope();
     }
-  public: // republish some functions
+  public:
+    /** \group republish
+     * This solves some strange friendship issues (at least w/ gcc) */
+    //@{
+    //auto symIdAnyScopeSorted() const { return Ssym::symIdAnyScopeSorted(); }
+    // equiv:
     auto symIdAnyScopeSorted() const { return ssu.symIdAnyScopeSorted(); }
-    template<typename... Arg>
-        unsigned newsym(Arg&&... arg){
-            auto const symId = Ssym::newsym(arg..., nextTick());
-            return symId;
-        }
+    //@}
+    void end_scope( unsigned scope ){
+        if(scope != Ssym::scope()) THROW(" DemoSymbStates::end_scope : "<<scope<<" is not innermost active scope!");
+        std::cout<<" DSS::end_scope!"; std::cout.flush();
+        mkWeak(scopeSymbols());
+        Ssym::end_scope();
+    }
+
   public:
     //RegId allocScalar();                    ///< allocate from \c scalars, spill if nec.
     //RegId allocScalar(unsigned const symId);///< allocScalar + setReg
@@ -599,6 +677,7 @@ class DemoSymbStates
     void write(unsigned const symId);       ///< annotate register write event */
 
   private:
+    friend class Tester;
     friend bool chk_order(DemoSymbStates const& ssym, std::initializer_list<unsigned> const& i);
     /** The spill manager lifetime should be less than the psyms map lifetime */
     ve::Spill<DemoSymbStates> spill;
@@ -641,11 +720,11 @@ using namespace scope;
 #include <typeinfo>
 void Tester::test1(){
     typedef RegisterBase Rb;
-    typedef DemoSymbStates Ssym;
-    typedef Ssym::Psym Psym;
+    typedef DemoSymbStates DSS;
+    typedef DSS::Psym Psym;
     TEST("Construct some symbols");
     {
-        Ssym ssym;
+        DSS ssym;
         auto x = ssym.newsym("x");
         assert(x==1U);
         //ASSERTTHROW( ssym.psym(1U).getActive() );
@@ -794,7 +873,7 @@ void Tester::test1(){
     }
     TEST("various Symbol constructors");
     {
-        Ssym ssym;
+        DSS ssym;
         auto x = ssym.newsym("x");                      // defaults to "scalar"
         assert(x==1U);
         //ASSERTTHROW( ssym.psym(1U).getActive() );
@@ -814,6 +893,80 @@ void Tester::test1(){
         cout<<ssym.psym(x)<<endl; cout.flush();
         cout<<ssym.psym(y)<<endl; cout.flush();
         cout<<ssym.psym(z)<<endl; cout.flush();
+    }
+    TEST("mkScope test with no register assignments");
+    {
+        DSS ssym;
+        auto s=[&ssym](unsigned symId) {return ssym.psym(symId);};
+        unsigned x,y,z;
+        x = ssym.newsym("x");                      // defaults to "scalar"
+        assert(x==1U);
+        //ASSERTTHROW( ssym.psym(1U).getActive() );
+        {
+            auto yscope = ssym.mkScope();
+            y = ssym.newsym("y",Rb::Cls::vector);      // override as "vector"
+            assert(y==2U);
+            {
+                auto zscope = ssym.mkScope();
+                try{
+                    ssym.newsym("z",RegsetId{3}); // 3 is out-of-range!
+                }catch(...){ cout<<"Good, caught bad RegsetId"; }
+                z = ssym.newsym("z",RegsetId{2});          // custom regset (here, just "vector mask")
+                cout<<"Symbols x,y,z = "<<x<<","<<y<<","<<z<<endl;
+                cout<<s(x)<<s(y)<<s(z)<<endl;
+                ssym.s2r.dump();
+                assert( s(x).getActive() && s(y).getActive() && s(z).getActive() );
+            }
+            cout<<s(x)<<s(y)<<s(z)<<endl;
+            ssym.s2r.dump();
+            assert( s(x).getActive() && s(y).getActive() && !s(z).getActive() );
+        }
+        // at this point only x is active.
+        cout<<s(x)<<s(y)<<s(z)<<endl;
+        assert( s(x).getActive() && !s(y).getActive() && !s(z).getActive() );
+        // ??? vector + vector length should also be possible
+        // TODO add vl() vector length to Symbol class, w/ dynamic_vl flag to allow setVl()
+        //      [default should be vl=256 dynamic_vl=false]
+    }
+    TEST("mkScope test with register assignments");
+    {
+        DSS ssym;
+        cout<<"ssym.regsets.size() = "<<ssym.regsets.size()<<endl;
+        for(size_t i=0; i<ssym.regsets.size(); ++i){
+            cout<<"ssym.regsets["<<i<<"]"<<endl;
+            cout<<ssym.regsets[i]<<endl;
+        }
+        auto s=[&ssym](unsigned symId) {return ssym.psym(symId);};
+        auto assign=[&ssym](unsigned symId) {return ssym.assign(symId);};
+        unsigned x,y,z;
+        cout<<assign(x=ssym.newsym("x"))<<endl; // defaults to "scalar"
+        assert(x==1U);
+        //ASSERTTHROW( ssym.psym(1U).getActive() );
+        {
+            auto yscope = ssym.mkScope();
+            cout<<assign(y = ssym.newsym("y",Rb::Cls::vector))<<endl; // override as "vector"
+            assert(y==2U);
+            {
+                auto zscope = ssym.mkScope();
+                try{
+                    ssym.newsym("z",RegsetId{3}); // 3 is out-of-range!
+                }catch(...){ cout<<"Good, caught bad RegsetId"<<endl; }
+                cout<<assign(z = ssym.newsym("z",RegsetId{2}))<<endl; // custom regset (here, just "vector mask")
+                cout<<"Symbols x,y,z = "<<x<<","<<y<<","<<z<<endl;
+                cout<<s(x)<<s(y)<<s(z)<<endl;
+                ssym.s2r.dump();
+                assert( s(x).getActive() && s(y).getActive() && s(z).getActive() );
+            }
+            cout<<s(x)<<s(y)<<s(z)<<endl;
+            ssym.s2r.dump();
+            assert( s(x).getActive() && s(y).getActive() && !s(z).getActive() );
+        }
+        // at this point only x is active.
+        cout<<s(x)<<s(y)<<s(z)<<endl;
+        assert( s(x).getActive() && !s(y).getActive() && !s(z).getActive() );
+        // ??? vector + vector length should also be possible
+        // TODO add vl() vector length to Symbol class, w/ dynamic_vl flag to allow setVl()
+        //      [default should be vl=256 dynamic_vl=false]
     }
 }
 
