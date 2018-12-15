@@ -50,7 +50,15 @@ struct Vab{
     int vl;    // 0 < Vabs.back().vl < vlen
 };
 
-/** Generate reference vectors of vectorized 2-loop indices */
+/** Generate reference vectors of vectorized 2-loop indices.
+ * ```
+ * for(i=0..ii) for(j=0..jj) {
+ *     remember full vl-length (i,j) pairs into a[],b[]
+ *     store a[], b[] vectors into vabs when full
+ * }
+ * incl final maybe-partial vector into vabs
+ * ```
+ */
 std::vector<Vab> ref_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
                             int const verbose=1)
 {
@@ -112,11 +120,12 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
     int const bignum = std::max( ii, jj );
     int const wide = 1 + (bignum<10? 1: bignum <100? 2: bignum<1000? 3: 4);
 
-    // generate reference index outputs
+    // generate reference vectorized loop-index values into vabs.a and vabs.b
     std::vector<Vab> vabs = ref_vloop2(vlen, ii, jj, 1/*verbose*/);
     assert( vabs.size() > 0 );
     assert(vabs.size() == ((ii*jj) +vlen -1) / vlen);
     // generate reference set of offset vectors
+    // output:  offs (linear combination output)
     std::vector<std::vector<Lpi>> offs;
 #define FOR(I,VL) for(int I=0;I<VL;++I)
     for(auto const& vab: vabs){
@@ -158,11 +167,13 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
     }
     VVlpi a(vl), b(vl), o(vl); // loop body vectors
     VVlpi bA(vl), bM(vl), bD(vl), aA(vl), sq(vl); // tmp vectors
+    VVlpi bLin(vl), aA0(vl);
     int iloop = 0; // mostly for debug checks, now;
     //for( ; iloop < nloop; ++iloop )
     for( ; cnt < iijj; cnt += vl )
     {
         //cout<<"cnt "<<cnt<<" iloop "<<iloop<<" ii "<<ii<<" jj "<<jj<<endl;
+#if 0 // induction for aa, bb .. longhand
         if (iloop == 0){
             // now load the initial vector-loop registers:
             FOR(i,vl) sq[i] = i;         // vseq_v
@@ -172,7 +183,14 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
             //     which has some optimizations for nice values of jj.
             // is not induced, so calc below.
         }else{
+            // Required linear function: o[i] = aa*a[i] + bb*b[i] + cc;
             // 2. Induction from a->ax, b->bx
+            // b[i'] = (sq[i] + iloop*vl)%jj
+            //       = (sq[i]%jj + n*vl%jj) %jj
+            //       = ((sq[i]+(iloop-1)*jj)%jj + vl%jj) %jj
+            //       = ( b[i]                   + vl%jj) %jj
+            //       = (b[i] + vl)%jj surprise! (do not need sq[i] + iloop*vl explicitly)
+            //
             FOR(i,vl) bA[i] = vl + b[i];  // bA = b + vl; add_vsv
             FOR(i,vl) bM[i] = bA[i] % jj; // bM = bA % jj; mod_vsv
             FOR(i,vl) bD[i] = bA[i] / jj; // bD = bA / jj; div_vsv
@@ -201,11 +219,197 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
             // saving having cc in register (for non-jit) is not
             // worth the added complexity.
         }
-        // o[i] = aa*a[i] + bb*b[i] + cc;
+        // Required linear function: o[i] = aa*a[i] + bb*b[i] + cc;
         FOR(i,vl) aA[i] = aa * a[i];
         FOR(i,vl) bA[i] = bb * b[i];
         FOR(i,vl) o [i] = aA[i] + cc;
         FOR(i,vl) o [i] = o [i] + bA[i];
+#elif 0 // induction for aa, bb .. shorter
+        if (iloop == 0){
+            // now load the initial vector-loop registers:
+            FOR(i,vl) sq[i] = i;         // vseq_v
+            FOR(i,vl) b [i] = sq[i] % jj;
+            FOR(i,vl) a [i] = sq[i] / jj;
+            //
+            FOR(i,vl) aA[i] = aa * a[i];
+            FOR(i,vl) bA[i] = bb * b[i]; // req'd
+            FOR(i,vl) o [i] = aA[i] + cc;
+            FOR(i,vl) o [i] = o [i] + bA[i];
+        }else{
+            VVlpi aA(vl);
+            FOR(i,vl) bA[i] = vl + b[i];  // bA = b + vl; add_vsv
+#if 0 // 1. elide bM
+            FOR(i,vl) bM[i] = bA[i] % jj; // bM = bA % jj; mod_vsv
+            FOR(i,vl) b[i] = bM[i]; // bNext is bM
+#else
+            FOR(i,vl) b[i] = bA[i]%jj; // 1. elide vector bM
+#endif
+#if 0 // 2. elide bD
+            FOR(i,vl) bD[i] = bA[i] / jj; // bD = bA / jj; div_vsv
+            FOR(i,vl) aA[i] = a[i] + bD[i]; // aA = a + bD; add_vvv
+            FOR(i,vl) a[i] = aA[i]; // aNext is aA
+#else
+            // really 2 ops
+            //FOR(i,vl) a[i] = a[i] + bA[i] / jj; // 2. elide bD and aA
+            FOR(i,vl) aA[i] = bA[i] / jj;
+            FOR(i,vl) a[i] = a[i] + aA[i];
+#endif
+#if 0
+            FOR(i,vl) aA[i] = aa * a[i]; // but prev aA[i] is aa*a[i]...
+            FOR(i,vl) o [i] = aA[i] + cc;
+            FOR(i,vl) bA[i] = bb * b[i];
+            FOR(i,vl) o [i] = o [i] + bA[i];
+#else // using multiply-add
+            FOR(i,vl) o [i] = aa*a[i] + cc;
+            FOR(i,vl) o [i] = bb*b[i] + o[i];
+#endif
+        }
+#elif 0 // try to induce o[i] directly --> OUCH ugly for b[i]
+        // but MAYBE sometimes we have a NICE bDelta
+        if (iloop == 0){
+            // now load the initial vector-loop registers:
+            FOR(i,vl) sq[i] = i;         // vseq_v
+            FOR(i,vl) b [i] = sq[i] % jj;
+            FOR(i,vl) bD[i] = b[i];
+            FOR(i,vl) a [i] = sq[i] / jj;
+            //
+            FOR(i,vl) aA[i] = aa * a[i];
+            FOR(i,vl) bA[i] = bb * b[i]; // req'd
+            FOR(i,vl) o [i] = aA[i] + cc;
+            FOR(i,vl) o [i] = o [i] + bA[i];
+        }else{
+            VVlpi aA(vl);
+            FOR(i,vl) bA[i] = vl + b[i];  // bA = b + vl; add_vsv
+            // o[i] induces wrt a[i] is nice...
+            FOR(i,vl) aA[i] = bA[i] / jj; // this IS adelta!
+            FOR(i,vl) a[i] = a[i] + aA[i]; // now this is an optional calc!
+            // new: induce o[i] ...
+            FOR(i,vl) o [i] = o[i] + aa*aA[i]; // this is ~equiv effort to non-induced o[i]
+            //
+            // BUT this forces induction wrt b[i] too (I think)
+            // and o[i] induced wrt b[i] is NOT NICE
+            //
+#if 0 // induce o[i] w/ bDelta (even longer!)
+            if( vl % jj != 0 ){
+                // another optimization to avoid this calc
+                FOR(i,vl) bM[i] = bA[i] % jj; // bM = bA % jj; mod_vsv
+            }
+            // long-hand bDelta...
+            FOR(i,vl) bD[i] = bM[i] - b[i]; // bdelta
+            if( vl % jj == 0 ){
+                cout<<" ********************************* vl%jj == 0 ************************"<<endl;
+                cout<<" bD[i]={";
+                FOR(i,vl){
+                    cout<<" "<<i<<":"<<bD[i];
+                    assert( bD[i] == 0 );               // easy case, bD[i] always zero
+                }
+                cout<<"}"<<endl;
+            }else{
+                cout<<" ********************************* vl%jj == "<<vl%jj<<" ************************"<<endl;
+                cout<<" bD[i]={";
+                FOR(i,vl){
+                    // In general bD[i] takes one of two values: vl%jj (+ve)    or     vl%jj-jj (-ve)
+                    //
+                    //int guess = (iloop*vl+i)%jj - ((iloop-1)*vl+i)%jj; // OK
+                    //int guess = vl%jj; // not quite
+                    //int guess = (iloop*vl+i)%jj >= vl%jj? vl%jj : vl%jj -jj;
+                    //
+                    //int guess=vl%jj;     // broadcast
+                    //if( (iloop*vl+i)%jj < guess ) guess -= jj; // compare+merge ?
+                    //
+                    //int which = ((iloop*vl+i)%jj >= vl%jj); // can icmp generate 0/1 values directly?
+                    //assert( (iloop*vl+i)%jj == (b[i]+vl) % jj );
+                    //int which = (b[i]+vl)%jj >= vl%jj;      // b[i']%jj, if update b[i] before here
+                    int which = bM[i] >= vl%jj;             // simplify even more
+                    int guess = (vl%jj-jj) + which*jj;      // integer multiply-add (const coeffs, which[i])
+
+                    //cout<<" "<<i<<":"<<(int)bD[i]<<"?"<<guess<<"."<<vl%jj<<','<<(iloop*vl+i)%jj; cout.flush();
+                    //cout<<" "<<i<<":"<<(int)bD[i]<<"?"<<guess<<"."<<(b[i]+vl)%jj;
+                    assert( (int)bD[i] == guess );
+                    //assert( bD[i] == (iloop*jj+vl)%jj );
+                    // so bD is a fn of sq[i] with comparison 
+                }
+                cout<<"}"<<endl;
+            }
+            FOR(i,vl) b [i] = bM[i]; // = b[i] + bD[i] (b[i] required for induction still)
+            //FOR(i,vl) b [i] = b[i] + bD[i]; // equiv
+            FOR(i,vl) o [i] = o[i] + bb*bD[i]; // this is a loss!
+#else // do not induce o[i] wrt bb
+            FOR(i,vl) o [i] = o[i] - bb*b[i]; // well if a is induced we sorta gotta kludge b...
+            FOR(i,vl) b [i] = bA[i] % jj;
+            FOR(i,vl) o [i] = o[i] + bb*b[i];
+#endif
+
+        }
+#elif 1 // induction for aa, bb .. shorter
+        if (iloop == 0){
+            // now load the initial vector-loop registers:
+            FOR(i,vl) sq[i] = i;         // vseq_v
+            FOR(i,vl) b [i] = sq[i] % jj;
+            FOR(i,vl) a [i] = sq[i] / jj;
+            //
+            FOR(i,vl) o [i] = bb*b[i] + cc;
+            if( vl%jj == 0 ){
+                cout<<" +bLin"<<endl;
+                FOR(i,vl) { bLin[i] = bb*b[i] + cc; cout<<" "<<bLin[i]; }
+                cout<<endl;
+            }
+            if( vl%ii == 0 ){
+                FOR(i,vl) aA0[i] = b[i] / jj;
+                //FOR(i,vl) aA0[i] = b[i] / jj + vl/jj;
+            }
+            FOR(i,vl) o [i] = aa*a[i] + o[i]; // if aa is nonzero
+        }else{
+            //
+            //  vl%jj == 0 save 2 vector ops (at least. aA update may also simplify)
+            //
+            //if( vl%jj!=0 || vl%ii!=0 )
+                FOR(i,vl) bA[i] = vl + b[i];  // bA = b + vl; add_vsv
+            if ( vl%jj != 0 )
+                FOR(i,vl) b [i] = bA[i] % jj;
+            // calc loop index a[i], elide if aa is zero and a[i] is unused
+            //
+            // original:
+            FOR(i,vl) aA[i] = bA[i] / jj;
+#if 0 // unsuccessful.  sometimes aA is const, but when?
+            cout<<" aA "; FOR(i,vl){ cout<<" "<<i<<":"<<aA[i]<<'.'<<(vl+sq[i])/jj;} cout<<endl;
+            cout<<" aA "; FOR(i,vl){ cout<<" "<<i<<":"<<aA[i]<<'.'<<aA0[i];} cout<<endl;
+            if( vl%ii == 0  && vl%jj==0 ){
+                cout<<" vl %% ii"<<ii<<" = "<<vl%ii<<endl;
+                FOR(i,vl) assert( aA[i] == aA0[i] ); // is it a const vector? YES
+            } else if( vl%jj == 0 ){
+                cout<<" vl %% ii"<<ii<<" = "<<vl%ii<<endl;
+                cout<<" aA "; FOR(i,vl){ cout<<" "<<i<<":"<<aA[i]<<'.'<<aA0[i];} cout<<endl;
+                //FOR(i,vl) assert( aA[i] == aA0[i] ); // is it a const vector? NO
+            }
+            // optimized:
+            //if( vl%ii != 0 || vl%jj!=0 ) // <---------------------------- ohoh !!!!!!!!!!!!!!!!!!!!!
+            //    FOR(i,vl) aA[i] = bA[i] / jj;
+#endif
+            //
+            FOR(i,vl) a [i] = a[i] + aA[i];
+            // Q: is there a fast way to calculate the "deltas" and easily induce o[i] ??
+            // if aa and bb and cc are nonzero...
+            // if aa is zero:
+            //    FOR(i,vl) o [i] = bb*b[i] + cc;
+            // if bb is zero:
+            //    FOR(i,vl) o [i] = aa*a[i] + cc
+            // else general case
+            if( vl%jj == 0 ){
+                //FOR(i,vl) o [i] = bb*b[i] + cc;
+                ////FOR(i,vl) cout<<" "<<o[i]<<":"<<bLin[i]; cout.flush();
+                //FOR(i,vl) assert( o[i] == bLin[i] );
+                //FOR(i,vl) o [i] = aa*a[i] + o[i]; // if aa is nonzero
+                FOR(i,vl) o [i] = aa*a[i] + bLin[i]; // if aa is nonzero
+            }else{
+                FOR(i,vl) o [i] = bb*b[i] + cc;
+                FOR(i,vl) o [i] = aa*a[i] + o[i]; // if aa is nonzero
+            }
+            // for ops for induction of a[i], b[i]
+            // and 2 more for induction of the linear combination o[i]
+            // nb. this replaces 
+        }
+#endif
 
         // Note: vl reduction must take place AFTER above use of "long" vl
         if( cnt + vl > iijj ){ // last time might have reduced vl
@@ -235,7 +439,7 @@ void test_vloop2_unroll(Lpi const vlen, Lpi const ii, Lpi const jj)
 {
     // for r in [0,h){ for c in [0,w] {...}}
     assert( vlen > 0 );
-    cout<<"test_vloop2( vlen="<<vlen<<" loops 0.."<<ii<<" 0.."<<jj<<endl;
+    cout<<"test_vloop2_unrolled( vlen="<<vlen<<" loops 0.."<<ii<<" 0.."<<jj<<endl;
 
     // pretty-printing via vecprt
     int const n=8; // output up-to-n [ ... [up-to-n]] ints
@@ -315,7 +519,7 @@ void test_vloop2_no_unroll(Lpi const vlen, Lpi const ii, Lpi const jj)
 {
     // for r in [0,h){ for c in [0,w] {...}}
     assert( vlen > 0 );
-    cout<<"test_vloop2( vlen="<<vlen<<" loops 0.."<<ii<<" 0.."<<jj<<endl;
+    cout<<"test_vloop2_nounroll( vlen="<<vlen<<" loops 0.."<<ii<<" 0.."<<jj<<endl;
 
     // pretty-printing via vecprt
     int const n=8; // output up-to-n [ ... [up-to-n]] ints
@@ -379,8 +583,8 @@ again:
     cout<<"__"<<iloop<<endl;
     cout<<"Induce:      "<<vecprt(n,wide,a,vl)<<endl;
     cout<<"             "<<vecprt(n,wide,b,vl)<<endl;
-    FOR(i,vl) assert( a[i] == vabs[iloop].a[i] );
-    FOR(i,vl) assert( b[i] == vabs[iloop].b[i] );
+    FOR(i,vl) assert( a[i] == vabs[iloop].a[i] ); // check aa loop index vector
+    FOR(i,vl) assert( b[i] == vabs[iloop].b[i] ); // check bb loop index vector
     cnt += vl; // or cnt = nxt;
     if (cnt >= iijj) goto done;
     if (iloop == 0){
@@ -438,8 +642,8 @@ int main(int argc,char**argv){
     if(argc > a+6) cc = atof(argv[a+6]);
     cout<<"vlen="<<vl<<", ii="<<ii<<", jj="<<jj<<", aa="<<aa<<", bb="<<bb<<", cc="<<cc<<endl;
     test_vloop2(vl,ii,jj,aa,bb,cc);
-    //test_vloop2_unroll(vl,h,w);
-    //test_vloop2_no_unroll(vl,h,w); // C++ code more like asm generic loop
+    test_vloop2_unroll(vl,ii,jj);
+    test_vloop2_no_unroll(vl,ii,jj); // C++ code more like asm generic loop
     cout<<"\nGoodbye"<<endl;
     return 0;
 }

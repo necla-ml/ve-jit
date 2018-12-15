@@ -13,6 +13,7 @@
 #include <iomanip>
 #include <sstream>
 #include <algorithm> // ve finds std::max here!
+#include <type_traits>
 
 #include <cstring>
 #include <cstddef>
@@ -21,10 +22,22 @@
 using namespace std;
 
 typedef int Lpi; // Loop-index type
+// Note other optimization might *pack* 2-loop indices differently!
+// (e.g. u32 a[0]b[0] a[1]b[1] in a packed register)
+// (e.g. single register with a[] concat b[] (for short double-loops)
+// Here we just store a[], b[] indices in two separate registers
+typedef uint64_t Vlpi; // vector-loop-index type
+typedef std::vector<Vlpi> VVlpi;
+
+typedef make_unsigned<Lpi>::type Ulpi;
+typedef make_unsigned<Vlpi>::type Uvlpi;
+
+
+
 /** string up-to-n first, dots, up-to-n last of vector \c v[0..vl-1] w/ \c setw(wide) */
 template<typename T>
 std::string vecprt(int const n, int const wide, std::vector<T> v, int const vl){
-    assert( v.size() >= vl );
+    assert( v.size() >= (size_t)vl );
     std::ostringstream oss;
     for(int i=0; i<vl; ++i){
         if( i < n ){ oss <<setw(wide)<< v[i]; }
@@ -33,13 +46,140 @@ std::string vecprt(int const n, int const wide, std::vector<T> v, int const vl){
     }
     return oss.str();
 }
-// Note other optimization might *pack* 2-loop indices differently!
-// (e.g. u32 a[0]b[0] a[1]b[1] in a packed register)
-// (e.g. single register with a[] concat b[] (for short double-loops)
-// Here we just store a[], b[] indices in two separate registers
-typedef uint64_t Vlpi; // vector-loop-index type
-typedef std::vector<Vlpi> VVlpi;
-
+inline bool constexpr positivePow2(uint64_t v) {
+    return ((v & (v-1)) == 0);
+}
+static const int MultiplyDeBruijnBitPosition2[32] = 
+{
+    0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8, 
+    31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9
+};
+inline int /*constexpr*/ positivePow2Shift(uint32_t v) {
+    //assert( positivePow2(v)
+    return MultiplyDeBruijnBitPosition2[(uint32_t)(v * 0x077CB531U) >> 27];
+}
+#include "../regs/throw.hpp"
+#include <typeinfo>
+template<typename T> T mod_inverse( T const a ){
+    THROW("mod_inverse<T> not implemented for "<<typeid(T).name());
+    return T(0);
+}
+template<>
+inline uint32_t mod_inverse<uint32_t>(uint32_t const a)
+{
+    uint32_t u = 2-a;
+    uint32_t i = a-1;
+    i *= i; u *= i+1;
+    i *= i; u *= i+1;
+    i *= i; u *= i+1;
+    i *= i; u *= i+1;
+    return u;
+}
+template<> inline int32_t mod_inverse<int32_t>(int32_t const a)
+{
+    return mod_inverse((uint32_t)a);
+}
+template<>
+inline uint64_t mod_inverse<uint64_t>(uint64_t const a)
+{
+    uint64_t u = 2-a;
+    uint64_t i = a-1;
+    i *= i; u *= i+1;
+    i *= i; u *= i+1;
+    i *= i; u *= i+1;
+    i *= i; u *= i+1;
+    i *= i; u *= i+1;   // one extra?
+    return u;
+}
+template<> inline int64_t mod_inverse<int64_t>(int64_t const a)
+{
+    return mod_inverse((uint64_t)a);
+}
+template<typename T> // T ~ an unsigned int type
+void test_mod_inverse(){
+    for(T a=0U; a<1024U; ++a){
+        T odd = 2U*a+1U;
+        T mo  = mod_inverse(odd);
+        assert( odd * mo == 1 );
+        if(1){ // no... can't "just" convert divides into multiplies
+            for(T t=1U; t<23U; ++t){
+                assert( (t/odd) == (t - t%odd)*mo );
+            }
+        }
+    }
+    for(T base=1024U; base>=1024U; base+=base){
+        for(T a=base-1024U; a<base+1024U; ++a){
+            T const odd = 2U*a+1U;
+            T const mo  = mod_inverse(odd);
+            assert( odd * mo == 1 );
+            if(1){ // no... can't "just" convert divides into multiplies
+                for(T t=1U; t<99U; ++t){
+                    //cout<<" t="<<t<<" odd = "<<odd<<" mo = "<<mo<<endl;
+                    assert( (t/odd) == (t - t%odd)*mo );
+                    // or (t/odd)*t == (t-t%odd)*mo*t
+                    // or (t/odd)*t ==  t - t%odd
+                    // or t%odd == t - (t/odd)*t
+                    // Also (t+odd)%odd == (t+odd) - (t+odd)/odd*t
+                    //                  == t+odd - (t/odd + 1)*t
+                    //  or  (t+odd)/odd = t/odd + 1 = ((t+odd) - (t    )%odd)*mo
+                    // (t+odd)*mo - t*mo = odd * mo = 1
+                    assert( (t/odd) == (t - t%odd)*mo );
+                    // What is the relation between t/odd and t*mo ?
+                    // t/odd == (t*mo - (t%odd)*mo)
+                    //                  ^^^^^^^ in [0,odd)
+                    // t*mo = t/odd + (t%odd)*mo
+                    //                ^^^^^^^^^^ in [0,mo*odd)
+                    //
+                    // gcd(2^N,odd) = 1 == 2^N*x + odd*y for some x,y (actually any?)
+                    // 1 == 2^N*(t/odd) + odd*y*(t/odd)
+                    // mo == 2^N*(t/odd)*mo + odd*y*(t/odd)
+                    int const x=1; // verbose
+                    if( odd==1 ){
+                        uint64_t u = (uint64_t)1<<32;
+                        uint64_t v = (((uint64_t)t*(uint64_t)mo));
+                        if(x)cout<<" t,odd "<<t<<","<<odd<<" t\%odd="<<t%odd<<" t/odd="<<t/odd<<" "<<u<<" "<<v<<endl;
+                        assert( t/odd == v );
+                    }
+                    if( odd==3 ){
+                        uint64_t u = (uint64_t)1<<32;
+                        uint64_t v = (((uint64_t)t*(uint64_t)mo))>>32;
+                        v = v>>1;
+                        if(x)cout<<" t,odd "<<t<<","<<odd<<" t\%odd="<<t%odd<<" t/odd="<<t/odd<<" "<<u<<" "<<v<<endl;
+                        assert( t/odd == v );
+                    }
+                    if( odd==5 ){
+                        uint64_t u = (uint64_t)1<<32;
+                        uint64_t v = (((uint64_t)t*(uint64_t)mo))>>32;
+                        v = v>>2;
+                        if(x)cout<<" t,odd "<<t<<","<<odd<<" t\%odd="<<t%odd<<" t/odd="<<t/odd<<" "<<u<<" "<<v<<endl;
+                        assert( t/odd == v );
+                    }
+                    if( odd==7 ){
+                        uint64_t u = (uint64_t)1<<32;
+                        // uint64_t mo2 =  multiplicative inverse with 34 bits, truncated to 33 bits ??
+                        uint64_t v = (((uint64_t)(t)*(uint64_t)mo))>>32;
+                        //v=((v+t+1+(t>>3)-(t>>2)-(t>>1))>>3); // fails after a while
+                        v = (v+t)>>3;
+                        if(x)cout<<" t,odd "<<t<<","<<odd<<" t\%odd="<<t%odd<<" t/odd="<<t/odd<<" "<<u<<" "<<v<<" "<<(t>>2)<<endl;
+                        //assert( t/odd == v );
+                    }
+                    if(odd>7) break;
+                    if( odd>8 && odd<16 ){
+                        uint64_t u = (uint64_t)1<<32;
+                        uint64_t v = (((uint64_t)t*(uint64_t)mo))>>35;
+                        if(x)cout<<" t,odd "<<t<<","<<odd<<" t\%odd="<<t%odd<<" t/odd="<<t/odd<<" "<<u<<" "<<v<<endl;
+                        assert( t/odd == v );
+                    }
+                    //if(odd>7) assert(false);
+                }
+            }
+            //if(odd>7)break;
+            cout<<" a="<<a<<endl;
+            if(a>10) break;
+        }
+        if(base > 2000) break;
+    }
+}
 /** Reference values for correct index outputs */
 struct Vab{
     Vab( VVlpi const& asrc, VVlpi const& bsrc, int vl )
@@ -79,7 +219,7 @@ std::vector<Vab> ref_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
         int const bignum = std::max( ii, jj );
         int const wide = 1 + (bignum<10? 1: bignum <100? 2: bignum<1000? 3: 4);
 
-        for(int l=0; l<vabs.size(); ++l){
+        for(size_t l=0; l<vabs.size(); ++l){
             auto const& a = vabs[l].a;
             auto const& b = vabs[l].b;
             auto const& vl = vabs[l].vl;
@@ -114,7 +254,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     // generate reference index outputs
     std::vector<Vab> vabs = ref_vloop2(vlen, ii, jj, 1/*verbose*/);
     assert( vabs.size() > 0 );
-    assert(vabs.size() == ((ii*jj) +vlen -1) / vlen);
+    assert(vabs.size() == (size_t)(((ii*jj) +vlen -1) / vlen));
 
     cout<<"Verify-------"<<endl;
     // Have reference vabs vectors. Now we try induction way.
@@ -127,7 +267,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     register int vl = vlen;
     register uint64_t cnt = 0UL;
     //if (cnt+vl > iijj) vl = iijj - cnt;  // simplifies for cnt=0
-    if (vl > iijj) vl = iijj;
+    if ((uint64_t)vl > iijj) vl = iijj;
 
 #define FOR(I,VL) for(int I=0;I<VL;++I)
     if(0){
@@ -139,11 +279,24 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
         cout<<" cnt="<<cnt<<" iijj="<<iijj<<endl;
     }
     VVlpi a(vl), b(vl), bA(vl), bM(vl), bD(vl), aA(vl), sq(vl);
+    VVlpi a0(vl), b0(vl), x(vl);
     int iloop = 0; // mostly for debug checks, now;
+    Vlpi jj_minus_1 = jj - 1;  // for kase 3, positivePow2(jj)
+    int jj_shift=0;            // for kase 3, positivePow2(jj)
+    Ulpi jj_mod_inverse_lpi   = mod_inverse((Ulpi)jj);
+    Uvlpi jj_mod_inverse_Vlpi = mod_inverse((Uvlpi)jj);
     //for( ; iloop < nloop; ++iloop )
     for( ; cnt < iijj; cnt += vl )
     {
         //cout<<"cnt "<<cnt<<" iloop "<<iloop<<" ii "<<ii<<" jj "<<jj<<endl;
+        int const verbose = 1; // verbose
+        int kase = // for verbose printing
+            vl%jj == 0          ? 1
+            : jj%vl == 0        ? 2
+            : positivePow2(jj)  ? 3
+            : jj < vl           ? 4
+            : jj%2 == 1         ? 5
+            : 0;
         if (iloop == 0){
             // now load the initial vector-loop registers:
 #if 0
@@ -155,24 +308,186 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
             FOR(i,vl) b [i] = sq[i] % jj;
             FOR(i,vl) a [i] = sq[i] / jj;
 #endif
+            FOR(i,vl) a0[i] = a[i];
+            FOR(i,vl) b0[i] = b[i];
+            if(verbose || kase!=0 ){ // for debug printing or assertions
+                FOR(i,vl) bA[i] = vl + b[i];  // bA = b + vl; add_vsv
+                FOR(i,vl) bM[i] = b[i] % jj;
+                //FOR(i,vl) bM[i] = bA[i] % jj;
+                cout<<"bA0 "<<vecprt(n,wide,bA,vl)<<endl;
+                cout<<"bM0 "<<vecprt(n,wide,bM,vl)<<endl;
+                FOR(i,vl) bD[i] = bA[i] / jj; // bD = bA / jj; div_vsv
+            }
+            if( kase==2 ){
+#if 0
+                Lpi special = iloop % (jj/vl);
+                assert( special == 0 );
+                if( special==0 ) FOR(i,vl) x[i] = sq[i];
+                else          FOR(i,vl) x[i] = x[i] + vl;
+                cout<<" bM "<<special<<" := "<<vecprt(n,wide,bM,vl)<<endl;
+                cout<<"  x "<<special<<" := "<<vecprt(n,wide, x,vl)<<endl;
+#else
+                FOR(i,vl) x[i] = sq[i];                 // for debug
+                FOR(i,vl) assert( bM[i] == x[i] );
+#endif
+                FOR(i,vl) assert( a[i] == 0 );
+                FOR(i,vl) assert( b[i] == sq[i] );
+            }
+            if( kase==3 ){
+                jj_shift = positivePow2Shift((uint32_t)jj);
+                cout<<" jj="<<jj<<" power of two shift is "<<jj_shift<<"    mask is "<<jj_minus_1<<endl;
+            }
+
             // NB: common operation is divmod(v,s,vM,vD) : v--> v%s, v/s,
             //     which has some optimizations for nice values of jj.
         }else{
             // 2. Induction from a->ax, b->bx
-            FOR(i,vl) bA[i] = vl + b[i];  // bA = b + vl; add_vsv
-            FOR(i,vl) bM[i] = bA[i] % jj; // bM = bA % jj; mod_vsv
-            FOR(i,vl) bD[i] = bA[i] / jj; // bD = bA / jj; div_vsv
+            if(vl%jj == 0){  // avoid div,mod -------------> 1 vec op
+                assert( kase == 1 );
+                //FOR(i,vl) bA[i] = vl + b[i];
+                //FOR(i,vl) x [i] = bA[i] % jj;
+                //cout<<" bA "<<vecprt(n,wide,bA,vl)<<endl;
+                //cout<<"  x "<<vecprt(n,wide, x,vl)<<endl;
+                //FOR(i,vl) assert( bM[i] == x[i] ); // const
+                FOR(i,vl) assert( bA[i] = vl + b[i] );          // const vector
+                FOR(i,vl) assert( bM[i] == (vl+b[i]) % jj );    // const vector
+                FOR(i,vl) assert( bM[i] == b[i] % jj );         // --- " ---
+                FOR(i,vl) assert( bD[i] == (vl+b[i]) / jj );
+                FOR(i,vl) assert( bD[i] == (Vlpi)(vl/jj) );     // const scalar
+                // FOR(i,vl) aA[i] = a[i] + vl/jj; // aA = a + bD; add_vvv
+                // /**/ FOR(i,vl) b[i] = bM[i]; // bNext is bM
+                // /**/ FOR(i,vl) a[i] = aA[i]; // aNext is aA
+                FOR(i,vl) a[i] = a[i] + vl/jj;
+            }else if(jj%vl == 0){  // avoid div, scalar mod ---------------> 1 or 2 vec op
+                assert( kase == 2 );
+                Lpi special = iloop % (jj/vl);                  // vector mod --> scalar mod
+#if 0 // debug
+                FOR(i,vl) assert( bA[i] = vl + b[i] );          // const vector
+#if 0
+                FOR(i,vl) bM[i] = bA[i] % jj; // bM = bA % jj; mod_vsv
+#elif 0
+                if( special==0 ) FOR(i,vl) x[i] = sq[i];
+                else             FOR(i,vl) x[i] = x[i] + vl;
+                cout<<" bM "<<special<<" := "<<vecprt(n,wide,bM,vl)<<endl;
+                cout<<"  x "<<special<<" := "<<vecprt(n,wide, x,vl)<<endl;
+                FOR(i,vl) assert( bM[i] == x[i] );
+#elif 1 // not sure whether this is fastest ......................
+                if( special==0 ) FOR(i,vl) bM[i] = sq[i];
+                else             FOR(i,vl) bM[i] = bM[i] + vl;
+#else
+                FOR(i,vl) bM[i] = b0[i] + vl*special; // bM = bA % jj; mod_vsv
+#endif
+                FOR(i,vl) assert( (vl+b[i])/jj == (special==0?1:0) ); // test bD[i] (all-zero or all-one)
+                //FOR(i,vl) aA[i] = a[i] + (special==0);
+                if( special == 0 ) a[i] = a[i] + 1;       // is this faster?
+
+                /**/ FOR(i,vl) b[i] = bM[i]; // bNext is bM
+                /**/ FOR(i,vl) a[i] = aA[i]; // aNext is aA
+#else // streamlined
+                // unroll(jj/vl) (if not too big) could be branchless
+                FOR(i,vl) assert( bA[i] = vl + b[i] );          // const vector
+                FOR(i,vl) assert( (vl+b[i])/jj == (special==0?1:0) ); // test bD[i]
+                if( special ) {                         // bump b[i], bD[i]==0
+                    FOR(i,vl) b[i] = b[i] + vl;
+                }else{                                  // reset b[i], bD[i]==1
+                    FOR(i,vl) b[i] = sq[i];
+                    FOR(i,vl) a[i] = a[i] + 1;
+                }
+#endif
+            }else if( positivePow2(jj) ){ // 4 vec ops (div and mod --> shift and or)
+                assert( kase == 3 );
+#if 0 // debug
+                FOR(i,vl) bA[i] = vl + b[i];  // bA = b + vl; add_vsv
+                FOR(i,vl) bD[i] = bA[i] / jj; // bD = bA / jj; div_vsv
+                FOR(i,vl) bM[i] = bA[i] % jj; // bM = bA % jj; mod_vsv
+
+                //FOR(i,vl) x[i] = (bA[i] >> jj_shift);
+                //cout<<" bA "<<vecprt(n,wide,bA,vl)<<endl;
+                //cout<<" bD "<<vecprt(n,wide,bD,vl)<<endl;
+                //cout<<"  x "<<vecprt(n,wide, x,vl)<<"  <--- bA >> "<<jj_shift<<endl;
+                FOR(i,vl) assert( bD[i] == (bA[i] >> jj_shift) );         // div --> shift-right
+
+                FOR(i,vl) assert( bM[i] == bA[i] - jj*bD[i] );          // mod --> mult-sub
+                FOR(i,vl) assert( bM[i] == (bA[i] & jj_minus_1) );      // mod --> mask
+                FOR(i,vl) aA[i] = a[i] + bD[i]; // aA = a + bD; add_vvv
+                /**/ FOR(i,vl) b[i] = bM[i]; // bNext is bM
+                /**/ FOR(i,vl) a[i] = aA[i]; // aNext is aA
+#else // streamlined
+                FOR(i,vl) bA[i] = vl + b[i];            // bA = b + vl; add_vsv
+                FOR(i,vl) bD[i] = (bA[i] >> jj_shift);  // bD = bA / jj; div_vsv
+                FOR(i,vl) b [i] = (bA[i] & jj_minus_1); // bM = bA % jj; mod_vsv
+                FOR(i,vl) a [i] = a[i] + bD[i]; // aA = a + bD; add_vvv
+#endif
+            }else if( jj < vl ){ 
+                assert( kase == 4 );
+                Lpi special = ((iloop-1)*vl)%jj;
+                assert( b[0] == special );
+                //FOR(i,vl) assert( bA[i] == sq[i] + iloop%(jj%vl) );
+                FOR(i,vl) bA[i] = vl + b[i];  // bA = b + vl; add_vsv
+                FOR(i,vl)  x[i] = (sq[i] + special) % jj;
+                //  Hmmm. it can be done with a rot,rot,merge (maintaining virtual 2*vl vector)
+                //cout<<" bA "<<special<<" := "<<vecprt(n,wide,bA,vl)<<endl;
+                cout<<" b  "<<b[0]   <<" := "<<vecprt(n,wide,b ,vl)<<endl;
+                cout<<"  x "<<special<<" := "<<vecprt(n,wide, x,vl)<<endl;
+
+                FOR(i,vl) bM[i] = bA[i] % jj; // bM = bA % jj; mod_vsv
+                FOR(i,vl) bD[i] = bA[i] / jj; // bD = bA / jj; div_vsv
+                FOR(i,vl) aA[i] = a[i] + bD[i]; // aA = a + bD; add_vvv
+                /**/ FOR(i,vl) b[i] = bM[i]; // bNext is bM
+                /**/ FOR(i,vl) a[i] = aA[i]; // aNext is aA
+            }else if( jj%2 == 1 ){ // div-mod ----------------------------------> mul-add/sub, 3 vec ops
+                assert( kase == 5 );
+                FOR(i,vl) bA[i] = vl + b[i];  // bA = b + vl; add_vsv
+#if 0 // normal div mod
+                FOR(i,vl) bD[i] = bA[i] / jj; // bD = bA / jj; div_vsv
+                FOR(i,vl) bM[i] = bA[i] % jj; // bM = bA % jj; mod_vsv
+                FOR(i,vl) aA[i] = a[i] + bD[i]; // aA = a + bD; add_vvv
+                /**/ FOR(i,vl) b[i] = bM[i]; // bNext is bM
+                /**/ FOR(i,vl) a[i] = aA[i]; // aNext is aA
+#elif 1 // perhaps faster?
+                assert( jj * jj_mod_inverse_lpi == 1 );
+                assert( (Vlpi)jj * jj_mod_inverse_Vlpi == 1 );
+                FOR(i,vl) assert( 0 <= b[i] );
+                FOR(i,vl) assert( b[i] < jj );
+                FOR(i,vl) assert( vl <= bA[i] );
+                FOR(i,vl) assert( bA[i] < vl+jj );
+                if(vl>jj) FOR(i,vl) assert( bA[i] > jj );
+                if(vl>jj) FOR(i,vl){
+                    if(!( (Uvlpi)bA[i] / (Uvlpi)jj == (Uvlpi)bA[i] * jj_mod_inverse_Vlpi )){
+                        cout
+                            <<" bA[i]/jj = "<<bA[i]<<"/"<<jj<<" = "<<bA[i]/jj<<endl
+                            <<" bA[i]*mi = "<<bA[i]<<"*"<<jj_mod_inverse_Vlpi<<" = "<<bA[i]*jj_mod_inverse_Vlpi<<endl;
+                    }
+                    assert( bA[i] * jj_mod_inverse_Vlpi != 0 );
+                    assert( bA[i] / jj == bA[i] * jj_mod_inverse_Vlpi );
+                    // If bA[i] / jj is ZERO, cannot mult by jj_mod_inverse.
+                    // Now bA[i] >= vl, so if jj >= vl, bA[i] / jj is NOT ZERO
+                }
+                if(vl>jj){
+                    FOR(i,vl) bD[i] = bA[i] * jj_mod_inverse_Vlpi;       // div --> mult by mod inv of jj
+                }else{
+                    FOR(i,vl) bD[i] = bA[i]/jj;
+                }
+                FOR(i,vl) bM[i] = bA[i] - jj*bD[i];             // mod --> mult-sub
+                FOR(i,vl) aA[i] = a[i] + bD[i]; // aA = a + bD; add_vvv
+                /**/ FOR(i,vl) b[i] = bM[i]; // bNext is bM
+                /**/ FOR(i,vl) a[i] = aA[i]; // aNext is aA
+#else // streamlined
+                FOR(i,vl) bD[i] = bA[i] * jj_mod_inverse_Vlpi;        // div --> mult by mod inv of jj
+                FOR(i,vl) b[i] = bA[i] - jj * bD[i];             // mul-sub for b[]!
+                FOR(i,vl) a[i] = a[i]  + jj_mod_inverse_Vlpi * bA[i]; // mul-add for a[]!
+#endif
+            }else{ // div-mod ----------------------------------> mul-add/sub, 3 vec ops
+                assert( kase == 0 );
+                FOR(i,vl) bA[i] = vl + b[i];  // bA = b + vl; add_vsv
+                FOR(i,vl) bD[i] = bA[i] / jj; // bD = bA / jj; div_vsv
+                FOR(i,vl) bM[i] = bA[i] % jj; // bM = bA % jj; mod_vsv
+                FOR(i,vl) aA[i] = a[i] + bD[i]; // aA = a + bD; add_vvv
+                /**/ FOR(i,vl) b[i] = bM[i]; // bNext is bM
+                /**/ FOR(i,vl) a[i] = aA[i]; // aNext is aA
+            }
             // Note: for some jj,
             //       the bM,bD divmod operation can be OPTIMIZED to rot etc.
-            VVlpi aA(vl); FOR(i,vl) aA[i] = a[i] + bD[i]; // aA = a + bD; add_vvv
-            if(0){
-                cout<<"I:bA  "<<vecprt(n,wide,bA,vl)<<" <-- b+vl"<<endl;
-                cout<<"I:bM  "<<vecprt(n,wide,bM,vl)<<" <-- bA%jj = b'"<<endl;
-                cout<<"I:bD  "<<vecprt(n,wide,bD,vl)<<" <-- bA/jj"<<endl;
-                cout<<"I:aA  "<<vecprt(n,wide,aA,vl)<<" <-- a+:!bD ???"<<endl;
-            }
-            FOR(i,vl) b[i] = bM[i]; // bNext is bM
-            FOR(i,vl) a[i] = aA[i]; // aNext is aA
         }
 
         // Note: vl reduction must take place AFTER above use of "long" vl
@@ -182,9 +497,17 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
         }
         //cout<<" cnt="<<cnt<<" vl="<<vl<<" iijj="<<iijj<<endl;
 
-        cout<<"__"<<iloop<<endl;
+        cout<<"__"<<iloop<<" vl,ii,jj "<<vl<<","<<ii<<","<<jj<<"  kase "<<kase<<"  vl\%ii="<<vl%ii<<"  vl\%jj="<<vl%jj<<endl;
         cout<<(iloop==0?"Init  ":"Induce")<<":  "<<vecprt(n,wide,a,vl)<<endl;
         cout<<"         "<<vecprt(n,wide,b,vl)<<endl;
+        if(verbose){
+            cout<<"I:bA "<<kase<<" "<<vecprt(n,wide,bA,vl)<<" <-- b+vl"<<endl;
+            cout<<"I:bM "<<kase<<" "<<vecprt(n,wide,bM,vl)<<" <-- bA%jj = b'"<<endl;
+            cout<<"I:bD "<<kase<<" "<<vecprt(n,wide,bD,vl)<<" <-- bA/jj"<<endl;
+            cout<<"I:aA "<<kase<<" "<<vecprt(n,wide,aA,vl)<<" <-- a+:!bD ???"<<endl;
+            cout<<"I:a0 "<<kase<<" "<<vecprt(n,wide,a0,vl)<<"     ii,jj="<<ii<<","<<jj<<endl;
+            cout<<"I:b0 "<<kase<<" "<<vecprt(n,wide,b0,vl)<<"     vl="<<vl<<endl;
+        }
         FOR(i,vl) assert( a[i] == vabs[iloop].a[i] );
         FOR(i,vl) assert( b[i] == vabs[iloop].b[i] );
         ++iloop; // just for above debug assertions
@@ -301,7 +624,7 @@ void test_vloop2_no_unroll(Lpi const vlen, Lpi const ii, Lpi const jj)
     register uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
     register int vl = vlen;
     register uint64_t cnt = 0UL;
-    if (vl > iijj) vl = iijj; //in general: if (cnt+vl > iijj) vl=iijj-cnt;
+    if ((uint64_t)vl > iijj) vl = iijj; //in general: if (cnt+vl > iijj) vl=iijj-cnt;
     cout<<"===   lea %iijj, 0,"<<ii<<"(,0)"<<endl;
     cout<<"===   lea %vl,   0,"<<jj<<"(,0) // vl used as tmp reg"<<endl;
     cout<<"===   mulu.l %iijj, %iijj, %vl  // opt last 3 for small ii, jj !"<<endl;
@@ -378,7 +701,8 @@ int main(int argc,char**argv){
     int opt_t=1, opt_u=0, opt_l=0, opt_h=0;
     int a=0;
     if(argc > 1){
-        if (argv[1][0]=='-'){
+        // actually only the last -[tlu] option is used
+        for( ; argv[a+1][0]=='-'; ++a){
             char *c = &argv[1][1];
             for( ; *c != '\0'; ++c){
                 if(*c=='h'){
@@ -397,7 +721,6 @@ int main(int argc,char**argv){
                 }else if(*c=='u'){ opt_t=0; opt_l=0; opt_u=1;
                 }
             }
-            ++a;
         }
     }
     cout<<" args: a = "<<a<<endl;
@@ -405,6 +728,9 @@ int main(int argc,char**argv){
     if(argc > a+2) h  = atof(argv[a+2]);
     if(argc > a+3) w  = atof(argv[a+3]);
     cout<<"vlen="<<vl<<", h="<<h<<", w="<<w<<endl;
+    test_mod_inverse<uint32_t>();
+    //test_mod_inverse<uint64_t>();
+    cout<<" (mod_inverse OK)";
     if(opt_h == 0){
         if(opt_t) test_vloop2(vl,h,w);
         if(opt_u) test_vloop2_unroll(vl,h,w);
