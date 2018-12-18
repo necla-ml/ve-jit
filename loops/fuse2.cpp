@@ -14,6 +14,8 @@
 #include <sstream>
 #include <algorithm> // ve finds std::max here!
 #include <type_traits>
+#include <unordered_set>
+#include <map>
 
 #include <cstring>
 #include <cstddef>
@@ -98,6 +100,8 @@ template<> inline int64_t mod_inverse<int64_t>(int64_t const a)
 {
     return mod_inverse((uint64_t)a);
 }
+void libdiv_show(){
+}
 template<typename T> // T ~ an unsigned int type
 void test_mod_inverse(){
     for(T a=0U; a<1024U; ++a){
@@ -110,77 +114,197 @@ void test_mod_inverse(){
             }
         }
     }
-    for(T base=1024U; base>=1024U; base+=base){
-        for(T a=base-1024U; a<base+1024U; ++a){
-            T const odd = 2U*a+1U;
-            T const mo  = mod_inverse(odd);
-            assert( odd * mo == 1 );
-            if(1){ // no... can't "just" convert divides into multiplies
-                for(T t=1U; t<99U; ++t){
-                    //cout<<" t="<<t<<" odd = "<<odd<<" mo = "<<mo<<endl;
-                    assert( (t/odd) == (t - t%odd)*mo );
-                    // or (t/odd)*t == (t-t%odd)*mo*t
-                    // or (t/odd)*t ==  t - t%odd
-                    // or t%odd == t - (t/odd)*t
-                    // Also (t+odd)%odd == (t+odd) - (t+odd)/odd*t
-                    //                  == t+odd - (t/odd + 1)*t
-                    //  or  (t+odd)/odd = t/odd + 1 = ((t+odd) - (t    )%odd)*mo
-                    // (t+odd)*mo - t*mo = odd * mo = 1
-                    assert( (t/odd) == (t - t%odd)*mo );
-                    // What is the relation between t/odd and t*mo ?
-                    // t/odd == (t*mo - (t%odd)*mo)
-                    //                  ^^^^^^^ in [0,odd)
-                    // t*mo = t/odd + (t%odd)*mo
-                    //                ^^^^^^^^^^ in [0,mo*odd)
-                    //
-                    // gcd(2^N,odd) = 1 == 2^N*x + odd*y for some x,y (actually any?)
-                    // 1 == 2^N*(t/odd) + odd*y*(t/odd)
-                    // mo == 2^N*(t/odd)*mo + odd*y*(t/odd)
-                    int const x=1; // verbose
-                    if( odd==1 ){
-                        uint64_t u = (uint64_t)1<<32;
-                        uint64_t v = (((uint64_t)t*(uint64_t)mo)); // but divide-by-one case is already trivial
-                        if(x)cout<<" t,odd "<<t<<","<<odd<<" t\%odd="<<t%odd<<" t/odd="<<t/odd<<" "<<u<<" "<<v<<endl;
-                        assert( t/odd == v );
-                    }
-                    if( odd==3 ){
-                        uint64_t u = (uint64_t)1<<32;
-                        uint64_t v = (((uint64_t)t*(uint64_t)mo))>>32; // boils down to mul, shr by 33 (still two ops)
-                        v = v>>1;
-                        if(x)cout<<" t,odd "<<t<<","<<odd<<" t\%odd="<<t%odd<<" t/odd="<<t/odd<<" "<<u<<" "<<v<<endl;
-                        assert( t/odd == v );
-                    }
-                    if( odd==5 ){
-                        uint64_t u = (uint64_t)1<<32;
-                        uint64_t v = (((uint64_t)t*(uint64_t)mo))>>32;
-                        v = v>>2;
-                        if(x)cout<<" t,odd "<<t<<","<<odd<<" t\%odd="<<t%odd<<" t/odd="<<t/odd<<" "<<u<<" "<<v<<endl;
-                        assert( t/odd == v );
-                    }
-                    if( odd==7 ){
-                        uint64_t u = (uint64_t)1<<32;
-                        // uint64_t mo2 =  multiplicative inverse with 34 bits, truncated to 33 bits ??
-                        uint64_t v = (((uint64_t)(t)*(uint64_t)mo))>>32;
-                        //v=((v+t+1+(t>>3)-(t>>2)-(t>>1))>>3); // fails after a while
-                        v = (v+t)>>3;
-                        if(x)cout<<" t,odd "<<t<<","<<odd<<" t\%odd="<<t%odd<<" t/odd="<<t/odd<<" "<<u<<" "<<v<<" "<<(t>>2)<<endl;
-                        //assert( t/odd == v );
-                    }
-                    if(odd>7) break;
-                    if( odd>8 && odd<16 ){
-                        uint64_t u = (uint64_t)1<<32;
-                        uint64_t v = (((uint64_t)t*(uint64_t)mo))>>35;
-                        if(x)cout<<" t,odd "<<t<<","<<odd<<" t\%odd="<<t%odd<<" t/odd="<<t/odd<<" "<<u<<" "<<v<<endl;
-                        assert( t/odd == v );
-                    }
-                    //if(odd>7) assert(false);
+    cout<<" *** test_mod_inverse() *** "<<endl;
+    T const addme = 0U;
+    cout<<" variant: mul, add "<<addme<<", shr"<<endl;
+    std::map<T,T> magic; // div -->shr
+//#define MAGIC(A,MO,ADDME,SHR) (((A*(uint64_t)MO)+ADDME)>>SHR)
+//#define MAGIC(A,MO,ADDME,SHR) ((A*(uint64_t)(MO+ADDME))>>SHR)
+#define MAGIC(A,MO,ADDME,SHR) ((A*(uint64_t)(MO) )>>SHR)        /* <-- desirable */
+//#define MAGIC(A,MO,ADDME,SHR) (((A+1)*(uint64_t)(MO) )>>SHR)
+//#define MAGIC(A,MO,ADDME,SHR) ((A*(uint64_t)(MO) + (A>>1))>>SHR) // ok for all pow 2?
+//#define MAGIC(A,MO,ADDME,SHR) ((A*(uint64_t)(MO) + (A>>2))>>SHR) // ok for some new
+//#define MAGIC(A,MO,ADDME,SHR) ((A*(uint64_t)(MO) + A)>>SHR)
+    for(int shr=28; shr<50; ++shr){
+        cout<<" mod_inv w/ shr = "<<shr<<" ..."<<endl;
+        std::unordered_set<T> tried;
+        std::unordered_set<T> bad;
+        for(T base=1024U; base>=1024U; base+=base){
+            for(T a=base-1023U,cnt=0; cnt<2048 && a!=0; ++a,++cnt){
+                T const div = a;
+                if(tried.find(div)!=tried.end()){
+                    //cout<<" already tried div="<<div<<endl;
+                    continue;
                 }
+                T mo;
+                //mo  = mod_inverse(div);
+                //  if( div%2 == 1 ) assert( div * mo == 1 );
+                //mo  = mod_inverse(div/2);
+                //mo = ((uint64_t(1)<<63)-1)/div +1;
+                //mo = ((uint64_t(1)<<62)-1)/div +1;
+                //mo = ((uint64_t(1)<<63)-1)/div +0;
+                //mo = ((uint64_t(1)<<63)-1)/(div) +(div>>3);
+                //mo = ((uint64_t(1)<<63)-1)/(div) +(div>>6); // 124,130,136,144,160,170
+                //mo = ((uint64_t(1)<<63)-1)/(div) +(div>>7); // many in 129..255
+#define U64MAX (~uint64_t(0))
+                //mo = (U64MAX/div); // very good, w/ (A+1)*MO>>SHR
+                //mo = ((uint64_t(1)<<62)-1)/div +0; //also decent
+                //mo = ((uint64_t(1)<<63)-1)/div +0; //also decent, seen before set
+                //mo = ((uint64_t(1)<<63))/div +0; //also decent, seen before set
+#define POW2m1(N) ((((uint64_t(1)<<(N-1)) -1)<<1)+1)
+                assert( POW2m1(64) == U64MAX );
+                //mo = (U64MAX/div+1); // less good, w/ A*MO>>SHR
+                mo = ((POW2m1(63)))/div +1; // ~ 3,9,10,11,12,15,20
+                //mo = ((POW2m1(62)))/div +1; // ~ 5,6,10,14
+                //mo = ((POW2m1(63)+POW2m1(62)))/div +0; //not great
+                //mo = ((POW2m1(63)+POW2m1(61)))/div +0; // some new?
+                //mo = ((POW2m1(63)+POW2m1(60)))/div +0; // some new?
+                //mo = ((POW2m1(63)+POW2m1(60)+(div>>1)))/div +0; // some new?
+                //mo = ((POW2m1(63)+POW2m1(61)))/div +1; // finally hit 13!
+#if 0
+ divisor 11 shr 35
+ divisor 13 shr 34
+ divisor 18 shr 36
+ divisor 22 shr 35
+ divisor 24 shr 36
+ divisor 36 shr 36
+ divisor 44 shr 35
+ divisor 72 shr 36
+ divisor 96 shr 38
+ divisor 181 shr 37
+ divisor 384 shr 40
+ divisor 608 shr 41
+ divisor 1152 shr 42
+ divisor 1216 shr 41
+ divisor 1536 shr 42
+ divisor 2304 shr 42
+#endif
+                //mo = ((POW2m1(62)))/div +1; // 5,6,10,14
+                //mo = (POW2m1(62) + POW2m1(60)+1)/div +1; // incl 9,11,12,18
+                //mo = (POW2m1(62) + POW2m1(60) + POW2m1(59)+2)/div +1; // incl 6,7,10,18..21
+#if 0
+ sorted summary of magic inv_mod shifts...
+ divisor 6 shr 34
+ divisor 7 shr 34
+ divisor 10 shr 35
+ divisor 18 shr 36
+ divisor 19 shr 35
+ divisor 20 shr 35
+ divisor 21 shr 34
+ divisor 24 shr 36
+ divisor 25 shr 35
+ divisor 27 shr 36
+#endif
+                //mo = (POW2m1(63) + POW2m1(61) + POW2m1(60)+2)/div +1; // 3,12,14,19
+                //mo = (POW2m1(62) + POW2m1(60) + POW2m1(58)+2)/div +1; incl 5,10,11,17
+                //
+                // so libdivide pre-shift and increment are not necessary with
+                // a different search procedure, I think
+                //
+                tried.insert(div);
+                //cout<<" trying div="<<div;
+                for(T t=1U; t<8000U; ++t){
+                    if( !(t/div == MAGIC(t,mo,addme,shr)) ){
+                        bad.insert(div);
+                        break;
+                    }
+                }
+                //cout<<"."; cout.flush();
+                if( bad.find(div) == bad.end() ){
+                    for(T tt=8192U; tt>=8192U; tt+=tt){
+                        for(T t=tt-1024U,cnt=0U; cnt<2048U && t!=0; ++cnt, ++t){
+                            if( !(t/div == MAGIC(t,mo,addme,shr)) ){
+                                bad.insert(div);
+                                break;
+                            }
+                        }
+                        if(bad.find(div)!=bad.end()) break;
+                    }
+                }
+                //cout<<(bad.find(div)!=bad.end()? " BAD":" OK")<<endl;
+                //cout.flush();
+
+                if(0){ // no... can't "just" convert divides into multiplies
+                    for(T t=1U; t<99U; ++t){
+                        //cout<<" t="<<t<<" div = "<<div<<" mo = "<<mo<<endl;
+                        assert( (t/div) == (t - t%div)*mo );
+                        // or (t/div)*t == (t-t%div)*mo*t
+                        // or (t/div)*t ==  t - t%div
+                        // or t%div == t - (t/div)*t
+                        // Also (t+div)%div == (t+div) - (t+div)/div*t
+                        //                  == t+div - (t/div + 1)*t
+                        //  or  (t+div)/div = t/div + 1 = ((t+div) - (t    )%div)*mo
+                        // (t+div)*mo - t*mo = div * mo = 1
+                        assert( (t/div) == (t - t%div)*mo );
+                        // What is the relation between t/div and t*mo ?
+                        // t/div == (t*mo - (t%div)*mo)
+                        //                  ^^^^^^^ in [0,div)
+                        // t*mo = t/div + (t%div)*mo
+                        //                ^^^^^^^^^^ in [0,mo*div)
+                        //
+                        // gcd(2^N,div) = 1 == 2^N*x + div*y for some x,y (actually any?)
+                        // 1 == 2^N*(t/div) + div*y*(t/div)
+                        // mo == 2^N*(t/div)*mo + div*y*(t/div)
+                        int const x=1; // verbose
+                        if( div==1 ){
+                            uint64_t u = (uint64_t)1<<32;
+                            uint64_t v = (((uint64_t)t*(uint64_t)mo)); // but divide-by-one case is already trivial
+                            if(x)cout<<" t,div "<<t<<","<<div<<" t\%div="<<t%div<<" t/div="<<t/div<<" "<<u<<" "<<v<<endl;
+                            assert( t/div == v );
+                        }
+                        if( positivePow2(div) ){
+                            cout<<"div="<<div<<" is a power of two"<<endl;
+                            continue;
+                        }
+                        if( div==3 ){
+                            uint64_t u = (uint64_t)1<<32;
+                            uint64_t v = (((uint64_t)t*(uint64_t)mo))>>32; // boils down to mul, shr by 33 (still two ops)
+                            v = v>>1;
+                            if(x)cout<<" t,div "<<t<<","<<div<<" t\%div="<<t%div<<" t/div="<<t/div<<" "<<u<<" "<<v<<endl;
+                            assert( t/div == v );
+                        }
+                        if( div==5 ){
+                            uint64_t u = (uint64_t)1<<32;
+                            uint64_t v = (((uint64_t)t*(uint64_t)mo))>>32;
+                            v = v>>2;
+                            if(x)cout<<" t,div "<<t<<","<<div<<" t\%div="<<t%div<<" t/div="<<t/div<<" "<<u<<" "<<v<<endl;
+                            assert( t/div == v );
+                        }
+                        if( div==7 ){
+                            uint64_t u = (uint64_t)1<<32;
+                            // uint64_t mo2 =  multiplicative inverse with 34 bits, truncated to 33 bits ??
+                            uint64_t v = (((uint64_t)(t)*(uint64_t)mo))>>32;
+                            //v=((v+t+1+(t>>3)-(t>>2)-(t>>1))>>3); // fails after a while
+                            v = (v+t)>>3;
+                            if(x)cout<<" t,div "<<t<<","<<div<<" t\%div="<<t%div<<" t/div="<<t/div<<" "<<u<<" "<<v<<" "<<(t>>2)<<endl;
+                            //assert( t/div == v );
+                        }
+                        if(div>7) break;
+                        if( div>8 && div<16 ){
+                            uint64_t u = (uint64_t)1<<32;
+                            uint64_t v = (((uint64_t)t*(uint64_t)mo))>>35;
+                            if(x)cout<<" t,div "<<t<<","<<div<<" t\%div="<<t%div<<" t/div="<<t/div<<" "<<u<<" "<<v<<endl;
+                            assert( t/div == v );
+                        }
+                        //if(div>7) assert(false);
+                    }
+                }
+                //if(div>7)break;
+                //cout<<" a="<<a<<endl;
+                //if(a>10) break;
             }
-            //if(odd>7)break;
-            cout<<" a="<<a<<endl;
-            if(a>10) break;
+            if(base > 2000) break;
         }
-        if(base > 2000) break;
+        for(auto const t: tried){
+            if(bad.find(t)==bad.end()){
+                cout<<" divisor "<<t<<" OK with *mod_inv, >>"<<shr<<endl;
+                magic[t] = shr;
+            }
+        }
+    }
+    cout<<" sorted summary of magic inv_mod shifts..."<<endl;
+    for(auto const& m: magic){
+        cout<<" divisor "<<m.first<<" shr "<<m.second<<endl;
     }
 }
 void verify1() {
@@ -331,13 +455,20 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     magicu_info bogus = {0,0,0,0};
     assert( sizeof(uint)*CHAR_BIT == 32 );
     auto const ld = positivePow2(jj) ? bogus: compute_unsigned_magic_info( jj, 32 );
-    if( ld.pre_shift==0 ){
-        cout<<" jj="<<jj<<" --> no pre-shift, post-shift="<<ld.post_shift<<",increment="<<ld.increment<<endl;
-        // NO assert( ld.post_shift==1 ); sometimes 1 or 2
-        // NO  assert( ld.post_shift==0 || ld.post_shift==1 || ld.post_shift==2 );
-    }else{
-        cout<<" OHOH ";
-        cout<<" jj="<<jj<<" --> pre-shift="<<ld.pre_shift<<", post-shift="<<ld.post_shift<<",increment="<<ld.increment<<endl;
+    if( !positivePow2(jj) ){
+        if( ld.pre_shift==0 ){
+            // NO assert( ld.post_shift==1 ); sometimes 1 or 2
+            // NO  assert( ld.post_shift==0 || ld.post_shift==1 || ld.post_shift==2 );
+            if( ld.post_shift==0 ){
+                // never happens?
+                cout<<" jj="<<jj<<" --> no pre or post-shift, increment="<<ld.increment<<", mul="<<(void*)ld.multiplier<<" jj_modinv64="<<(void*)jj_mod_inverse_Vlpi<<endl;
+            }else{
+                cout<<" jj="<<jj<<" --> no pre-shift, post-shift="<<ld.post_shift<<",increment="<<ld.increment<<", mul="<<(void*)ld.multiplier<<" jj_modinv64="<<(void*)jj_mod_inverse_Vlpi<<endl;
+            }
+        }else{
+            cout<<" OHOH ";
+            cout<<" jj="<<jj<<" --> pre-shift="<<ld.pre_shift<<", post-shift="<<ld.post_shift<<",increment="<<ld.increment<<", mul="<<(void*)ld.multiplier<<" jj_modinv64="<<(void*)jj_mod_inverse_Vlpi<<endl;
+        }
     }
     for( ; cnt < iijj; cnt += vl )
     {
@@ -546,10 +677,9 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
                 FOR(i,vl) b[i] = bA[i] - jj * bD[i];                  // b[] w/ mul,sub (for mod)
                 FOR(i,vl) a[i] = a[i]  + bD[i];                       // a[] w/ add
 #endif
-            }else if(0) { // libdivide method -- op count for the divide is always worse (4 or 5)
-                unsigned op_count = 0U;
+            }else if(1) { // libdivide method -- op count for the divide is always worse (4 or 5)
                 FOR(i,vl) bA[i] = vl + b[i];  // bA = b + vl; add_vsv
-                ++op_count;
+                unsigned op_count = 0U;
                 //FOR(i,vl) bD[i] = bA[i] / jj; // bD = bA / jj; div_vsv
                 if( ld.pre_shift == 0 ){
                     FOR(i,vl) bD[i] = ((uint64_t)ld.multiplier * (uint64_t)bA[i]);
@@ -565,6 +695,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
                     cout<<" bD2 := "<<vecprt(n,12,bD,vl)<<" inc"<<endl;
                     ++op_count;
                 }
+#if 0
                 FOR(i,vl) bD[i] = bD[i] >> 32;
                 ++op_count;
                 cout<<" bD3 := "<<vecprt(n,12,bD,vl)<<" >>32"<<endl;
@@ -573,9 +704,13 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
                     cout<<" bD4 := "<<vecprt(n,12,bD,vl)<<endl;
                     ++op_count;
                 }
+#else
+                FOR(i,vl) bD[i] = bD[i] >> (32+ld.post_shift);
+                ++op_count;
+#endif
                 FOR(i,vl) x[i] = bA[i] / jj;
                 cout<<"  x  := "<<vecprt(n,wide, x,vl)<<" <-- expected"<<endl;
-                cout<<" libdiv ops="<<op_count<<" "<<(op_count<2?"BETTER": op_count==2? "SAME": "WORSE")<<" wrt. fastdiv_uB"<<endl;
+                cout<<" libdiv jj="<<jj<<" ops="<<op_count<<" "<<(op_count<2?"BETTER": op_count==2? "SAME": "WORSE")<<" wrt. fastdiv_uB"<<endl;
                 FOR(i,vl) bM[i] = bA[i] - bD[i]*jj; // modulo, via the div bD
                 //FOR(i,vl) bM[i] = bA[i] % jj; // modulo, via the div bD
                 FOR(i,vl) aA[i] = a[i] + bD[i]; // aA = a + bD; add_vvv
@@ -651,7 +786,7 @@ void test_vloop2_unroll(Lpi const vlen, Lpi const ii, Lpi const jj)
 {
     // for r in [0,h){ for c in [0,w] {...}}
     assert( vlen > 0 );
-    cout<<"test_vloop2( vlen="<<vlen<<" loops 0.."<<ii<<" 0.."<<jj<<endl;
+    cout<<"test_vloop2_unroll( vlen="<<vlen<<" loops 0.."<<ii<<" 0.."<<jj<<endl;
 
     // pretty-printing via vecprt
     int const n=8; // output up-to-n [ ... [up-to-n]] ints
@@ -731,7 +866,7 @@ void test_vloop2_no_unroll(Lpi const vlen, Lpi const ii, Lpi const jj)
 {
     // for r in [0,h){ for c in [0,w] {...}}
     assert( vlen > 0 );
-    cout<<"test_vloop2( vlen="<<vlen<<" loops 0.."<<ii<<" 0.."<<jj<<endl;
+    cout<<"test_vloop2_nounroll( vlen="<<vlen<<" loops 0.."<<ii<<" 0.."<<jj<<endl;
 
     // pretty-printing via vecprt
     int const n=8; // output up-to-n [ ... [up-to-n]] ints
@@ -827,7 +962,7 @@ done:
 int main(int argc,char**argv){
     int vl = 8;
     int h=20, w=3;
-    int opt_t=1, opt_u=0, opt_l=0, opt_h=0;
+    int opt_t=1, opt_u=0, opt_l=0, opt_h=0, opt_m=0;
     int a=0;
     if(argc > 1){
         // actually only the last -[tlu] option is used
@@ -839,6 +974,7 @@ int main(int argc,char**argv){
                     cout<<"  -t    just test correctness"<<endl;
                     cout<<"  -l    [default] pseudo-asm-code for loops (+correctness)"<<endl;
                     cout<<"  -u    pseudo-asm-code for unrolled loops (+correctness)"<<endl;
+                    cout<<"  -m    try for extended-range (a/d) ~ a*M>>N forms"<<endl;
                     cout<<"  -h    this help"<<endl;
                     cout<<"   VLEN = vector length"<<endl;
                     cout<<"   I    = 1st loop a=0..i-1"<<endl;
@@ -848,6 +984,7 @@ int main(int argc,char**argv){
                 }else if(*c=='t'){ opt_t=1; opt_l=0; opt_u=0;
                 }else if(*c=='l'){ opt_t=0; opt_l=1; opt_u=0;
                 }else if(*c=='u'){ opt_t=0; opt_l=0; opt_u=1;
+                }else if(*c=='m'){ opt_m=1;
                 }
             }
         }
@@ -857,9 +994,315 @@ int main(int argc,char**argv){
     if(argc > a+2) h  = atof(argv[a+2]);
     if(argc > a+3) w  = atof(argv[a+3]);
     cout<<"vlen="<<vl<<", h="<<h<<", w="<<w<<endl;
-    test_mod_inverse<uint32_t>();
-    //test_mod_inverse<uint64_t>();
-    cout<<" (mod_inverse OK)";
+
+    if(opt_m){
+        test_mod_inverse<uint32_t>();
+        //test_mod_inverse<uint64_t>();
+        cout<<" (mod_inverse OK)";
+#if 0
+Alg:  a/d ~ a* (mod_inverse(d) >> shr
+ sorted summary of magic inv_mod shifts...
+ divisor 3 shr 33
+ divisor 5 shr 34
+ divisor 9 shr 33
+ divisor 11 shr 35
+ divisor 17 shr 36
+ divisor 33 shr 35
+ divisor 43 shr 35
+ divisor 67 shr 33
+ divisor 129 shr 35
+ divisor 137 shr 34
+ divisor 201 shr 33
+ divisor 229 shr 38
+ divisor 241 shr 36
+ divisor 257 shr 40
+ divisor 281 shr 35
+ divisor 433 shr 36
+ divisor 457 shr 38
+ divisor 473 shr 35
+ divisor 603 shr 33
+ divisor 641 shr 32
+ divisor 683 shr 33
+ divisor 685 shr 34
+ divisor 843 shr 35
+ divisor 953 shr 34
+ divisor 1145 shr 38
+ divisor 1419 shr 35
+ divisor 1429 shr 42
+ divisor 1469 shr 42
+ divisor 1777 shr 37
+ divisor 1885 shr 42
+ divisor 2049 shr 33
+ divisor 2285 shr 38
+ divisor 2731 shr 39
+ Note: for 2x divisor, mul by modinv(div/2), and use shr(+1)
+   But the only thing floor/ceil/mod_inv multipliers give is
+   extended validity range and NO REDUCTION IN OPS.
+   So for jj+vl < 1<<21, convolution algs are just fine with the
+   generic *_uB algs.
+Alg: a/d ~ a * ((ceil(1<<64)/d)) >> shr
+ divisor 3 shr 33
+ divisor 9 shr 33
+ divisor 10 shr 35
+ divisor 11 shr 33
+ divisor 12 shr 35
+ divisor 15 shr 35  (not 17)
+ divisor 20 shr 35
+ divisor 28 shr 36 (not 33)
+ divisor 43 shr 35
+ divisor 48 shr 37 (not 67)
+ divisor 124 shr 38
+ divisor 129 shr 35
+ divisor 130 shr 39
+ divisor 136 shr 39 (not 137)
+ divisor 140 shr 39
+ divisor 144 shr 39
+ divisor 153 shr 39
+ divisor 156 shr 39
+ divisor 160 shr 39
+ divisor 168 shr 39
+ divisor 170 shr 39
+ divisor 180 shr 39
+ divisor 182 shr 39
+ divisor 192 shr 39
+ divisor 195 shr 39 (not 201)
+ divisor 204 shr 39
+ divisor 208 shr 39
+ divisor 210 shr 39
+ divisor 221 shr 39
+ divisor 224 shr 39 (not 229)
+ divisor 234 shr 39
+ divisor 238 shr 39
+ divisor 240 shr 39
+ divisor 241 shr 39
+ divisor 252 shr 39
+ divisor 255 shr 39 (not 257)
+ divisor 260 shr 39
+ divisor 272 shr 39 (not 281)
+ divisor 288 shr 39
+ divisor 320 shr 39
+ divisor 336 shr 39
+ divisor 340 shr 39
+ divisor 357 shr 39
+ divisor 376 shr 40
+ divisor 416 shr 39 (not 433, 457, 473)
+ divisor 476 shr 39
+ divisor 482 shr 39
+ divisor 534 shr 41
+ divisor 552 shr 41
+ divisor 576 shr 39 (not 603, 641)
+ divisor 672 shr 39
+ divisor 683 shr 41 (not 685)
+ divisor 712 shr 41
+ divisor 714 shr 39
+ divisor 736 shr 41
+ divisor 765 shr 39
+ divisor 768 shr 41 (not 843, 953)
+ divisor 964 shr 39
+ divisor 1068 shr 41
+ divisor 1104 shr 41 (not 1145)
+ divisor 1348 shr 42
+ divisor 1366 shr 41 (not 1419)
+ divisor 1428 shr 39 (not 1429, 1469)
+ divisor 1568 shr 42 (not 1777)
+ divisor 1778 shr 42
+ divisor 1792 shr 42 (not 1885)
+ divisor 1928 shr 39
+ divisor 2032 shr 42
+ divisor 2049 shr 41
+ divisor 2050 shr 43
+ divisor 2112 shr 43
+ divisor 2200 shr 43
+ divisor 2255 shr 43 (not 2285)
+ divisor 2325 shr 43
+ divisor 2359 shr 42
+ divisor 2400 shr 43
+ divisor 2460 shr 43
+ divisor 2480 shr 43
+ divisor 2542 shr 43
+ divisor 2560 shr 43
+ divisor 2624 shr 43
+ divisor 2640 shr 43
+ divisor 2696 shr 42
+ divisor 2706 shr 43
+ divisor 2728 shr 43 (not 2731)
+ divisor 2732 shr 41
+ divisor 2816 shr 43
+ divisor 2976 shr 43
+ divisor 3072 shr 43
+floor-based M with (A+1)*M>>SHR is even more widely correct ......
+ sorted summary of magic inv_mod shifts...
+ divisor 1 shr 32
+ divisor 2 shr 33
+ divisor 3 shr 33
+ divisor 4 shr 34
+ divisor 6 shr 33
+ divisor 7 shr 33
+ divisor 8 shr 35
+ divisor 10 shr 35
+ divisor 12 shr 35 (everybody missing 13,14)
+ divisor 15 shr 35
+ divisor 16 shr 36
+ divisor 20 shr 35
+ divisor 24 shr 35
+ divisor 28 shr 36
+ divisor 29 shr 35
+ divisor 30 shr 35
+ divisor 32 shr 37
+ divisor 40 shr 35
+ divisor 48 shr 37
+ divisor 56 shr 36
+ divisor 58 shr 35
+ divisor 60 shr 35
+ divisor 64 shr 38
+ divisor 73 shr 36
+ divisor 96 shr 37
+ divisor 113 shr 35
+ divisor 116 shr 35
+ divisor 120 shr 35
+ divisor 124 shr 38
+ divisor 127 shr 35
+ divisor 128 shr 39
+ divisor 130 shr 39
+ divisor 136 shr 39
+ divisor 140 shr 39
+ divisor 144 shr 39
+ divisor 153 shr 39
+ divisor 156 shr 39
+ divisor 160 shr 39
+ divisor 168 shr 39
+ divisor 170 shr 39
+ divisor 180 shr 39
+ divisor 182 shr 39
+ divisor 192 shr 39
+ divisor 195 shr 39
+ divisor 204 shr 39
+ divisor 208 shr 39
+ divisor 210 shr 39
+ divisor 221 shr 39
+ divisor 224 shr 39
+ divisor 234 shr 39
+ divisor 238 shr 39
+ divisor 240 shr 39
+ divisor 241 shr 39
+ divisor 248 shr 38
+ divisor 252 shr 39
+ divisor 255 shr 39
+ divisor 256 shr 40
+ divisor 260 shr 39
+ divisor 272 shr 39
+ divisor 273 shr 39
+ divisor 280 shr 39
+ divisor 288 shr 39
+ divisor 306 shr 39
+ divisor 312 shr 39
+ divisor 315 shr 39
+ divisor 320 shr 39
+ divisor 336 shr 39
+ divisor 340 shr 39
+ divisor 360 shr 39
+ divisor 364 shr 39
+ divisor 376 shr 40
+ divisor 384 shr 39
+ divisor 390 shr 39
+ divisor 408 shr 39
+ divisor 420 shr 39
+ divisor 442 shr 39
+ divisor 448 shr 39
+ divisor 455 shr 39
+ divisor 468 shr 39
+ divisor 480 shr 39
+ divisor 504 shr 39
+ divisor 510 shr 39
+ divisor 511 shr 36
+ divisor 512 shr 41
+ divisor 520 shr 39
+ divisor 534 shr 41
+ divisor 544 shr 39
+ divisor 546 shr 39
+ divisor 552 shr 41
+ divisor 585 shr 39
+ divisor 595 shr 39
+ divisor 630 shr 39
+ divisor 640 shr 39
+ divisor 680 shr 39
+ divisor 683 shr 41
+ divisor 712 shr 41
+ divisor 723 shr 39
+ divisor 728 shr 39
+ divisor 736 shr 41
+ divisor 752 shr 40
+ divisor 768 shr 41
+ divisor 780 shr 39
+ divisor 816 shr 39
+ divisor 819 shr 39
+ divisor 840 shr 39
+ divisor 884 shr 39
+ divisor 910 shr 39
+ divisor 936 shr 39
+ divisor 960 shr 39
+ divisor 1020 shr 39
+ divisor 1024 shr 42
+ divisor 1068 shr 41
+ divisor 1088 shr 39
+ divisor 1092 shr 39
+ divisor 1104 shr 41
+ divisor 1170 shr 39
+ divisor 1205 shr 39
+ divisor 1260 shr 39
+ divisor 1348 shr 42
+ divisor 1360 shr 39
+ divisor 1365 shr 39
+ divisor 1424 shr 41
+ divisor 1472 shr 41
+ divisor 1504 shr 40
+ divisor 1536 shr 41
+ divisor 1560 shr 39
+ divisor 1568 shr 42
+ divisor 1632 shr 39
+ divisor 1638 shr 39
+ divisor 1778 shr 42
+ divisor 1792 shr 42
+ divisor 1820 shr 39
+ divisor 1920 shr 39
+ divisor 2032 shr 42
+ divisor 2040 shr 39
+ divisor 2047 shr 41
+ divisor 2048 shr 43
+ divisor 2050 shr 43
+ divisor 2112 shr 43
+ divisor 2136 shr 41
+ divisor 2169 shr 39
+ divisor 2176 shr 39
+ divisor 2184 shr 39
+ divisor 2200 shr 43
+ divisor 2208 shr 41
+ divisor 2255 shr 43
+ divisor 2325 shr 43
+ divisor 2340 shr 39
+ divisor 2359 shr 42
+ divisor 2400 shr 43
+ divisor 2460 shr 43
+ divisor 2480 shr 43
+ divisor 2520 shr 39
+ divisor 2542 shr 43
+ divisor 2560 shr 43
+ divisor 2624 shr 43
+ divisor 2640 shr 43
+ divisor 2706 shr 43
+ divisor 2720 shr 39
+ divisor 2728 shr 43
+ divisor 2730 shr 39
+ divisor 2816 shr 43
+ divisor 2848 shr 41
+ divisor 2944 shr 41
+ divisor 2976 shr 43
+ divisor 3072 shr 43
+So probably can ceil, floor, inv_mod, and various other "magics" for
+good approximations for (a/d) as a*M>>R
+#endif
+       exit(0);
+    }
 
     // INCORRECT verify1();
     //cout<<" verify1 OK"<<endl;

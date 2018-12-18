@@ -1,8 +1,14 @@
-all: fuse2 fuse2lin tf2-1.log tf2-2.log tf2-3.log tf2-4.log tf2-0.log tf2-5.log
+all: fuse2 fuse2lin tf2-1.log tf2-2.log tf2-3.log tf2-4.log tf2-0.log tf2-5.log tf2-m.log
 	@echo 'ALL DONE with make all'
 
 fuse2: fuse2.cpp
 	g++ -Wall -std=c++11 -O3 $< -o $@
+tf2-m.log: fuse2 Makefile
+	( echo "$@" \
+		&& ./fuse2 -m  8  1  1 \
+		&& echo "EVERYTHING LOOKS GOOD" \
+		) 2>&1 | tee $@
+
 tf2-1.log: fuse2 Makefile # vl%jj == 0 (case 1)
 	( echo "$@" \
 		&& ./fuse2 -t  8  1  1 \
