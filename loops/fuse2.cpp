@@ -58,6 +58,9 @@ inline int /*constexpr*/ positivePow2Shift(uint32_t v) {
     //assert( positivePow2(v)
     return MultiplyDeBruijnBitPosition2[(uint32_t)(v * 0x077CB531U) >> 27];
 }
+
+#include "divide_by_constants_codegen_reference.c"
+
 #include "../regs/throw.hpp"
 #include <typeinfo>
 template<typename T> T mod_inverse( T const a ){
@@ -136,13 +139,13 @@ void test_mod_inverse(){
                     int const x=1; // verbose
                     if( odd==1 ){
                         uint64_t u = (uint64_t)1<<32;
-                        uint64_t v = (((uint64_t)t*(uint64_t)mo));
+                        uint64_t v = (((uint64_t)t*(uint64_t)mo)); // but divide-by-one case is already trivial
                         if(x)cout<<" t,odd "<<t<<","<<odd<<" t\%odd="<<t%odd<<" t/odd="<<t/odd<<" "<<u<<" "<<v<<endl;
                         assert( t/odd == v );
                     }
                     if( odd==3 ){
                         uint64_t u = (uint64_t)1<<32;
-                        uint64_t v = (((uint64_t)t*(uint64_t)mo))>>32;
+                        uint64_t v = (((uint64_t)t*(uint64_t)mo))>>32; // boils down to mul, shr by 33 (still two ops)
                         v = v>>1;
                         if(x)cout<<" t,odd "<<t<<","<<odd<<" t\%odd="<<t%odd<<" t/odd="<<t/odd<<" "<<u<<" "<<v<<endl;
                         assert( t/odd == v );
@@ -178,6 +181,20 @@ void test_mod_inverse(){
             if(a>10) break;
         }
         if(base > 2000) break;
+    }
+}
+void verify1() {
+    for(uint32_t vl = 0U; vl<1000U; ++vl){
+        for(uint32_t d=1U; d<vl; d+=2U){
+            uint32_t d_modinv32 = mod_inverse(d);
+            for(uint64_t b=vl; b<vl+vl; ++b){
+                assert( d<vl && d%2==1 );
+                if(!( b/d == b * d_modinv32 )){
+                    cout<<" "<<b<<"/"<<d<<"="<<b/d<<", but b*"<<d_modinv32<<" = "<<b*d_modinv32<<endl;
+                }
+                assert( b/d == b * d_modinv32 );    
+            }
+        }
     }
 }
 /** Reference values for correct index outputs */
@@ -230,6 +247,30 @@ std::vector<Vab> ref_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
     }
     return vabs;
 }
+// see https://github.com/lemire/constantdivisionbenchmarks, "lkk" algorithm.
+// Issue #1 comments on 64-bit-only version similar to:
+#define B 21 /* B up to 21 is OK to keep all intermediates in 64-bit range */
+/** *_uB functions were verified for its SAFEMAX (took a while to run) */
+#define SAFEMAX ((1U<<B)-1U)
+#define C (2*B)
+static inline uint64_t constexpr computeM_uB(uint32_t d) {
+      return ((UINT64_C(1)<<C)-1) / d + 1;
+}
+/** fastdiv computes (a / d) given precomputed M for d>1.
+ * \pre a,d < (1<<21). */
+static inline constexpr uint32_t fastdiv_uB(uint32_t const a, uint64_t const M) {
+    return M*a >> C; // 2 ops: mul, shr
+}
+/** fastmod computes (a % d) given precomputed M.
+ * Probably nicer to calc. uint64_t D=a/d using fastdiv_uB, and then R=a-D*d.
+ * (retain "everythin" in u64 registers).
+ * \pre a,d < (1<<21). */
+static inline uint32_t constexpr fastmod_uB(uint32_t const a, uint64_t const M, uint32_t const d) {
+    // ugly with 'lowbits' approach, nicer to just do the fastdiv followed by mul and sub :(
+    return a - (M*a>>C)*d; // 3-4 ops: mul, shr, mul-sub... AND get a/d too (i.e. divmod adds 1 op to the division)
+}
+// NOTE: we do a ">>C", which we can't just elide on Aurora, even if C==16
+
 /* Suppose for i:(0,ii){ for j:(o,jj) {} gets
  * gets vector indices \c a[] and \c b[]
  * with preferred vector length \c vlen.
@@ -285,7 +326,19 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     int jj_shift=0;            // for kase 3, positivePow2(jj)
     Ulpi jj_mod_inverse_lpi   = mod_inverse((Ulpi)jj);
     Uvlpi jj_mod_inverse_Vlpi = mod_inverse((Uvlpi)jj);
+    uint64_t const jj_M = computeM_uB(jj); // for fastdiv_uB method
     //for( ; iloop < nloop; ++iloop )
+    magicu_info bogus = {0,0,0,0};
+    assert( sizeof(uint)*CHAR_BIT == 32 );
+    auto const ld = positivePow2(jj) ? bogus: compute_unsigned_magic_info( jj, 32 );
+    if( ld.pre_shift==0 ){
+        cout<<" jj="<<jj<<" --> no pre-shift, post-shift="<<ld.post_shift<<",increment="<<ld.increment<<endl;
+        // NO assert( ld.post_shift==1 ); sometimes 1 or 2
+        // NO  assert( ld.post_shift==0 || ld.post_shift==1 || ld.post_shift==2 );
+    }else{
+        cout<<" OHOH ";
+        cout<<" jj="<<jj<<" --> pre-shift="<<ld.pre_shift<<", post-shift="<<ld.post_shift<<",increment="<<ld.increment<<endl;
+    }
     for( ; cnt < iijj; cnt += vl )
     {
         //cout<<"cnt "<<cnt<<" iloop "<<iloop<<" ii "<<ii<<" jj "<<jj<<endl;
@@ -294,8 +347,8 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
             vl%jj == 0          ? 1
             : jj%vl == 0        ? 2
             : positivePow2(jj)  ? 3
-            : jj < vl           ? 4
-            : jj%2 == 1         ? 5
+            : /*jj < vl*/0      ? 4
+            : jj<vl && jj%2==1  ? 5
             : 0;
         if (iloop == 0){
             // now load the initial vector-loop registers:
@@ -342,7 +395,8 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
             //     which has some optimizations for nice values of jj.
         }else{
             // 2. Induction from a->ax, b->bx
-            if(vl%jj == 0){  // avoid div,mod -------------> 1 vec op
+            if(vl%jj == 0){  // avoid div,mod ----------------------------> 1 vec op
+                // jj==1 special case is included here (good)
                 assert( kase == 1 );
                 //FOR(i,vl) bA[i] = vl + b[i];
                 //FOR(i,vl) x [i] = bA[i] % jj;
@@ -387,14 +441,15 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
                 // unroll(jj/vl) (if not too big) could be branchless
                 FOR(i,vl) assert( bA[i] = vl + b[i] );          // const vector
                 FOR(i,vl) assert( (vl+b[i])/jj == (special==0?1:0) ); // test bD[i]
-                if( special ) {                         // bump b[i], bD[i]==0
+                // can be optimized further into 3 minimal-op cases
+                if( special ) { // slightly less likely // bump b[i], bD[i]==0
                     FOR(i,vl) b[i] = b[i] + vl;
                 }else{                                  // reset b[i], bD[i]==1
                     FOR(i,vl) b[i] = sq[i];
                     FOR(i,vl) a[i] = a[i] + 1;
                 }
 #endif
-            }else if( positivePow2(jj) ){ // 4 vec ops (div and mod --> shift and or)
+            }else if( positivePow2(jj) ){ // -----------------> 4 vec ops (add, shr, and, add)
                 assert( kase == 3 );
 #if 0 // debug
                 FOR(i,vl) bA[i] = vl + b[i];  // bA = b + vl; add_vsv
@@ -418,7 +473,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
                 FOR(i,vl) b [i] = (bA[i] & jj_minus_1); // bM = bA % jj; mod_vsv
                 FOR(i,vl) a [i] = a[i] + bD[i]; // aA = a + bD; add_vvv
 #endif
-            }else if( jj < vl ){ 
+            }else if( 0 && jj < vl ){ // Attempts that I never got better than "_uB" (21-bit lkk) method
                 assert( kase == 4 );
                 Lpi special = ((iloop-1)*vl)%jj;
                 assert( b[0] == special );
@@ -435,8 +490,9 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
                 FOR(i,vl) aA[i] = a[i] + bD[i]; // aA = a + bD; add_vvv
                 /**/ FOR(i,vl) b[i] = bM[i]; // bNext is bM
                 /**/ FOR(i,vl) a[i] = aA[i]; // aNext is aA
-            }else if( jj%2 == 1 ){ // div-mod ----------------------------------> mul-add/sub, 3 vec ops
+            }else if( 0 && jj<vl && jj%2 == 1 ){ // div-mod ------NEVER REALLY WORKED---------> mul-add/sub, 3 vec ops
                 assert( kase == 5 );
+#if 1
                 FOR(i,vl) bA[i] = vl + b[i];  // bA = b + vl; add_vsv
 #if 0 // normal div mod
                 FOR(i,vl) bD[i] = bA[i] / jj; // bD = bA / jj; div_vsv
@@ -463,28 +519,101 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
                     // If bA[i] / jj is ZERO, cannot mult by jj_mod_inverse.
                     // Now bA[i] >= vl, so if jj >= vl, bA[i] / jj is NOT ZERO
                 }
-                if(vl>jj){
+                //if(jj<vl){
                     FOR(i,vl) bD[i] = bA[i] * jj_mod_inverse_Vlpi;       // div --> mult by mod inv of jj
-                }else{
-                    FOR(i,vl) bD[i] = bA[i]/jj;
-                }
+                //}else{
+                //    FOR(i,vl) bD[i] = bA[i]/jj; // NOT EFFICIENT FOR jj > vl
+                //}
+                FOR(i,vl) bM[i] = bA[i] - jj*bD[i];             // mod --> mult-sub
+                FOR(i,vl) aA[i] = a[i] + bD[i]; // aA = a + bD; add_vvv
+                /**/ FOR(i,vl) b[i] = bM[i]; // bNext is bM
+                /**/ FOR(i,vl) a[i] = aA[i]; // aNext is aA
+#elif 0
+                FOR(i,vl) bD[i] = bA[i] * jj_mod_inverse_Vlpi;       // div --> mult by mod inv of jj
                 FOR(i,vl) bM[i] = bA[i] - jj*bD[i];             // mod --> mult-sub
                 FOR(i,vl) aA[i] = a[i] + bD[i]; // aA = a + bD; add_vvv
                 /**/ FOR(i,vl) b[i] = bM[i]; // bNext is bM
                 /**/ FOR(i,vl) a[i] = aA[i]; // aNext is aA
 #else // streamlined
                 FOR(i,vl) bD[i] = bA[i] * jj_mod_inverse_Vlpi;        // div --> mult by mod inv of jj
-                FOR(i,vl) b[i] = bA[i] - jj * bD[i];             // mul-sub for b[]!
-                FOR(i,vl) a[i] = a[i]  + jj_mod_inverse_Vlpi * bA[i]; // mul-add for a[]!
+                FOR(i,vl) b[i] = bA[i] - jj * bD[i];                  // mul-sub for b[]!
+                FOR(i,vl) a[i] = a[i]  + bD[i];
 #endif
-            }else{ // div-mod ----------------------------------> mul-add/sub, 3 vec ops
-                assert( kase == 0 );
+#else
+                // verify range: verify1()
+                FOR(i,vl) bA[i] = vl + b[i];                          // add
+                FOR(i,vl) bD[i] = bA[i] * jj_mod_inverse_Vlpi;        // div --> mul
+                FOR(i,vl) b[i] = bA[i] - jj * bD[i];                  // b[] w/ mul,sub (for mod)
+                FOR(i,vl) a[i] = a[i]  + bD[i];                       // a[] w/ add
+#endif
+            }else if(0) { // libdivide method -- op count for the divide is always worse (4 or 5)
+                unsigned op_count = 0U;
                 FOR(i,vl) bA[i] = vl + b[i];  // bA = b + vl; add_vsv
-                FOR(i,vl) bD[i] = bA[i] / jj; // bD = bA / jj; div_vsv
-                FOR(i,vl) bM[i] = bA[i] % jj; // bM = bA % jj; mod_vsv
+                ++op_count;
+                //FOR(i,vl) bD[i] = bA[i] / jj; // bD = bA / jj; div_vsv
+                if( ld.pre_shift == 0 ){
+                    FOR(i,vl) bD[i] = ((uint64_t)ld.multiplier * (uint64_t)bA[i]);
+                    cout<<" bD0 := "<<vecprt(n,12,bD,vl)<<" mul, no pre-shift"<<endl;
+                    ++op_count;
+                }else{
+                    FOR(i,vl) bD[i] = ((uint64_t)ld.multiplier * (uint64_t)(bA[i] >> ld.pre_shift));
+                    cout<<" bD1 := "<<vecprt(n,12,bD,vl)<<" mul w/ pre-shift "<<ld.pre_shift<<endl;
+                    ++op_count; ++op_count;
+                }
+                if( ld.increment ){
+                    FOR(i,vl) bD[i] += ld.multiplier;
+                    cout<<" bD2 := "<<vecprt(n,12,bD,vl)<<" inc"<<endl;
+                    ++op_count;
+                }
+                FOR(i,vl) bD[i] = bD[i] >> 32;
+                ++op_count;
+                cout<<" bD3 := "<<vecprt(n,12,bD,vl)<<" >>32"<<endl;
+                if( ld.post_shift > 0 ){
+                    FOR(i,vl) bD[i] = bD[i] >> ld.post_shift;
+                    cout<<" bD4 := "<<vecprt(n,12,bD,vl)<<endl;
+                    ++op_count;
+                }
+                FOR(i,vl) x[i] = bA[i] / jj;
+                cout<<"  x  := "<<vecprt(n,wide, x,vl)<<" <-- expected"<<endl;
+                cout<<" libdiv ops="<<op_count<<" "<<(op_count<2?"BETTER": op_count==2? "SAME": "WORSE")<<" wrt. fastdiv_uB"<<endl;
+                FOR(i,vl) bM[i] = bA[i] - bD[i]*jj; // modulo, via the div bD
+                //FOR(i,vl) bM[i] = bA[i] % jj; // modulo, via the div bD
                 FOR(i,vl) aA[i] = a[i] + bD[i]; // aA = a + bD; add_vvv
                 /**/ FOR(i,vl) b[i] = bM[i]; // bNext is bM
                 /**/ FOR(i,vl) a[i] = aA[i]; // aNext is aA
+            }else{ // div-mod ----------------------------------> 6 vec ops: add (mul,shr) (mul,sub) add
+                assert( jj+VL < (1<<21) );
+                //assert( kase == 0 );
+#if 0
+                FOR(i,vl) bA[i] = vl + b[i];  // bA = b + vl; add_vsv
+#if 0
+                FOR(i,vl) bD[i] = bA[i] / jj; // bD = bA / jj; div_vsv
+                FOR(i,vl) bM[i] = bA[i] % jj; // bM = bA % jj; mod_vsv
+#elif 1
+                FOR(i,vl) bD[i] = bA[i] / jj; // bD = bA / jj; div_vsv
+                FOR(i,vl) bM[i] = bA[i] % jj; // bM = bA % jj; mod_vsv
+                FOR(i,vl) assert( bD[i] == ((jj_M*bA[i]) >> C) );       // fastdiv_uB for bA[]/jj
+                FOR(i,vl) assert( bM[i] == bA[i] - bD[i]*jj );          // long-hand remainder
+#else
+                FOR(i,vl) bD[i] = ((jj_M*bA[i]) >> C);                  // fastdiv_uB for bA[]/jj       : mul, shr
+                FOR(i,vl) bM[i] = bA[i] - bD[i]*jj;                     // long-hand remainder          : mul, sub
+#endif
+                FOR(i,vl) aA[i] = a[i] + bD[i]; // aA = a + bD; add_vvv
+                /**/ FOR(i,vl) b[i] = bM[i]; // bNext is bM
+                /**/ FOR(i,vl) a[i] = aA[i]; // aNext is aA
+#else // streamlined
+                // Note that libdivide methods can extend the range of applicability, but the
+                // worst case adds an extra "pre-shift" operation.  The libdivide best case is
+                // better:
+                //    when pre_shift and post_shift are zero and UINT_BITS is 32, there is
+                //    only a single multiply with NO SHIFT.
+                // Also, the saturated_increment I think only fixes the "a very very big" case,
+                // so it can be ignored [I hope].
+                FOR(i,vl) bA[i] = vl + b[i];  // bA = b + vl; add_vsv   // add
+                FOR(i,vl) bD[i] = ((jj_M*bA[i]) >> C);                  // fastdiv_uB for bA[]/jj       : mul, shr
+                FOR(i,vl) b [i] = bA[i] - bD[i]*jj;                     // long-hand remainder          : mul, sub
+                FOR(i,vl) a [i] = a[i] + bD[i];                         // add
+#endif
             }
             // Note: for some jj,
             //       the bM,bD divmod operation can be OPTIMIZED to rot etc.
@@ -731,6 +860,10 @@ int main(int argc,char**argv){
     test_mod_inverse<uint32_t>();
     //test_mod_inverse<uint64_t>();
     cout<<" (mod_inverse OK)";
+
+    // INCORRECT verify1();
+    //cout<<" verify1 OK"<<endl;
+
     if(opt_h == 0){
         if(opt_t) test_vloop2(vl,h,w);
         if(opt_u) test_vloop2_unroll(vl,h,w);
