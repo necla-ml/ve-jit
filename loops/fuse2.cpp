@@ -582,7 +582,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
                 /**/ FOR(i,vl) b[i] = bM[i]; // bNext is bM
                 /**/ FOR(i,vl) a[i] = aA[i]; // aNext is aA
             }else{ // div-mod ----------------------------------> 6 vec ops: add (mul,shr) (mul,sub) add
-                assert( jj+VL < (1<<21) );
+                assert( jj+vl < (1<<21) );
                 //assert( kase == 0 );
 #if 0
                 FOR(i,vl) bA[i] = vl + b[i];  // bA = b + vl; add_vsv
