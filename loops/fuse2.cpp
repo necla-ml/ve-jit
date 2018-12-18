@@ -136,27 +136,31 @@ void test_mod_inverse(){
                     //cout<<" already tried div="<<div<<endl;
                     continue;
                 }
-                //T const mo  = mod_inverse(div);
+                T mo;
+                //mo  = mod_inverse(div);
                 //  if( div%2 == 1 ) assert( div * mo == 1 );
-                //T const mo  = mod_inverse(div/2);
-                //T const mo = ((uint64_t(1)<<63)-1)/div +1;
-                //T const mo = ((uint64_t(1)<<63)-1)/div +0;
-                //T const mo = ((uint64_t(1)<<63)-1)/(div) +(div>>3);
-                //T const mo = ((uint64_t(1)<<63)-1)/(div) +(div>>6); // 124,130,136,144,160,170
-                //T const mo = ((uint64_t(1)<<63)-1)/(div) +(div>>7); // many in 129..255
+                //mo  = mod_inverse(div/2);
+                //mo = ((uint64_t(1)<<63)-1)/div +1;
+                //mo = ((uint64_t(1)<<62)-1)/div +1;
+                //mo = ((uint64_t(1)<<63)-1)/div +0;
+                //mo = ((uint64_t(1)<<63)-1)/(div) +(div>>3);
+                //mo = ((uint64_t(1)<<63)-1)/(div) +(div>>6); // 124,130,136,144,160,170
+                //mo = ((uint64_t(1)<<63)-1)/(div) +(div>>7); // many in 129..255
 #define U64MAX (~uint64_t(0))
-                //T const mo = (U64MAX/div); // very good, w/ (A+1)*MO>>SHR
-                //T const mo = (U64MAX/div+1); // less good, w/ A*MO>>SHR
-                //T const mo = ((uint64_t(1)<<62)-1)/div +0; //also decent
-                //T const mo = ((uint64_t(1)<<63)-1)/div +0; //also decent, seen before set
-                //T const mo = ((uint64_t(1)<<63))/div +0; //also decent, seen before set
+                //mo = (U64MAX/div); // very good, w/ (A+1)*MO>>SHR
+                //mo = ((uint64_t(1)<<62)-1)/div +0; //also decent
+                //mo = ((uint64_t(1)<<63)-1)/div +0; //also decent, seen before set
+                //mo = ((uint64_t(1)<<63))/div +0; //also decent, seen before set
 #define POW2m1(N) ((((uint64_t(1)<<(N-1)) -1)<<1)+1)
                 assert( POW2m1(64) == U64MAX );
-                //T const mo = ((POW2m1(63)+POW2m1(62)))/div +0; //not great
-                //T const mo = ((POW2m1(63)+POW2m1(61)))/div +0; // some new?
-                //T const mo = ((POW2m1(63)+POW2m1(60)))/div +0; // some new?
-                //T const mo = ((POW2m1(63)+POW2m1(60)+(div>>1)))/div +0; // some new?
-                //T const mo = ((POW2m1(63)+POW2m1(61)))/div +1; // finally hit 13!
+                //mo = (U64MAX/div+1); // less good, w/ A*MO>>SHR
+                mo = ((POW2m1(63)))/div +1; // ~ 3,9,10,11,12,15,20
+                //mo = ((POW2m1(62)))/div +1; // ~ 5,6,10,14
+                //mo = ((POW2m1(63)+POW2m1(62)))/div +0; //not great
+                //mo = ((POW2m1(63)+POW2m1(61)))/div +0; // some new?
+                //mo = ((POW2m1(63)+POW2m1(60)))/div +0; // some new?
+                //mo = ((POW2m1(63)+POW2m1(60)+(div>>1)))/div +0; // some new?
+                //mo = ((POW2m1(63)+POW2m1(61)))/div +1; // finally hit 13!
 #if 0
  divisor 11 shr 35
  divisor 13 shr 34
@@ -175,9 +179,9 @@ void test_mod_inverse(){
  divisor 1536 shr 42
  divisor 2304 shr 42
 #endif
-                //T const mo = ((POW2m1(62)))/div +1; // incl 14
-                //T const mo = (POW2m1(62) + POW2m1(60)+1)/div +1; // incl 9,11,12,18
-                //T const mo = (POW2m1(62) + POW2m1(60) + POW2m1(59)+2)/div +1; // incl 18..21
+                //mo = ((POW2m1(62)))/div +1; // 5,6,10,14
+                //mo = (POW2m1(62) + POW2m1(60)+1)/div +1; // incl 9,11,12,18
+                //mo = (POW2m1(62) + POW2m1(60) + POW2m1(59)+2)/div +1; // incl 6,7,10,18..21
 #if 0
  sorted summary of magic inv_mod shifts...
  divisor 6 shr 34
@@ -191,7 +195,8 @@ void test_mod_inverse(){
  divisor 25 shr 35
  divisor 27 shr 36
 #endif
-                //T const mo = (POW2m1(62) + POW2m1(60) + POW2m1(58)+2)/div +1; // incl 5,10,11,17
+                //mo = (POW2m1(63) + POW2m1(61) + POW2m1(60)+2)/div +1; // 3,12,14,19
+                //mo = (POW2m1(62) + POW2m1(60) + POW2m1(58)+2)/div +1; incl 5,10,11,17
                 //
                 // so libdivide pre-shift and increment are not necessary with
                 // a different search procedure, I think
