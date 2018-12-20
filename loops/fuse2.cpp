@@ -61,6 +61,55 @@ inline int /*constexpr*/ positivePow2Shift(uint32_t v) {
     return MultiplyDeBruijnBitPosition2[(uint32_t)(v * 0x077CB531U) >> 27];
 }
 
+/** greatest common denominator, a,b > 0 */
+inline int gcd(int a, int b)
+{
+    for (;;)
+    {
+        if (a == 0) return b;
+        b %= a;
+        if (b == 0) return a;
+        a %= b;
+    }
+}
+
+/** lowest common multiple, a,b > 0 */
+inline int lcm(int a, int b)
+{
+    int temp = gcd(a, b);
+
+    return temp ? (a / temp * b) : 0;
+}
+
+/** Solve for integers j, k and g=gcd(a,b) such that ja + ky = g,
+ * where a,b are integer constants.
+ * This is a linear equation in integers, and is solved
+ * via the extended Euclid algorithm.
+ */
+static void inline extendedEuclid( int& k, int a, int& j, int b, int& g)
+{
+  int x = 1, y = 0;
+  int xLast = 0, yLast = 1;
+  int q, r, m, n;
+  while (a != 0)
+  {
+    q = b / a;
+    r = b % a;
+    m = xLast - q * x;
+    n = yLast - q * y;
+    xLast = x;
+    yLast = y;
+    x = m;
+    y = n;
+    b = a;
+    a = r;
+  }
+  g = b;
+  k = xLast;
+  j = yLast;
+}
+
+
 #include "divide_by_constants_codegen_reference.c"
 
 #include "../regs/throw.hpp"
@@ -346,6 +395,22 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
         FOR(i,vl) div[i] = jj_M * a[i] >> C;
         FOR(i,vl) mod[i] = a[i] - div[i]*jj;
     };
+    // Note: I began with a simple cyclic case, jj%vl==0.
+    //   In general, the period for b[] vectors is lcm(vl,jj)/vl
+    //   Ex. vl=6, jj=8 --> lcm(6,8)/6=24/6 = 4 b[0] cycle={0,6,4,2}
+    //   Ex. vl=6, jj=9 --> lcm(6,9)/6=18/6 = 3 b[0] cycle={0,6,3}
+    //   Ex. vl=9, jj=6 --> lcm(6,9)/9=18/9 = 2 b[0] cycle={0,3}
+    int const lcm_vljj = lcm(vl,jj);
+    int const b_period = lcm_vljj / vl;
+    int const b_period_max = 8; // how many regs can you spare?
+    if( jj>1 /*&& jj>=b_period*/ && b_period > 1 && b_period < 8 ) {
+        if( jj <= b_period/*??*/ ) cout<<" suggest full unroll (jj="<<jj<<", period="<<b_period<<endl;
+        else cout<<" suggest unroll by "<<b_period<<endl;
+        cout<<"   b[] cycles through values"<<endl;
+        cout<<"   a[]-INCREMENT also cycles"<<endl;
+        cout<<"     Then a[]-b[] induction is 2 ops total,\n"
+            <<"     move/add from fixed (precalculated) register to working register"<<endl;
+    }
     for( ; cnt < iijj; cnt += vl )
     {
         //cout<<"cnt "<<cnt<<" iloop "<<iloop<<" ii "<<ii<<" jj "<<jj<<endl;
@@ -380,7 +445,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
                 FOR(i,vl) a[i] = a[i] + vl_over_jj;
             }else if(jj%vl == 0){  // -------------1 or 2 vec op (conditional)
                 Lpi special = iloop % (jj/vl);                  // vector mod --> scalar mod
-                // unroll(jj/vl) (if not too big) could be branchless
+                // #pragma..unroll(jj/vl) could be branchless
                 // can be optimized further into 3 minimal-op cases
                 if( special ) { // slightly less likely // bump b[i], bD[i]==0
                     FOR(i,vl) b[i] = b[i] + vl;
