@@ -6,13 +6,14 @@
 #include <stdio.h>
 #include <time.h>
 #include INC
+#include <assert.h>
 
 FILE *ofile;
 
 // ----------------------------- printb --------------------------------
 
 void
-printb(int pr, char *format, ...)
+printb(int pr, char const*format, ...)
 {
    /* Prints  the given data on the display and on the current output
    file. Takes any number of printf-style args after "format".
@@ -108,7 +109,19 @@ simulate_one_instruction(int i)
    arg1 = r[pgm[i].opnd[1]];
    arg2 = r[pgm[i].opnd[2]];
 
+   // XXX need flag if an instruction forces output register
+   // to be same as one of the input registers.
+   // Perhaps simulate as r[i+RI0] = ... followed
+   // by r[...opnd[?]] = r[i+RI0]
    r[i + RI0] = (*isa[pgm[i].op].proc)(arg0, arg1, arg2);
+#if 1
+   //printb(2," %s(%d,%d,%d)-->r%d=%d ", isa[pgm[i].op].mnemonic,
+   //       arg0,arg1,arg2, i, r[i+RI0]);
+   int const sameas_output = isa[pgm[i].op].outputreg;
+   if (sameas_output >=0 && sameas_output <= 2){
+           r[pgm[i].opnd[ sameas_output ]] = r[i+RI0];
+   }
+#endif
    if (counters) counter[i] = counter[i] + 1;
    return;
 }
@@ -119,83 +132,94 @@ int
 check(int i)
 {
 
-   static int itrialx;          // Init 0.
+    static int itrialx;          // Init 0.
 #if NARGS == 2
-   static int itrialy;
+    static int itrialy;
 #endif
 
-   if (debug) {
+    if (debug) {
 #if NARGS == 1
-      fprintf(ofile, "\nSimulating with trial arg x = %d (0x%X):\n",
-         r[RX],r[RX]);
+        fprintf(ofile, "\nSimulating with trial arg x = %d (0x%X):\n",
+                r[RX],r[RX]);
 #else
-      fprintf(ofile, "\nSimulating with (x, y) = (%d, %d) ((0x%X, 0x%X)):\n",
-         r[RX], r[RY], r[RX], r[RY]);
+        fprintf(ofile, "\nSimulating with (x, y) = (%d, %d) ((0x%X, 0x%X)):\n",
+                r[RX], r[RY], r[RX], r[RY]);
 #endif
-   }
+    }
+    if( corr_result != userfun(r[RX]) ){
+        fprintf(ofile, "Ooops, corr_result is %d but userfun(r[RX]) is %d\n",
+                corr_result, userfun(r[RX]) );
+        assert( corr_result == userfun(r[RX]) );
+    }
+    int savRX = r[RX];
 L:
-      simulate_one_instruction(i);              // Simulate i'th insn,
-      if (i < numi - 1) {i = i + 1; goto L;}    // and more if req'd
-      if (unacceptable) {       // E.g., if divide by 0:
-         if (debug) printb(2, "Unacceptable program (invalid operation).\n");
-         unacceptable = 0;
-         return 0;
-      }
+    simulate_one_instruction(i);              // Simulate i'th insn,
+    if (i < numi - 1) {i = i + 1; goto L;}    // and more if req'd
+    r[RX] = savRX;
+    if (unacceptable) {       // E.g., if divide by 0:
+        if (debug) printb(2, "Unacceptable program (invalid operation).\n");
+        unacceptable = 0;
+        return 0;
+    }
 
-   if (debug) {
-      print_pgm(2);
-      fprintf(ofile, "Computed result = %d, correct result = %d, %s\n",
-      r[numi-1+RI0], corr_result, r[numi-1+RI0] == corr_result ? "ok" : "fail");
-   }
-   if (r[numi-1+RI0] != corr_result)    // If not the correct
-      return 0;                         // result, failure.
+    if (debug) {
+        print_pgm(2);
+        fprintf(ofile, "Computed result = %d, correct result = %d, %s\n",
+                r[numi-1+RI0], corr_result, r[numi-1+RI0] == corr_result ? "ok" : "fail");
+        assert( corr_result == userfun(r[RX]) );
+    }
+    if (r[numi-1+RI0] != corr_result)    // If not the correct
+        return 0;                         // result, failure.
 
-   // Got the correct result.  Check this program using all trial values.
+    // Got the correct result.  Check this program using all trial values.
 
-   for (int kx = 0; kx < NTRIALX - 1; kx++) {
-      itrialx += 1;
-      if (itrialx >= NTRIALX) itrialx = 0;
-      r[RX] = trialx[itrialx];
+    for (int kx = 0; kx < NTRIALX - 1; kx++) {
+        itrialx += 1;
+        if (itrialx >= NTRIALX) itrialx = 0;
+        r[RX] = trialx[itrialx];
+        savRX = r[RX];
 #if NARGS == 1
-      corr_result = correct_result[itrialx];
+        corr_result = correct_result[itrialx];
+        assert( corr_result == userfun(r[RX]) );
 #else
-   for (int ky = 0; ky < NTRIALY - 1; ky++) {
-      itrialy += 1;
-      if (itrialy >= NTRIALY) itrialy = 0;
-      r[RX] = trialx[itrialx];
-      r[RY] = trialy[itrialy];
-      corr_result = correct_result[itrialx][itrialy];
+        for (int ky = 0; ky < NTRIALY - 1; ky++) {
+            itrialy += 1;
+            if (itrialy >= NTRIALY) itrialy = 0;
+            r[RX] = trialx[itrialx];
+            r[RY] = trialy[itrialy];
+            corr_result = correct_result[itrialx][itrialy];
 #endif
 
-      /* Now we simulate the current program, i.e., the instructions
-      from 0 to numi-1.  The result of instruction i goes in
-      register i + RI0. */
+            /* Now we simulate the current program, i.e., the instructions
+               from 0 to numi-1.  The result of instruction i goes in
+               register i + RI0. */
 
-      if (debug) {
+            if (debug) {
 #if NARGS == 1
-         fprintf(ofile, "\nContinuing this pgm with arg x = %d (0x%X):\n",
-            r[RX], r[RX]);
+                fprintf(ofile, "\nContinuing this pgm with arg x = %d (0x%X):\n",
+                        r[RX], r[RX]);
 #else
-         fprintf(ofile, "\nContinuing this pgm with (x, y) = (%d, %d) ((0x%X, 0x%X)):\n",
-            r[RX], r[RY], r[RX], r[RY]);
+                fprintf(ofile, "\nContinuing this pgm with (x, y) = (%d, %d) ((0x%X, 0x%X)):\n",
+                        r[RX], r[RY], r[RX], r[RY]);
 #endif
-      }
-      for (i = 0; i < numi; i++) {      // Simulate program from
-         simulate_one_instruction(i);   // beginning to end.
-      }
-      if (unacceptable) {unacceptable = 0; return 0;}
-      if (debug) {
-         print_pgm(2);
-         fprintf(ofile, "Computed result = %d, correct result = %d, %s\n",
-         r[numi+RI0-1], corr_result, r[numi+RI0-1] == corr_result ? "ok" : "fail");
-      }
-      if (r[numi+RI0-1] != corr_result) return 0;
+            }
+            for (i = 0; i < numi; i++) {      // Simulate program from
+                simulate_one_instruction(i);   // beginning to end.
+            }
+            r[RX] = savRX;
+            if (unacceptable) {unacceptable = 0; return 0;}
+            if (debug) {
+                print_pgm(2);
+                fprintf(ofile, "Computed result = %d, correct result = %d, %s\n",
+                        r[numi+RI0-1], corr_result, r[numi+RI0-1] == corr_result ? "ok" : "fail");
+            }
+            if (r[numi+RI0-1] != corr_result) return 0;
 #if NARGS == 2
-   }  // end ky
+        }  // end ky
 #endif
-   }  // end kx
-   return 1;                    // Passed all tests, found a
-                                // probably correct program.
+    }  // end kx
+    return 1;                    // Passed all tests, found a
+    // probably correct program.
 }
 
 // -------------------------- fix_operands -----------------------------
@@ -395,6 +419,10 @@ increment(void)
          pgm[i].opnd[0] = isa[k].opndstart[0];
          pgm[i].opnd[1] = isa[k].opndstart[1];
          pgm[i].opnd[2] = isa[k].opndstart[2];
+         if( pgm[i].opnd[0] >= RI0+i
+             || pgm[i].opnd[1] >= RI0+i
+             || pgm[i].opnd[2] >= RI0+i )
+             continue;
 
          fix_operands(i);
          return i;
@@ -426,6 +454,7 @@ search(void)
 #if NARGS == 1
    r[RX] = trialx[0];                   // Must initialize these for
    corr_result = correct_result[0];     // speed-up thing in "check."
+   assert( corr_result == userfun(r[RX]) );
 #else
    r[RX] = trialx[0];
    r[RY] = trialy[0];
@@ -434,13 +463,18 @@ search(void)
    num_solutions = 0;
    i = 0;
    do {
+       i=0; // reg-modifying instructions should restart from zero :(
+       // (or just before first modified register, but this is unknown)
       ok = check(i);            // Simulate the program from i on.
+      assert( corr_result == userfun(r[RX]) );
       if (ok) {
          num_solutions += 1;
          printb(3, "\nFound a %d-operation program:\n", numi);
          print_pgm(3);
       }
+      assert( corr_result == userfun(r[RX]) );
       i = increment();          // Increment to next program.
+      assert( corr_result == userfun(r[RX]) );
    } while (i >= 0);
    return num_solutions;
 }

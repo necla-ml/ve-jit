@@ -5,14 +5,22 @@
 code. It must have either one or two arguments, both int, and must
 return a 32-bit int quantity. */
 
-uint_least32_t userfun(uint_least32_t x) {
-    if(x + 127U < 127U ) return x+127U;
+#define NARGS 1                 // Number of args in userfun, 1 or 2.
+const int debug = 1;            // 0 or 1; debugging printouts if 1.
+const int counters = 1;         // 0 or 1; count number of evaluations.
+#if NARGS == 1
+uint_least32_t userfun(uint_least32_t x){
+    x=x+1;
+    if(x>=3) x=0;
     return x;
 }
-
-#define NARGS 1                 // Number of args in userfun, 1 or 2.
-const int debug = 0;            // 0 or 1; debugging printouts if 1.
-const int counters = 1;         // 0 or 1; count number of evaluations.
+#else
+uint_least32_t userfun(uint_least32_t x, uint_least32_t /*xprev*/) {
+    x=x+1;
+    if(x>=3) x=0;
+    return x;
+}
+#endif
 
 /* A note about the registers:
 
@@ -38,16 +46,14 @@ NSHIM = number of shift immediate values
 #define NBSM 63                 // Shift mask.  Use 63 for mod 64
                                 // shifts, or 31 for mod 32.
 
-int trialx[] = {1, 0, -1, MAXNEG, MAXPOS, \
-   MAXNEG + 1, MAXPOS - 1, 0x01234567, 0x89ABCDEF, -2, 2, -3, 3, \
-   -64, 64, -5, -31415};
-#if NARGS == 2
-int trialy[] = {1, 0, -1, MAXNEG, MAXPOS, \
-   MAXNEG + 1, MAXPOS - 1, 0x01234567, 0x89ABCDEF, -2, 2, -3, 3, \
+int trialx[] = {0, 1, 2};
+#if NARGS == 1
+int trialy[] = {1, 0, -1, (int)MAXNEG, (int)MAXPOS, \
+   (int)(MAXNEG + 1), (int)(MAXPOS - 1), (int)0x01234567, (int)0x89ABCDEF, -2, 2, -3, 3, \
    -64, 64, -5, -31415};
 #endif
 // First three values of IMMEDS must be 0, -1, and 1.
-#define IMMEDS 0, -1, 1, MAXNEG, -2, 2, 3
+#define IMMEDS 0, -1, 1, (int)MAXNEG, -2, 2, 3
 #define SHIMMEDS 1, 2, 30, 31
 
 int dummy1[] = {IMMEDS};        // These get optimized out of existence.
@@ -115,6 +121,10 @@ int divu(int x, int y, int) {
 int _and(int x, int y, int) {return x & y;}
 int _or (int x, int y, int) {return x | y;}
 int _xor(int x, int y, int) {return x ^ y;}
+int _nand(int x, int y, int) {return (~x) ^ y;}
+int _eqv(int x, int y, int) {return ~(x^y);}
+int _mrg(int x, int y, int z) {return (x&(~z))|(y&z);}//bitwise merge
+// note: often chips use lsb's of 's' only
 int rotl(int x, int y, int) {int s = y & NBSM;
    return x << s | (unsigned)x >> (32 - s);}
 int shl (int x, int y, int) {int s = y & NBSM;
@@ -123,12 +133,20 @@ int shr(int x, int y, int) {int s = y & NBSM;
    if (s >= 32) return 0; else return (unsigned)x >> s;}
 int shrs(int x, int y, int) {int s = y & NBSM;
    if (s >= 32) return x >> 31; else return x >> s;}
+// aurora does not have these, instead have cmov   
 int cmpeq(int x, int y, int) {return x == y;}
 int cmplt(int x, int y, int) {return x < y;}
 int cmpltu(int x, int y, int) {return (unsigned)(x) < (unsigned)(y);}
+// aurora has many cmov... x = (cond(y)? x: z), but I don't know how to represent
+// register-modifying instructions in aha!
+int cmoveq(int x, int y, int z) {return y == 0 ? x : z;}
+int cmovgt(int x, int y, int z) {return y > 0 ? x : z;}
+int cmovlt(int x, int y, int z) {return y < 0 ? x : z;}
+
 int seleq(int x, int y, int z) {return x == 0 ? y : z;}
 int sellt(int x, int y, int z) {return x < 0 ? y : z;}
 int selle(int x, int y, int z) {return x <= 0 ? y : z;}
+// Aurora has cmov: if( cond(y,0) ) x; else z;
 
                                 // The machine's instruction set:
 // Note: Commutative ops are commutative in operands 0 and 1.
@@ -137,33 +155,40 @@ struct {
    int  numopnds;               // Number of operands, 1 to 3.
    int  commutative;            // 1 if opnds 0 and 1 commutative.
    int  opndstart[3];           // Starting reg no. for each operand.
-   char const*mnemonic;              // Name of op, for printing.
-   char const*fun_name;              // Function name, for printing.
-   char const*op_name;               // Operator name, for printing.
+   int  outputreg;              // if 0,1,2, copy output into this operand reg
+   char const*mnemonic;         // Name of op, for printing.
+   char const*fun_name;         // Function name, for printing.
+   char const*op_name;          // Operator name, for printing.
 } isa[] = {
-   {neg,    1, 0, {RX,  0,  0}, "neg",   "-(",   ""     },  // Negate.
-   {_not,   1, 0, {RX,  0,  0}, "not",   "~(",   ""     },  // One's-complement.
-   {pop,    1, 0, {RX,  0,  0}, "pop",   "pop(", ""     },  // Population count.
-   {nlz,    1, 0, {RX,  0,  0}, "nlz",   "nlz(", ""     },  // Num leading 0's.
-// {rev,    1, 0, {RX,  0,  0}, "rev",   "rev(", ""     },  // Bit reversal.
-   {add,    2, 1, {RX,  2,  0}, "add",   "(",    " + "  },  // Add.
-   {sub,    2, 0, { 2,  2,  0}, "sub",   "(",    " - "  },  // Subtract.
-   {mul,    2, 1, {RX,  3,  0}, "mul",   "(",    "*"    },  // Multiply.
-// {div,    2, 0, { 1,  3,  0}, "div",   "(",    "/"    },  // Divide signed.
-// {divu,   2, 0, { 1,  1,  0}, "divu",  "(",    " /u " },  // Divide unsigned.
-   {_and,   2, 1, {RX,  2,  0}, "and",   "(",    " & "  },  // AND.
-   {_or,    2, 1, {RX,  2,  0}, "or",    "(",    " | "  },  // OR.
-   {_xor,   2, 1, {RX,  2,  0}, "xor",   "(",    " ^ "  },  // XOR.
-   {rotl,   2, 0, { 1,NIM,  0}, "rotl",  "(",    " <<r "},  // Rotate shift left.
-   {shl,    2, 0, { 1,NIM,  0}, "shl",   "(",    " << " },  // Shift left.
-   {shr,    2, 0, { 1,NIM,  0}, "shr",   "(",    " >>u "},  // Shift right.
-   {shrs,   2, 0, { 3,NIM,  0}, "shrs",  "(",    " >>s "},  // Shift right signed.
-   {cmpeq,  2, 1, {RX,  0,  0}, "cmpeq", "(",    " == " },  // Compare equal.
-   {cmplt,  2, 0, { 0,  0,  0}, "cmplt", "(",    " < "  },  // Compare less than.
-   {cmpltu, 2, 0, { 1,  1,  0}, "cmpltu","(",    " <u " },  // Compare less than unsigned.
-// {seleq,  3, 0, {RX,  0,  0}, "seleq", "seleq(", ", " },  // Select if = 0.
-// {sellt,  3, 0, {RX,  0,  0}, "sellt", "sellt(", ", " },  // Select if < 0.
-// {selle,  3, 0, {RX,  0,  0}, "selle", "selle(", ", " },  // Select if <= 0.
+   {neg,    1, 0, {RX,  0,  0}, -1, "neg",   "-(",   ""     },  // Negate.
+   {_not,   1, 0, {RX,  0,  0}, -1, "not",   "~(",   ""     },  // One's-complement.
+   {pop,    1, 0, {RX,  0,  0}, -1, "pop",   "pop(", ""     },  // Population count.
+   {nlz,    1, 0, {RX,  0,  0}, -1, "nlz",   "nlz(", ""     },  // Num leading 0's.
+// {rev,    1, 0, {RX,  0,  0}, -1, "rev",   "rev(", ""     },  // Bit reversal.
+   {add,    2, 1, {RX,  2,  0}, -1, "add",   "(",    " + "  },  // Add.
+   {sub,    2, 0, { 2,  2,  0}, -1, "sub",   "(",    " - "  },  // Subtract.
+   {mul,    2, 1, {RX,  3,  0}, -1, "mul",   "(",    "*"    },  // Multiply.
+// {div,    2, 0, { 1,  3,  0}, -1, "div",   "(",    "/"    },  // Divide signed.
+// {divu,   2, 0, { 1,  1,  0}, -1, "divu",  "(",    " /u " },  // Divide unsigned.
+   {_and,   2, 1, {RX,  2,  0}, -1, "and",   "(",    " & "  },  // AND.
+   {_or,    2, 1, {RX,  2,  0}, -1, "or",    "(",    " | "  },  // OR.
+   {_xor,   2, 1, {RX,  2,  0}, -1, "xor",   "(",    " ^ "  },  // XOR.
+   {_nand,  2, 1, {RX,  2,  0}, -1, "nand",  "(",    " ^ "  },  // NAND.
+   {_eqv,   2, 1, {RX,  2,  0}, -1, "eqv",   "(",    " ^ "  },  // EQV. == ~_xor
+   {shr,    2, 0, { 1,NIM,  0}, -1, "shr",   "(",    " >>u "},  // Shift right.
+   {shl,    2, 0, { 1,NIM,  0}, -1, "shl",   "(",    " << " },  // Shift left.
+   {rotl,   2, 0, { 1,NIM,  0}, -1, "rotl",  "(",    " <<r "},  // Rotate shift left.
+   {shrs,   2, 0, { 3,NIM,  0}, -1, "shrs",  "(",    " >>s "},  // Shift right signed.
+   {_mrg,   3, 0, {RX,  0,  0},  0, "mrg",   "mrg(",   ", " },  // Merge. x = {x&(~z)}|{y&z}
+   {cmoveq, 3, 0, {RX, RX,  0},  0, "cmoveq","cmoveq(", ", "},  // CMOV x=(signed_cnd(y)?x:z)
+   {cmovgt, 3, 0, {RX, RX,  0},  0, "cmovgt","cmovgt(", ", "},  // CMOV x=((y>0?z:x)
+   {cmovlt, 3, 0, {RX, RX,  0},  0, "cmovlt","cmovlt(", ", "},  // CMOV x=((y<0?z:x)
+// {cmpeq,  2, 1, {RX,  0,  0}, -1, "cmpeq", "(",    " == " },  // Compare equal.
+// {cmplt,  2, 0, { 0,  0,  0}, -1, "cmplt", "(",    " < "  },  // Compare less than.
+// {cmpltu, 2, 0, { 1,  1,  0}, -1, "cmpltu","(",    " <u " },  // Compare less than unsigned.
+//   {seleq,  3, 0, {RX,  0,  0}, -1, "seleq", "seleq(", ", " },  // Select if = 0.
+//   {sellt,  3, 0, {RX,  0,  0}, -1, "sellt", "sellt(", ", " },  // Select if < 0.
+//   {selle,  3, 0, {RX,  0,  0}, -1, "selle", "selle(", ", " },  // Select if <= 0.
 };
 
 /* ------------------- End of user-setup Portion -------------------- */
@@ -174,6 +199,8 @@ struct {
 #define NTRIALY (int)(sizeof(trialy)/sizeof(trialy[0]))
 
 #if NARGS == 1
+   int correct_result[NTRIALX];
+#elif NARGS == -1
    int correct_result[NTRIALX];
 #else
    int correct_result[NTRIALX][NTRIALY];

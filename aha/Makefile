@@ -6,7 +6,7 @@ EXAMPLE = mine
 CC	= gcc
 CXX	= g++
 DEFINES = -DINC=\"$(EXAMPLE).h\" -DOFILE=\"$(EXAMPLE).out\"
-CFLAGS	= -g -O3 -march=native -fomit-frame-pointer -Wall -I. $(DEFINES)
+CFLAGS	= -g -O3 -march=native -fomit-frame-pointer -Wall -I.
 CXXFLAGS = $(CFLAGS)
 
 SRCS	= aha.c
@@ -25,11 +25,11 @@ all: aha
 %: %.h aha.c
 	$(CXX) -DINC=\"$<\" -DOFILE=\"$@.out\" $(CXXFLAGS) -o $@ aha.c
 
+%seq: %.h ahaseq.c
+	$(CXX) -DINC=\"$<\" -DOFILE=\"$@.out\" $(CXXFLAGS) -o $@ ahaseq.c
 #.PHONY: aha
 aha: $(OBJS)
-	$(CXX) $(CXXFLAGS) -o aha $(OBJS)
-#aha: $(OBJS)
-#	$(CXX) $(CXXFLAGS) -o aha $(OBJS)
+	$(CXX) $(CXXFLAGS) $(DEFINES) -o aha $(OBJS)
 
 clean:
 	$(RM) -f $(OBJS) aha core *~ *.bak

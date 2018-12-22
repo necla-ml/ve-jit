@@ -25,6 +25,9 @@ See aha.pdf for a complete writeup.
 
                         History of Improvements
 
+[ejk] slowdowns for VE, because some of the operations modify input
+operands (so backtracking all the way was stuck in for correctness)
+
 Changing from calculating the correct answer for each new program to
 calculating them in advance and storing in a table, reduced the
 execution time by about 2.7%.
