@@ -1,5 +1,8 @@
 all: fuse2 fuse2lin tf2-1.log tf2-2.log tf2-3.log tf2-4.log tf2-0.log tf2-5.log tf2-m.log
 	@echo 'ALL DONE with make all'
+force:
+	rm -f tf2-1.log tf2-2.log tf2-3.log tf2-4.log tf2-0.log tf2-5.log tf2-m.log
+	$(MAKE)
 
 fuse2: fuse2.cpp
 	g++ -Wall -std=c++11 -O3 $< -o $@
@@ -496,6 +499,7 @@ tf2-0.log: fuse2 Makefile tf2-3.log
 	g++ -Wall -std=c++11 -O3 -E $< -o $@.i
 	g++ -Wall -std=c++11 -O3 $< -o $@
 clean:
-	rm -f *.i *.o fuse2 fuse2lin repro *.log
+	rm -f *.i *.o fuse2 fuse2lin repro
 realclean: clean	
+	rm -f *.log
 #	

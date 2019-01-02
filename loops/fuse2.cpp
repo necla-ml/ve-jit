@@ -42,9 +42,9 @@ std::string vecprt(int const n, int const wide, std::vector<T> v, int const vl){
     assert( v.size() >= (size_t)vl );
     std::ostringstream oss;
     for(int i=0; i<vl; ++i){
-        if( i < n ){ oss <<setw(wide)<< v[i]; }
+        if( i < n ){ oss<<" "<<setw(wide)<<v[i]; }
         if( i == n && i < vl-n ){ oss<<" ... "; }
-        if( i >= n && i >= vl-n ){ oss <<setw(wide)<< v[i]; }
+        if( i >= n && i >= vl-n ){ oss<<" "<<setw(wide)<< v[i]; }
     }
     return oss.str();
 }
@@ -297,7 +297,16 @@ void fastdiv_make(struct fastdiv *d, u32 divisor) {
  */
 void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){ for c in [0,w] {...}}
     assert( vlen > 0 );
-    cout<<"test_vloop2( vlen="<<vlen<<" loops 0.."<<ii<<" 0.."<<jj<<endl;
+    register uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
+    cout<<"test_vloop2( vlen="<<vlen<<" loops 0.."<<ii<<" 0.."<<jj<<" iijj="<<iijj;
+
+    register int vl = vlen;
+    //if (cnt+vl > iijj) vl = iijj - cnt;  // simplifies for cnt=0
+    if ((uint64_t)vl > iijj) vl = iijj;
+    int const vl0 = vl; // debug
+    int const nloop = (iijj+vl-1) / vl;    // div_round_up(iijj,vl)
+    cout<<" vl="<<vl<<" nloop="<<nloop<<endl;
+    assert( (nloop > 1) == ((uint64_t)vl < iijj) );
 
     // pretty-printing via vecprt
     //int const verbose = 1; // verbose
@@ -305,58 +314,35 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     //int const bignum = std::max( ii, jj );
     //int const wide = 1 + (bignum<10? 1: bignum <100? 2: bignum<1000? 3: 4);
 
+    cout<<"Verify-------"<<endl;
     // generate reference index outputs
     std::vector<Vab> vabs = ref_vloop2(vlen, ii, jj, 1/*verbose*/);
     assert( vabs.size() > 0 );
     assert(vabs.size() == (size_t)(((ii*jj) +vlen -1) / vlen));
 
-    cout<<"Verify-------"<<endl;
     // Have reference vabs vectors. Now we try induction way.
     // 1. initialize: could copy vabs[0] from const data storage, or...
     //   - generate from seq + divmod.
     //   - 2-loop induction uses 3 scalar registers:
     //     - \c cnt 0.. \c iijj, and \c vl (for jit, iijj is CCC (compile-time-const))
     //     - get final \c vl from cnt, vl and iij)
-    register uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
-    register int vl = vlen;
-    register uint64_t cnt = 0UL;
-    //if (cnt+vl > iijj) vl = iijj - cnt;  // simplifies for cnt=0
-    if ((uint64_t)vl > iijj) vl = iijj;
-    Vlpi const vl_over_jj = vl / jj;
-
 #define FOR(I,VL) for(int I=0;I<VL;++I)
-    if(0){
+    int const verbose=1;
+    if(verbose>=2){
         cout<<"   ii="<<ii<<"   jj="<<jj<<"   iijj="<<iijj<<endl;
         //cout<<" vcnt="<<vcount<<" vcnt'"<<vcount_next<<endl;
         cout<<" vabs.size() = "<<vabs.size()<<endl;
         //cout<<"iloop="<<iloop<<" / "<<nloop<<endl;
         cout<<"   vl="<<vl<<endl;
-        cout<<" cnt="<<cnt<<" iijj="<<iijj<<endl;
+        cout<<" iijj="<<iijj<<endl;
     }
-    // various misc precalculated consts and declarations.
-    VVlpi a(vl), b(vl), bA(vl), bM(vl), bD(vl), aA(vl), sq(vl);
-    VVlpi a0(vl), b0(vl), x(vl);
-    int iloop = 0; // mostly for debug checks, now;
-    Ulpi jj_mod_inverse_lpi   = mod_inverse((Ulpi)jj);
-    Uvlpi jj_mod_inverse_Vlpi = mod_inverse((Uvlpi)jj);
-    uint64_t const jj_M = computeM_uB(jj); // for fastdiv_uB method
-    //for( ; iloop < nloop; ++iloop )
-    magicu_info bogus = {0,0,0,0};
-    assert( sizeof(uint)*CHAR_BIT == 32 );
-    auto const ld = positivePow2(jj) ? bogus: compute_unsigned_magic_info( jj, 32 );
-    struct fastdiv jj_fastdiv;
-    fastdiv_make( &jj_fastdiv, (uint32_t)jj );
-    //
-    int jj_shift=0;
-    Vlpi jj_minus_1 = jj - 1;
-    if( positivePow2(jj) ){
-        jj_shift = positivePow2Shift((uint32_t)jj);
-        assert( (uint64_t)1<<jj_shift == (uint64_t)jj );
-        cout<<" jj="<<jj<<" power of two shift is "<<jj_shift<<"    mask is "<<jj_minus_1<<endl;
-    }
-    //
-    cout<<" jj="<<jj;
-    if( !positivePow2(jj) ){
+    // other fast divide approaches...
+    if(verbose>=1 && !positivePow2(jj)){
+        // libdivide relies on MULHI operation, which we don't have. It sometimes needs
+        // more ops, but for Aurora would be correct for larger (32-bit) input range.
+        magicu_info bogus = {0,0,0,0};
+        assert( sizeof(uint)*CHAR_BIT == 32 );
+        auto const ld = positivePow2(jj) ? bogus: compute_unsigned_magic_info( jj, 32 );
         if( ld.pre_shift==0 ){
             // NO assert( ld.post_shift==1 ); sometimes 1 or 2
             // NO  assert( ld.post_shift==0 || ld.post_shift==1 || ld.post_shift==2 );
@@ -375,26 +361,46 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
                 <<",increment="<<ld.increment
                 <<", mul="<<(void*)(intptr_t)ld.multiplier;
         }
-    }else{ // jj is 2^jj_shift
-        cout<<" = 2^"<<jj_shift<<" jj_M="<<(void*)(intptr_t)jj_M;
     }
-    cout<<endl<<"\t"
-        <<" mul,add,shr="<<(void*)(intptr_t)jj_fastdiv.mul
-        <<","<<jj_fastdiv.add<<","<<jj_fastdiv.shift;
-    cout<<" jj_modinv="<<(void*)(intptr_t)jj_mod_inverse_Vlpi
-        <<" or "<<(void*)(intptr_t)jj_mod_inverse_lpi;
+    if(verbose>=1){
+        // Note: Aurora has shift-LEFT-add but no mul-add or shift-right-add for int vectors
+        struct fastdiv jj_fastdiv;
+        fastdiv_make( &jj_fastdiv, (uint32_t)jj );
+        cout<<endl<<"\t"
+            <<" mul,add,shr="<<(void*)(intptr_t)jj_fastdiv.mul
+            <<","<<jj_fastdiv.add<<","<<jj_fastdiv.shift;
+    }
+    if(verbose>=1){
+        Ulpi jj_mod_inverse_lpi   = mod_inverse((Ulpi)jj);
+        Uvlpi jj_mod_inverse_Vlpi = mod_inverse((Uvlpi)jj);
+        cout<<" jj_modinv="<<(void*)(intptr_t)jj_mod_inverse_Vlpi
+            <<" or "<<(void*)(intptr_t)jj_mod_inverse_lpi;
+    }
+    //VVlpi a0(vl), b0(vl), x(vl), aA(vl), bM(vl);
+    // various misc precalculated consts and declarations.
+    VVlpi a(vl), b(vl);                 // calculated loop index vectors
+    VVlpi bA(vl), bD(vl), sq(vl);       // internal vectors
+    // bA and bD are used when:
+    //   iijj > vl && jj%vl!=0
+    // sq is used when:
+    //   iloop==0:   jj>1 && vl>=jj
+    //   iloop >0:   jj%vl==0 && (special: iloop can be >= (jj/vl))
+    int iloop = 0;
+    assert( nloop >= 1 );
+    uint64_t const jj_M = computeM_uB(jj); // for fastdiv_uB method
+    cout<<" jj="<<jj;
+    int jj_shift=0;
+    Vlpi jj_minus_1 = 0;
+    if( positivePow2(jj) ){
+        jj_shift = positivePow2Shift((uint32_t)jj);
+        jj_minus_1 = jj - 1;
+        assert( (uint64_t)1<<jj_shift == (uint64_t)jj );
+        cout<<" power of two shift is "<<jj_shift<<"    mask is "<<jj_minus_1;
+    }else{
+        cout<<" jj_M="<<(void*)(intptr_t)jj_M<<" shift="<<C;
+    }
     cout<<endl;
-    //
-    // C++14: &vl=std::as_const(vl)
-    auto v_divmod_vs = [&vl,&jj,&jj_M](/* in*/ VVlpi const& a, Vlpi const d,
-                                    /*out*/ VVlpi& div, VVlpi& mod){
-#ifndef NDEBUG
-        assert( (Ulpi)jj < SAFEMAX );
-        FOR(i,vl) assert( (Uvlpi)a[i] <= SAFEMAX );
-#endif
-        FOR(i,vl) div[i] = jj_M * a[i] >> C;
-        FOR(i,vl) mod[i] = a[i] - div[i]*jj;
-    };
+    
     // Note: I began with a simple cyclic case, jj%vl==0.
     //   In general, the period for b[] vectors is lcm(vl,jj)/vl
     //   Ex. vl=6, jj=8 --> lcm(6,8)/6=24/6 = 4 b[0] cycle={0,6,4,2}
@@ -403,7 +409,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     int const lcm_vljj = lcm(vl,jj);
     int const b_period = lcm_vljj / vl;
     int const b_period_max = 8; // how many regs can you spare?
-    if( jj>1 /*&& jj>=b_period*/ && b_period > 1 && b_period < 8 ) {
+    if( jj>1 /*&& jj>=b_period*/ && b_period > 1 && b_period < b_period_max ) {
         if( jj <= b_period/*??*/ ) cout<<" suggest full unroll (jj="<<jj<<", period="<<b_period<<endl;
         else cout<<" suggest unroll by "<<b_period<<endl;
         cout<<"   b[] cycles through values"<<endl;
@@ -411,62 +417,113 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
         cout<<"     Then a[]-b[] induction is 2 ops total,\n"
             <<"     move/add from fixed (precalculated) register to working register"<<endl;
     }
+#if 0
+    // NB: common operation is divmod(v,s,vM,vD) : v--> v%s, v/s,
+    //     which has some optimizations for nice values of jj.
+    // C++14: &vl=std::as_const(vl)
+    auto v_divmod_vs = [&vl,&jj,&jj_M](/* in*/ VVlpi const& a, Vlpi const d, /*out*/ VVlpi& div, VVlpi& mod){
+        assert( (Ulpi)jj < SAFEMAX ); FOR(i,vl) assert( (Uvlpi)a[i] <= SAFEMAX );
+        FOR(i,vl) div[i] = jj_M * a[i] >> C;
+        FOR(i,vl) mod[i] = a[i] - div[i]*jj;
+    };
+#endif
+    // have_FOO and cnt_FOO : FOO register usage condition and actual use count
+    bool const have_vl_over_jj = nloop>1 && vl%jj==0;
+    //bool const have_bA_bD = (jj!=1) && (iijj > (uint64_t)vl && jj%vl != 0);
+    bool const have_bA_bD = nloop>1 && vl%jj!=0 && jj%vl!=0;
+    bool const have_sq = (jj!=1 && jj<vl)                               // when iloop==0
+        || (nloop>jj/vl && vl%jj!=0 && jj%vl0==0);                      // o/w
+    bool const have_jj_shift = (jj!=1 && jj<vl && positivePow2(jj))     // when iloop==0
+        || (nloop>1 && vl%jj!=0 && jj%vl!=0 && positivePow2(jj));       // o/w
+    bool const have_jj_M = (jj>1 && jj<vl && !positivePow2(jj))         // when iloop==0
+        || (nloop>1 && vl%jj!=0 && jj%vl!=0 && !positivePow2(jj));      // o/w
+
+    int cnt_vl_over_jj=0, cnt_bA_bD=0, cnt_sq=0, cnt_jj_shift=0, cnt_jj_M=0;
+
+    Vlpi const vl_over_jj = have_vl_over_jj? vl/jj: 0;
+    register uint64_t cnt = 0UL;
+    int count_special = 0U;
     for( ; cnt < iijj; cnt += vl )
     {
         //cout<<"cnt "<<cnt<<" iloop "<<iloop<<" ii "<<ii<<" jj "<<jj<<endl;
         if (iloop == 0){
+            if(nloop==0) assert(have_vl_over_jj==0);
             // now load the initial vector-loop registers:
             // sq[i] and jj are < SAFEMAX, so we can avoid % and / operations
             FOR(i,vl) sq[i] = i;       // vseq_v
             if( jj==1 ){
+                if(verbose)cout<<" a";
                 FOR(i,vl) a[i] = i;    // sq/jj
                 FOR(i,vl) b[i] = 0;    // sq%jj
-            }else if(vl<=jj){
+                assert(have_bA_bD==0); assert(have_sq==0); assert(have_jj_shift==0);
+            }else if(jj>=vl){
+                if(verbose)cout<<" b";
                 FOR(i,vl) a[i] = 0;    // sq < vl, so sq/jj < 1
                 FOR(i,vl) b[i] = i;
+                if(nloop<=1) {assert(have_bA_bD==0); assert(have_sq==0); assert(have_jj_shift==0); }
             }else if( positivePow2(jj) ){
+                if(verbose)cout<<" c";
                 // 2 ops (shr, and)
                 FOR(i,vl) a[i] = (sq[i] >> jj_shift);  // bD = bA / jj; div_vsv
                 FOR(i,vl) b[i] = (sq[i] & jj_minus_1); // bM = bA % jj; mod_vsv
+                if(nloop<=1) assert(have_bA_bD==0); assert(have_sq==1); assert(have_jj_shift==1);
+                ++cnt_sq; ++cnt_jj_shift;
             }else{
+                if(verbose)cout<<" d";
                 // 4 int ops (mul,shr, mul,sub)
-                v_divmod_vs( sq, jj, /*sq[]/jj*/a, /*sq[]%jj*/b );
+                //v_divmod_vs( sq, jj, /*sq[]/jj*/a, /*sq[]%jj*/b );
+                FOR(i,vl) a[i] = jj_M * sq[i] >> C;
+                FOR(i,vl) b[i] = sq[i] - a[i]*jj;
                 //  OK since sq[] and jj both <= SAFEMAX [(1<<21)-1]
                 assert( (uint64_t)jj+vl <= (uint64_t)SAFEMAX );
-                // use mul_add_shr (fastdiv) approach if jj+vl>SAFEMAX
-                // (one extra vector_add_scalar op)
+                // use mul_add_shr (fastdiv) approach if jj+vl>SAFEMAX (1 more vector_add_scalar)
+                if(nloop<=1) assert(have_bA_bD==0); assert(have_sq==1); assert(have_jj_shift==0);
+                ++cnt_sq; ++cnt_jj_M;
             }
-
-            // NB: common operation is divmod(v,s,vM,vD) : v--> v%s, v/s,
-            //     which has some optimizations for nice values of jj.
         }else{
+            assert( nloop > 1 );
             // 2. Induction from a->ax, b->bx
             if(vl%jj == 0){  // avoid div,mod -----1 vec op
+                if(verbose)cout<<" e";
                 FOR(i,vl) a[i] = a[i] + vl_over_jj;
+                assert(have_vl_over_jj==1);
+                ++cnt_vl_over_jj;
             }else if(jj%vl == 0){  // -------------1 or 2 vec op (conditional)
+                assert( have_bA_bD==0); assert(have_jj_shift==0); assert(have_vl_over_jj==0);
                 Lpi special = iloop % (jj/vl);                  // vector mod --> scalar mod
                 // #pragma..unroll(jj/vl) could be branchless
                 // can be optimized further into 3 minimal-op cases
                 if( special ) { // slightly less likely // bump b[i], bD[i]==0
+                    if(verbose)cout<<" f";
                     FOR(i,vl) b[i] = b[i] + vl;
                 }else{                                  // reset b[i], bD[i]==1
+                    if(verbose)cout<<" g";
+                    assert( have_sq==1 );
+                    ++count_special; //cout<<" sq with iloop>0 ";
                     FOR(i,vl) b[i] = sq[i];
                     FOR(i,vl) a[i] = a[i] + 1;
+                    ++cnt_sq;
                 }
             }else if( positivePow2(jj) ){ // ------4 vec ops (add, shr, and, add)
+                if(verbose)cout<<" h";
+                assert(have_bA_bD==1); assert(have_jj_shift==1); assert(have_vl_over_jj==0); assert(have_sq==(jj>1&&jj<vl));
                 FOR(i,vl) bA[i] = vl + b[i];            // bA = b + vl; add_vsv
                 FOR(i,vl) bD[i] = (bA[i] >> jj_shift);  // bD = bA / jj; div_vsv
                 FOR(i,vl) b [i] = (bA[i] & jj_minus_1); // bM = bA % jj; mod_vsv
                 FOR(i,vl) a [i] = a[i] + bD[i]; // aA = a + bD; add_vvv
+                ++cnt_bA_bD; ++cnt_jj_shift;
             }else{ // div-mod ---------------------6 vec ops: add (mul,shr) (mul,sub) add
+                if(verbose)cout<<" i";
+                assert(have_bA_bD==1); assert(have_sq==(jj>1&&jj<vl)); assert(have_jj_shift==0); assert(have_vl_over_jj==0);
                 assert( jj+vl < (1<<21) );
                 FOR(i,vl) bA[i] = vl + b[i];            // add_vsv
                 FOR(i,vl) bD[i] = ((jj_M*bA[i]) >> C);  // fastdiv_uB   : mul_vvs, shr_vs
                 FOR(i,vl) b [i] = bA[i] - bD[i]*jj;     // long-hand    : mul_vvs, sub_vvv
                 FOR(i,vl) a [i] = a[i] + bD[i];         // add_vvv
+                ++cnt_bA_bD; ++cnt_jj_M;
             }
-            // Note: for some jj,
-            //       the bM,bD divmod operation can be OPTIMIZED to rot etc.
+            // Note: for some jj, esp if vl+jj<256
+            //       the bM,bD divmod operation might be OPTIMIZED to rot at longer vlen
         }
 
         // Note: vl reduction must take place AFTER above use of "long" vl
@@ -475,13 +532,30 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
             cout<<" vl reduced for last loop to "<<vl<<endl;
         }
 
+        if(1){
+            int const n=8; // output up-to-n [ ... [up-to-n]] ints
+            int const bignum = std::max( ii, jj );
+            int const wide = 1 + (bignum<10? 1: bignum <100? 2: bignum<1000? 3: 4);
+            cout<<"a["<<vl<<"]="<<vecprt(n,wide,a,vl)<<endl;
+            cout<<"b["<<vl<<"]="<<vecprt(n,wide,b,vl)<<endl;
+        }
+
         FOR(i,vl) assert( a[i] == vabs[iloop].a[i] );
         FOR(i,vl) assert( b[i] == vabs[iloop].b[i] );
         ++iloop; // just for above debug assertions
         //cout<<" next loop??? cnt+vl="<<cnt+vl<<" iijj="<<iijj<<endl;
 #undef FOR
     }
-    cout<<" Yay! induction formulas worked!"<<endl;
+    cout<<" Yay! induction formulas worked! iloop,nloop="<<iloop<<","<<nloop<<endl;
+    assert( cnt == iijj );
+    assert( nloop == iloop );
+    //if( nloop > 1 && vl%jj!=0 && jj%vl==0 ) assert( count_special > 0 );
+    assert( have_vl_over_jj == (cnt_vl_over_jj>0) );
+    assert( have_bA_bD == (cnt_bA_bD>0) );
+    assert( have_sq == (cnt_sq>0) );
+    assert( have_jj_shift == (cnt_jj_shift>0) );
+    assert( have_jj_M == (cnt_jj_M>0) );
+    assert( (count_special>0) == (vl%jj!=0 && jj%vl0==0 && nloop>jj/vl) );
 }
 
 /** opt0: print vector ops (and verify) */
@@ -489,7 +563,8 @@ void test_vloop2_unroll(Lpi const vlen, Lpi const ii, Lpi const jj)
 {
     // for r in [0,h){ for c in [0,w] {...}}
     assert( vlen > 0 );
-    cout<<"test_vloop2_unroll( vlen="<<vlen<<" loops 0.."<<ii<<" 0.."<<jj<<endl;
+    register uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
+    cout<<"test_vloop2_unroll( vlen="<<vlen<<" loops 0.."<<ii<<" 0.."<<jj<<" iijj="<<iijj<<endl;
 
     // pretty-printing via vecprt
     int const n=8; // output up-to-n [ ... [up-to-n]] ints
@@ -499,7 +574,6 @@ void test_vloop2_unroll(Lpi const vlen, Lpi const ii, Lpi const jj)
     // generate reference index outputs
     std::vector<Vab> vabs = ref_vloop2(vlen, ii, jj, 1/*verbose*/);
 
-    register uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
     register int vl = vlen;
     register uint64_t cnt=0;
     register uint64_t nxt;
