@@ -493,6 +493,14 @@ tf2-0.log: fuse2 Makefile tf2-3.log
 		&& ./fuse2 -t  6 13 8 \
 		&& ./fuse2 -t  6 13 9 \
 		&& ./fuse2 -t  9 13 6 \
+		&& ./fuse2 -t  1  4 2 \
+		&& ./fuse2 -t  1  2 4 \
+		&& ./fuse2 -t  1  6 3 \
+		&& ./fuse2 -t  1  3 6 \
+		&& ./fuse2 -t  1 18 6 \
+		&& ./fuse2 -t  2 18 6 \
+		&& ./fuse2 -t  3 18 6 \
+		&& ./fuse2 -t  4 18 6 \
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
 %: %.cpp

@@ -296,6 +296,7 @@ void fastdiv_make(struct fastdiv *d, u32 divisor) {
  * ? or maybe double-length 2*vlen of i/u32 (is this possible?)
  */
 void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){ for c in [0,w] {...}}
+    int const verbose=1;
     assert( vlen > 0 );
     register uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
     cout<<"test_vloop2( vlen="<<vlen<<" loops 0.."<<ii<<" 0.."<<jj<<" iijj="<<iijj;
@@ -307,18 +308,15 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     int const nloop = (iijj+vl-1) / vl;    // div_round_up(iijj,vl)
     cout<<" vl="<<vl<<" nloop="<<nloop<<endl;
     assert( (nloop > 1) == ((uint64_t)vl < iijj) );
+    assert( vl0 > 0 );
+    assert( ii > 0 );
+    assert( jj > 0 );
 
     // pretty-printing via vecprt
     //int const verbose = 1; // verbose
     //int const n=8; // output up-to-n [ ... [up-to-n]] ints
     //int const bignum = std::max( ii, jj );
     //int const wide = 1 + (bignum<10? 1: bignum <100? 2: bignum<1000? 3: 4);
-
-    cout<<"Verify-------"<<endl;
-    // generate reference index outputs
-    std::vector<Vab> vabs = ref_vloop2(vlen, ii, jj, 1/*verbose*/);
-    assert( vabs.size() > 0 );
-    assert(vabs.size() == (size_t)(((ii*jj) +vlen -1) / vlen));
 
     // Have reference vabs vectors. Now we try induction way.
     // 1. initialize: could copy vabs[0] from const data storage, or...
@@ -327,7 +325,12 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     //     - \c cnt 0.. \c iijj, and \c vl (for jit, iijj is CCC (compile-time-const))
     //     - get final \c vl from cnt, vl and iij)
 #define FOR(I,VL) for(int I=0;I<VL;++I)
-    int const verbose=1;
+    cout<<"Verify-------"<<endl;
+    // generate reference index outputs
+    std::vector<Vab> vabs = ref_vloop2(vlen, ii, jj, 0/*verbose*/);
+    assert( vabs.size() > 0 );
+    assert(vabs.size() == (size_t)(((ii*jj) +vlen -1) / vlen));
+
     if(verbose>=2){
         cout<<"   ii="<<ii<<"   jj="<<jj<<"   iijj="<<iijj<<endl;
         //cout<<" vcnt="<<vcount<<" vcnt'"<<vcount_next<<endl;
@@ -401,22 +404,6 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     }
     cout<<endl;
     
-    // Note: I began with a simple cyclic case, jj%vl==0.
-    //   In general, the period for b[] vectors is lcm(vl,jj)/vl
-    //   Ex. vl=6, jj=8 --> lcm(6,8)/6=24/6 = 4 b[0] cycle={0,6,4,2}
-    //   Ex. vl=6, jj=9 --> lcm(6,9)/6=18/6 = 3 b[0] cycle={0,6,3}
-    //   Ex. vl=9, jj=6 --> lcm(6,9)/9=18/9 = 2 b[0] cycle={0,3}
-    int const lcm_vljj = lcm(vl,jj);
-    int const b_period = lcm_vljj / vl;
-    int const b_period_max = 8; // how many regs can you spare?
-    if( jj>1 /*&& jj>=b_period*/ && b_period > 1 && b_period < b_period_max ) {
-        if( jj <= b_period/*??*/ ) cout<<" suggest full unroll (jj="<<jj<<", period="<<b_period<<endl;
-        else cout<<" suggest unroll by "<<b_period<<endl;
-        cout<<"   b[] cycles through values"<<endl;
-        cout<<"   a[]-INCREMENT also cycles"<<endl;
-        cout<<"     Then a[]-b[] induction is 2 ops total,\n"
-            <<"     move/add from fixed (precalculated) register to working register"<<endl;
-    }
 #if 0
     // NB: common operation is divmod(v,s,vM,vD) : v--> v%s, v/s,
     //     which has some optimizations for nice values of jj.
@@ -428,21 +415,166 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     };
 #endif
     // have_FOO and cnt_FOO : FOO register usage condition and actual use count
-    bool const have_vl_over_jj = nloop>1 && vl%jj==0;
+    bool const have_vl_over_jj = nloop>1 && vl0%jj==0;
     //bool const have_bA_bD = (jj!=1) && (iijj > (uint64_t)vl && jj%vl != 0);
     bool const have_bA_bD = nloop>1 && vl%jj!=0 && jj%vl!=0;
-    bool const have_sq = (jj!=1 && jj<vl)                               // when iloop==0
-        || (nloop>jj/vl && vl%jj!=0 && jj%vl0==0);                      // o/w
-    bool const have_jj_shift = (jj!=1 && jj<vl && positivePow2(jj))     // when iloop==0
-        || (nloop>1 && vl%jj!=0 && jj%vl!=0 && positivePow2(jj));       // o/w
-    bool const have_jj_M = (jj>1 && jj<vl && !positivePow2(jj))         // when iloop==0
-        || (nloop>1 && vl%jj!=0 && jj%vl!=0 && !positivePow2(jj));      // o/w
+    bool const have_jj_over_vl = (vl0%jj!=0 && jj%vl0==0 && nloop>jj/vl0); // case 'g' (old "special")
+    if( have_jj_over_vl ) cout<<" nloop="<<nloop<<" jj/vl0="<<jj/vl0<<endl;
+    bool const have_sq = (jj!=1 && jj<vl0)                              // when iloop==0
+        || have_jj_over_vl;                                             // o/w
+    bool const have_jj_shift = (jj!=1 && jj<vl0 && positivePow2(jj))    // when iloop==0
+        || (nloop>1 && vl0%jj!=0 && jj%vl0!=0 && positivePow2(jj));     // o/w
+    bool const have_jj_M = (jj>1 && jj<vl0 && !positivePow2(jj))        // when iloop==0
+        || (nloop>1 && vl0%jj!=0 && jj%vl0!=0 && !positivePow2(jj));    // o/w
 
     int cnt_vl_over_jj=0, cnt_bA_bD=0, cnt_sq=0, cnt_jj_shift=0, cnt_jj_M=0;
+    int cnt_jj_over_vl = 0U;
 
-    Vlpi const vl_over_jj = have_vl_over_jj? vl/jj: 0;
+    Vlpi const vl_over_jj = have_vl_over_jj? vl0/jj: 0;
+    Vlpi const jj_over_vl = have_jj_over_vl? jj/vl0: 0;
+    assert( !(have_vl_over_jj && have_jj_over_vl) );
+
+    // Note: I began with a simple cyclic case, jj%vl==0.
+    //   In general, the period for b[] vectors is lcm(vl,jj)/vl
+    //   Ex. vl=6, jj=8 --> lcm(6,8)/6=24/6 = 4 b[0] cycle={0,6,4,2}
+    //   Ex. vl=6, jj=9 --> lcm(6,9)/6=18/6 = 3 b[0] cycle={0,6,3}
+    //   Ex. vl=9, jj=6 --> lcm(6,9)/9=18/9 = 2 b[0] cycle={0,3}
+    int const lcm_vljj = lcm(vl,jj);
+    int const b_period = lcm_vljj / vl;
+    // opt: if nloop is low, can also precalc (whether or not it is periodic)
+    int const bcyc_regs = (nloop<b_period? nloop: b_period);
+    int const b_period_max = 8; // how many regs can you spare?
+    bool const have_b_period = true //jj>1 /*&& jj>=b_period*/
+        && bcyc_regs > 1 && bcyc_regs < b_period_max
+        && !(nloop>1 && vl0%jj==0)
+        && !have_jj_over_vl
+        && !(b_period>1 && !(nloop>1 && jj%vl0==0) && positivePow2(jj) && bcyc_regs<b_period_max)
+        ;
+    // print unrolling suggestion
+#if 0
+    if( nloop <= bcyc_regs )
+        cout<<" suggest full unroll(nloop="<<nloop<<") : jj="<<jj
+            <<", period="<<b_period<<", cyc_regs="<<bcyc_regs<<endl;
+    else
+        cout<<" suggest looped unroll(bcyc_regs="<<bcyc_regs<<") : jj="<<jj
+            <<", period="<<b_period<<", nloop="<<nloop<<endl;
+#else
+    // We cannot nicely do a generic loop cycling over S registers, because Aurora
+    // has no load instructions like Sx = S[Sw], where Sw is a cyclic register index.
+    //
+    // Aurora has register-indirect addressing M[V[Sw]] only for some vector ops,
+    // and even there it is not loading register values, but memory values.
+    //
+    // if have_jj_over_vl, this is an easy generic-loop case (treated here)
+    // else if have_b_period and nloop > bcyc_regs, this is a "Partial Unroll"
+    //     (using a set of predefined bcyc_regs vector registers)
+    // else if nloop < b_period_max, this is a "full unroll" that can re-use precalc a[] & b[]
+    // else if nloop < b_period, a full unroll would use too many regs to precalc a[] & b[]
+    //
+    // The following logic **suggests** that unrolling has 3 case:
+    //    1. full precalc unroll                        (nicest case)
+    //    2. partial precalc unroll (still looped)      (fairly nice)
+    //    3. full unroll (no precalc)                   (always possible)
+    // 1. and 2. are worth considering when:
+    //    - ii,jj loops are both enclosed in outer loops
+    //    - OR partial precalc reduces full unroll code size greatly.
+    // Any unroll can be chosen for trivial updates:
+    //    - have vl0%jj==0
+    //    - have jj%vl0==0
+    // Precalc for a positivePow2(jj) case may or may not be good.
+    if( have_jj_over_vl ){
+        ;/*nop*/
+    }else if( b_period == 1 ){
+        assert( ! have_b_period );
+        assert( vl0%jj == 0 );
+        cout<<" nloop="<<nloop<<", b_period="<<b_period
+            <<" has a trivial jj%vl==0 update (any small unroll ok)"
+            <<endl;
+    }else if( nloop > 1 && jj%vl0 == 0 ){
+        cout<<" nloop="<<nloop<<", b_period="<<b_period
+            <<" has a trivial vl%jj==0 update (any small unroll ok)"
+            <<endl;
+    }else if( positivePow2(jj) ){
+        if(nloop < b_period_max){
+            cout<<" nloop="<<nloop<<", b_period="<<b_period<<", bcyc_regs="<<bcyc_regs
+                <<" has jj=2^"<<jj_shift<<" with precalc unroll(nloop="<<nloop<<")"
+                <<endl;
+        }else if(bcyc_regs < b_period_max){
+            cout<<" nloop="<<nloop<<", b_period="<<b_period<<", bcyc_regs="<<bcyc_regs
+                <<" has jj=2^"<<jj_shift<<" with precalc unroll(bcyc_regs="<<bcyc_regs<<")"
+                <<endl;
+            //assert( have_b_period );
+        }else{
+            cout<<" nloop="<<nloop<<", b_period="<<b_period<<", bcyc_regs="<<bcyc_regs
+                <<" has jj=2^"<<jj_shift<<" easy update, but large period [no precalc]"
+                <<endl;
+            //assert( ! have_b_period );
+        }
+    }else if( nloop < b_period_max ){ // small nloop, any b_period
+        cout<<" nloop="<<nloop<<", b_period="<<b_period
+            <<" suggest full precalc unroll(nloop="<<nloop<<")\n"
+            <<"     Then a[]-b[] induction is 2 ops total, mov/mov from precalc regs to working"
+            <<endl;
+        // no. also ok for non-cyclic and low nloop ... assert( have_b_period );
+    }else if( have_b_period && nloop > bcyc_regs ){ // small b_period, high nloop
+        cout<<" nloop="<<nloop<<", b_period="<<b_period
+            <<" suggest partial precalc unroll(b_period="<<b_period<<")\n"
+            <<"   b[] and a[]-INCREMENT cycle through precalc values\n"
+            <<"     Then a[]-b[] induction is 2 ops total, mov/add from precalc regs to working"
+            <<endl;
+        assert( have_b_period );
+    }else{ // nloop and b_period both high OR this is a simpler case
+        cout<<" nloop="<<nloop<<", b_period="<<b_period
+            <<" both high: full unroll(nloop="<<nloop<<") [no precalc] stil possible"
+            <<endl;
+        assert( !have_b_period );
+    }
+#endif
+#if 0
+    // example code for precalc-unroll
+    // bcyc and acyc may be precalculated registers (or possibly loaded from .rodata)
+    VVlpi bcyc[bcyc_regs][vl], aDcyc[bcyc_regs][vl];
+    if( have_b_period ){
+        // precalculate either acyc ~      a[...][vl0] and bcyc ~ b[...][vl0]
+        //           or        acyc ~ aDelta[...][vl0] and bcyc ~ b[...][vl0] (nloop <= b_period)
+        assert( jj > 1 );
+        assert( b_period > 1 );
+        assert( !positivePow2(jj) );
+        for(int cyc=0; cyc < bcyc_regs && cnt < iijj; cnt+=vl, ++cyc )
+        {
+            VVlpi a0[vl];
+            int const bogus=666;
+            if(cyc==0){
+                if(jj>=vl) FOR(i,vl) { a[i]=0; b[i]=i; }
+                else FOR(i,vl) { a[i] = jj_M*sq[i] >> C; b[i] = sq[i] - a[i]*jj;
+                    ++cnt_sq; ++cnt_jj_M;
+                    assert( have_sq ); assert( have_jj_M );
+                }
+                FOR(i,vl) acyc[0/*cyc*/][i] = a[i]; // final value, if nloop<b_period
+            }else{
+                assert( nloop > 1 );
+                assert( !(vl0%jj==0) );
+                if( vl0%jj==0 ) assert( !(jj%vl0==0) );
+                FOR(i,vl) bA[i] = vl0 + b[i];            // add_vsv
+                FOR(i,vl) bD[i] = ((jj_M*bA[i]) >> C);  // fastdiv_uB   : mul_vvs, shr_vs
+                FOR(i,vl) b [i] = bA[i] - bD[i]*jj;     // long-hand    : mul_vvs, sub_vvv
+                FOR(i,vl) a [i] = a[i] + bD[i];         // add_vvv
+                if( nloop < b_period ){
+                    FOR(i,vl) acyc[cyc][i] = a[i];
+                }else{
+                    FOR(i,vl) acyc[cyc][i] = bD[i];
+                    if( cyc == b_period ){ // change acyc[0] to a delta value too...
+                        FOR(i,vl) acyc[0][i] = acyc[0][i] - a[i];
+                    }
+                }
+                ++cnt_bA_bD; ++cnt_jj_M;
+                assert( have_bA_bD ); assert( have_jj_M );
+            }
+        }
+    }
+#endif
+
     register uint64_t cnt = 0UL;
-    int count_special = 0U;
     for( ; cnt < iijj; cnt += vl )
     {
         //cout<<"cnt "<<cnt<<" iloop "<<iloop<<" ii "<<ii<<" jj "<<jj<<endl;
@@ -483,6 +615,223 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
         }else{
             assert( nloop > 1 );
             // 2. Induction from a->ax, b->bx
+            if(vl0%jj == 0){  // avoid div,mod -----1 vec op
+                // this includes cases with b_period==1 and high nloops
+                if(verbose)cout<<" e";
+                FOR(i,vl) a[i] = a[i] + vl_over_jj;
+                assert(have_vl_over_jj==1);
+                ++cnt_vl_over_jj;
+            }else if(jj%vl0 == 0){  // -------------1 or 2 vec op (conditional)
+                // often this case could be handled by have_b_period (with maybe more regs)
+                assert( have_bA_bD==0); assert(have_jj_shift==0); assert(have_vl_over_jj==0);
+                Lpi special = iloop % jj_over_vl;       // scalar cyclic mod
+                // #pragma..unroll(jj/vl) could be branchless
+                // can be optimized further into 3 minimal-op cases
+                if( special ) { // slightly less likely // bump b[i], bD[i]==0
+                    if(verbose)cout<<" f";
+                    FOR(i,vl) b[i] = b[i] + vl0;
+                }else{                                  // reset b[i], bD[i]==1
+                    if(verbose)cout<<" g";
+                    assert( have_sq==1 );
+                    assert( have_jj_over_vl==1 );
+                    FOR(i,vl) b[i] = sq[i];
+                    FOR(i,vl) a[i] = a[i] + 1;
+                    ++cnt_sq; ++cnt_jj_over_vl;
+                }
+            }else if( positivePow2(jj) ){ // ------4 vec ops (add, shr, and, add)
+                if(verbose)cout<<" h";
+                assert(have_bA_bD==1); assert(have_jj_shift==1); assert(have_vl_over_jj==0); assert(have_sq==(jj>1&&jj<vl));
+                FOR(i,vl) bA[i] = vl0 + b[i];            // bA = b + vl; add_vsv
+                FOR(i,vl) bD[i] = (bA[i] >> jj_shift);  // bD = bA / jj; div_vsv
+                FOR(i,vl) b [i] = (bA[i] & jj_minus_1); // bM = bA % jj; mod_vsv
+                FOR(i,vl) a [i] = a[i] + bD[i]; // aA = a + bD; add_vvv
+                ++cnt_bA_bD; ++cnt_jj_shift;
+            }else{ // div-mod ---------------------6 vec ops: add (mul,shr) (mul,sub) add
+                if(verbose)cout<<" i";
+                assert(have_bA_bD==1); assert(have_sq==(jj>1&&jj<vl)); assert(have_jj_shift==0); assert(have_vl_over_jj==0);
+                assert( jj+vl < (1<<21) );
+                FOR(i,vl) bA[i] = vl0 + b[i];            // add_vsv
+                FOR(i,vl) bD[i] = ((jj_M*bA[i]) >> C);  // fastdiv_uB   : mul_vvs, shr_vs
+                FOR(i,vl) b [i] = bA[i] - bD[i]*jj;     // long-hand    : mul_vvs, sub_vvv
+                FOR(i,vl) a [i] = a[i] + bD[i];         // add_vvv
+                ++cnt_bA_bD; ++cnt_jj_M;
+            }
+            // Note: for some jj, esp if vl+jj<256
+            //       the bM,bD divmod operation might be OPTIMIZED to rot at longer vlen
+        }
+
+        // Note: vl reduction must take place AFTER above use of "long" vl
+        if( cnt + vl > iijj ){ // last time might have reduced vl
+            vl = iijj - cnt;
+            cout<<" vl reduced for last loop to "<<vl<<endl;
+        }
+
+        if(1){
+            int const n=8; // output up-to-n [ ... [up-to-n]] ints
+            int const bignum = std::max( ii, jj );
+            int const wide = 1 + (bignum<10? 1: bignum <100? 2: bignum<1000? 3: 4);
+            cout<<"a["<<vl<<"]="<<vecprt(n,wide,a,vl)<<endl;
+            cout<<"b["<<vl<<"]="<<vecprt(n,wide,b,vl)<<endl;
+        }
+
+        FOR(i,vl) assert( a[i] == vabs[iloop].a[i] );
+        FOR(i,vl) assert( b[i] == vabs[iloop].b[i] );
+        ++iloop; // just for above debug assertions
+        //cout<<" next loop??? cnt+vl="<<cnt+vl<<" iijj="<<iijj<<endl;
+#undef FOR
+    }
+    cout<<" Yay! induction formulas worked! iloop,nloop="<<iloop<<","<<nloop<<endl;
+    assert( cnt == iijj );
+    assert( nloop == iloop );
+    //if( nloop > 1 && vl%jj!=0 && jj%vl==0 ) assert( count_special > 0 );
+    assert( have_vl_over_jj     == (cnt_vl_over_jj > 0) );
+    assert( have_bA_bD          == (cnt_bA_bD      > 0) );
+    assert( have_sq             == (cnt_sq         > 0) );
+    assert( have_jj_shift       == (cnt_jj_shift   > 0) );
+    assert( have_jj_M           == (cnt_jj_M       > 0) );
+    assert( have_jj_over_vl     == (cnt_jj_over_vl > 0) ); // old "special" count, case 'g' needed
+}
+
+void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){ for c in [0,w] {...}}
+    //int const bogus=666;
+    assert( vlen > 0 );
+    register uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
+    cout<<"test_vloop2( vlen="<<vlen<<" loops 0.."<<ii<<" 0.."<<jj<<" iijj="<<iijj;
+
+    register int vl = vlen;
+    //if (cnt+vl > iijj) vl = iijj - cnt;  // simplifies for cnt=0
+    if ((uint64_t)vl > iijj) vl = iijj;
+    int const vl0 = vl; // debug
+    int const nloop = (iijj+vl-1) / vl;    // div_round_up(iijj,vl)
+    cout<<" vl="<<vl<<" nloop="<<nloop<<endl;
+    assert( nloop >= 1 );
+    assert( (nloop > 1) == ((uint64_t)vl < iijj) );
+
+    cout<<"Verify-------"<<endl;
+    // generate reference index outputs
+    std::vector<Vab> vabs = ref_vloop2(vlen, ii, jj, 1/*verbose*/);
+    assert( vabs.size() > 0 );
+    assert(vabs.size() == (size_t)(((ii*jj) +vlen -1) / vlen));
+
+    // Have reference vabs vectors. Now we try induction way.
+    // 1. initialize: could copy vabs[0] from const data storage, or...
+    //   - generate from seq + divmod.
+    //   - 2-loop induction uses 3 scalar registers:
+    //     - \c cnt 0.. \c iijj, and \c vl (for jit, iijj is CCC (compile-time-const))
+    //     - get final \c vl from cnt, vl and iij)
+#define FOR(I,VL) for(int I=0;I<VL;++I)
+    // various misc precalculated consts and declarations.
+    VVlpi a(vl), b(vl);                 // calculated loop index vectors
+    VVlpi bA(vl), bD(vl), sq(vl);       // internal vectors
+    int iloop = 0;
+    uint64_t const jj_M = computeM_uB(jj); // for fastdiv_uB method
+    cout<<" jj="<<jj;
+    int jj_shift=0;
+    Vlpi jj_minus_1 = 0;
+    if( positivePow2(jj) ){
+        jj_shift = positivePow2Shift((uint32_t)jj);
+        jj_minus_1 = jj - 1;
+        assert( (uint64_t)1<<jj_shift == (uint64_t)jj );
+        cout<<" power of two shift is "<<jj_shift<<"    mask is "<<jj_minus_1;
+    }else{
+        cout<<" jj_M="<<(void*)(intptr_t)jj_M<<" shift="<<C;
+    }
+    cout<<endl;
+    
+    // have_FOO and cnt_FOO : FOO register usage condition and actual use count
+    bool const have_vl_over_jj = nloop>1 && vl0%jj==0;
+    //bool const have_bA_bD = (jj!=1) && (iijj > (uint64_t)vl && jj%vl != 0);
+    bool const have_bA_bD = nloop>1 && vl%jj!=0 && jj%vl!=0;
+    bool const have_jj_over_vl = (nloop>jj/vl0 && vl0%jj!=0 && jj%vl0==0); // case 'g'
+    bool const have_sq = (jj!=1 && jj<vl0)                              // when iloop==0
+        || have_jj_over_vl;                                             // o/w
+    bool const have_jj_shift = (jj!=1 && jj<vl0 && positivePow2(jj))    // when iloop==0
+        || (nloop>1 && vl0%jj!=0 && jj%vl0!=0 && positivePow2(jj));     // o/w
+    bool const have_jj_M = (jj>1 && jj<vl0 && !positivePow2(jj))        // when iloop==0
+        || (nloop>1 && vl0%jj!=0 && jj%vl0!=0 && !positivePow2(jj));    // o/w
+
+    int cnt_vl_over_jj=0, cnt_bA_bD=0, cnt_sq=0, cnt_jj_shift=0, cnt_jj_M=0;
+
+    Vlpi const vl_over_jj = have_vl_over_jj? vl0/jj: 0;
+    Vlpi const jj_over_vl = have_jj_over_vl? jj/vl0: 0;
+    //   NO (for now)
+    cout<<"=== // no-unroll regs (generic loop):"<<endl;
+    cout<<"=== //        %cnt        : scalar : count 0..iijj-1"<<endl;
+    cout<<"=== //        %iloop?     : scalar : count 0..iijj-1 by vl"<<endl;
+    cout<<"=== //        %vl         : scalar : vector length register"<<endl;
+    cout<<"=== // Oh. Fully generic would need ii and jj in scalar regs too"<<endl;
+    cout<<"=== //                 (ii could be re-used for iijj)"<<endl;
+    if(have_vl_over_jj)
+        cout<<"=== //        %vl_over_jj : scalar : vl/jj"<<endl;
+    cout<<"=== //        %a, %b          : vector : outer, inner loop indices [outputs]"<<endl;
+    if(have_sq)
+        cout<<"=== //        %sq         : vector : 0,1,...vl"<<endl;
+    if(have_bA_bD)
+        cout<<"=== //        %bA, %bD    : vector : tmp vector registers"<<endl;
+    cout<<"=== // no-unroll constants: vlen, ii, jj and..."<<endl;
+    cout<<"=== //        iijj        : const  : outer * inner fused-loop count"<<endl;
+    if(have_jj_shift){
+        cout<<"=== //        jj_shift    : const  : div-by-jj right-shift"<<endl;
+        cout<<"=== //        jj_minus_1  : const  : div-by-jj mask"<<endl;
+    }
+    if(have_jj_shift){
+        cout<<"=== //        jj_M        : const  : div-by-jj multiplier"<<endl;
+        cout<<"=== //        C           : const  : div-by-jj right-shift"<<endl;
+    }
+    //
+    // are we doing any b_period or nloop precalc?
+    //if(nloop>1 && vl%jj!=0 && have_special) ... (jj/vl)
+
+    int const verbose=0;
+    register uint64_t cnt = 0UL;
+    int count_special = 0U;
+    cout<<"=== // scalar init:"<<endl;
+    cout<<"=== //   register int vl = "<<vl0<<"; // lower 10 bits used for LVL"<<endl;
+    cout<<"=== //   register uint64_t iijj = "<<iijj<<"; // combined loops high limit"<<endl;
+    cout<<"=== //   register uint64_t cnt = 0; // cnt 0..iijj-1 by vl"<<endl;
+    cout<<"=== //   register uint64_t iloop = 0; // 0..nloops, maybe not required?"<<endl;
+    assert( !(have_vl_over_jj && have_jj_over_vl) );
+    //int const bigfrac_vl_jj = (have_jj_over_vl? jj_over_vl: have_vl_over_jj? vl_over_jj: bogus);
+    //cout<<"=== //   register uint64_t bigfrac_vl_jj = "<<bigfrac_vl_jj<<"; // immediate";
+    for( ; cnt < iijj; cnt += vl )
+    {
+        //cout<<"cnt "<<cnt<<" iloop "<<iloop<<" ii "<<ii<<" jj "<<jj<<endl;
+        if (cnt == 0){
+            if(nloop==0) assert(have_vl_over_jj==0);
+            // now load the initial vector-loop registers:
+            // sq[i] and jj are < SAFEMAX, so we can avoid % and / operations
+            if(have_sq) FOR(i,vl) sq[i] = i;       // vseq_v
+            if( jj==1 ){
+                FOR(i,vl) a[i] = i;    // sq/jj
+                FOR(i,vl) b[i] = 0;    // sq%jj
+                assert(have_bA_bD==0); assert(have_sq==0); assert(have_jj_shift==0);
+            }else if(jj>=vl){
+                if(verbose)cout<<" b";
+                FOR(i,vl) a[i] = 0;    // sq < vl, so sq/jj < 1
+                FOR(i,vl) b[i] = i;
+                if(nloop<=1) {assert(have_bA_bD==0); assert(have_sq==0); assert(have_jj_shift==0); }
+            }else if( positivePow2(jj) ){
+                if(verbose)cout<<" c";
+                // 2 ops (shr, and)
+                FOR(i,vl) a[i] = (sq[i] >> jj_shift);  // bD = bA / jj; div_vsv
+                FOR(i,vl) b[i] = (sq[i] & jj_minus_1); // bM = bA % jj; mod_vsv
+                if(nloop<=1) assert(have_bA_bD==0); assert(have_sq==1); assert(have_jj_shift==1);
+                ++cnt_sq; ++cnt_jj_shift;
+            }else{
+                if(verbose)cout<<" d";
+                // 4 int ops (mul,shr, mul,sub)
+                //v_divmod_vs( sq, jj, /*sq[]/jj*/a, /*sq[]%jj*/b );
+                FOR(i,vl) a[i] = jj_M * sq[i] >> C;
+                FOR(i,vl) b[i] = sq[i] - a[i]*jj;
+                //  OK since sq[] and jj both <= SAFEMAX [(1<<21)-1]
+                assert( (uint64_t)jj+vl <= (uint64_t)SAFEMAX );
+                // use mul_add_shr (fastdiv) approach if jj+vl>SAFEMAX (1 more vector_add_scalar)
+                if(nloop<=1) assert(have_bA_bD==0); assert(have_sq==1); assert(have_jj_shift==0);
+                ++cnt_sq; ++cnt_jj_M;
+            }
+        }else{
+            assert( nloop > 1 );
+            // 2. Induction from a->ax, b->bx
             if(vl%jj == 0){  // avoid div,mod -----1 vec op
                 if(verbose)cout<<" e";
                 FOR(i,vl) a[i] = a[i] + vl_over_jj;
@@ -490,7 +839,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
                 ++cnt_vl_over_jj;
             }else if(jj%vl == 0){  // -------------1 or 2 vec op (conditional)
                 assert( have_bA_bD==0); assert(have_jj_shift==0); assert(have_vl_over_jj==0);
-                Lpi special = iloop % (jj/vl);                  // vector mod --> scalar mod
+                Lpi special = iloop % jj_over_vl;                  // vector mod --> scalar mod
                 // #pragma..unroll(jj/vl) could be branchless
                 // can be optimized further into 3 minimal-op cases
                 if( special ) { // slightly less likely // bump b[i], bD[i]==0
@@ -555,7 +904,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     assert( have_sq == (cnt_sq>0) );
     assert( have_jj_shift == (cnt_jj_shift>0) );
     assert( have_jj_M == (cnt_jj_M>0) );
-    assert( (count_special>0) == (vl%jj!=0 && jj%vl0==0 && nloop>jj/vl) );
+    assert( (count_special>0) == (vl%jj!=0 && jj%vl0==0 && nloop>jj/vl0) );
 }
 
 /** opt0: print vector ops (and verify) */
