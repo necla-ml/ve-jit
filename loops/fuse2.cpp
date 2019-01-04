@@ -325,6 +325,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     //     - \c cnt 0.. \c iijj, and \c vl (for jit, iijj is CCC (compile-time-const))
     //     - get final \c vl from cnt, vl and iij)
 #define FOR(I,VL) for(int I=0;I<VL;++I)
+
     cout<<"Verify-------"<<endl;
     // generate reference index outputs
     std::vector<Vab> vabs = ref_vloop2(vlen, ii, jj, 0/*verbose*/);
@@ -418,20 +419,25 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     bool const have_vl_over_jj = nloop>1 && vl0%jj==0;
     //bool const have_bA_bD = (jj!=1) && (iijj > (uint64_t)vl && jj%vl != 0);
     bool const have_bA_bD = nloop>1 && vl%jj!=0 && jj%vl!=0;
-    bool const have_jj_over_vl = (vl0%jj!=0 && jj%vl0==0 && nloop>jj/vl0); // case 'g' (old "special")
-    if( have_jj_over_vl ) cout<<" nloop="<<nloop<<" jj/vl0="<<jj/vl0<<endl;
+    bool const have_reset      = (vl0%jj!=0 && jj%vl0==0 && nloop >jj/vl0); // case 'g'
+    bool const have_jj_over_vl = (vl0%jj!=0 && jj%vl0==0 && nloop>=jj/vl0);
+    if( 1 || have_jj_over_vl ){
+        cout<<" nloop="<<nloop<<" jj/vl0="<<jj/vl0<<endl;
+        if( have_jj_over_vl ) assert( jj/vl0 > 1 );
+        if( have_reset ) assert( have_jj_over_vl );
+    }
     bool const have_sq = (jj!=1 && jj<vl0)                              // when iloop==0
-        || have_jj_over_vl;                                             // o/w
+        || have_reset;                                                  // o/w
     bool const have_jj_shift = (jj!=1 && jj<vl0 && positivePow2(jj))    // when iloop==0
         || (nloop>1 && vl0%jj!=0 && jj%vl0!=0 && positivePow2(jj));     // o/w
     bool const have_jj_M = (jj>1 && jj<vl0 && !positivePow2(jj))        // when iloop==0
         || (nloop>1 && vl0%jj!=0 && jj%vl0!=0 && !positivePow2(jj));    // o/w
 
     int cnt_vl_over_jj=0, cnt_bA_bD=0, cnt_sq=0, cnt_jj_shift=0, cnt_jj_M=0;
-    int cnt_jj_over_vl = 0U;
+    int cnt_jj_over_vl=0U, cnt_reset=0U;
 
     Vlpi const vl_over_jj = have_vl_over_jj? vl0/jj: 0;
-    Vlpi const jj_over_vl = have_jj_over_vl? jj/vl0: 0;
+    Vlpi const jj_over_vl = (have_reset ? jj/vl0: 0);
     assert( !(have_vl_over_jj && have_jj_over_vl) );
 
     // Note: I began with a simple cyclic case, jj%vl==0.
@@ -447,7 +453,8 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     bool const have_b_period = true //jj>1 /*&& jj>=b_period*/
         && bcyc_regs > 1 && bcyc_regs < b_period_max
         && !(nloop>1 && vl0%jj==0)
-        && !have_jj_over_vl
+        //&& !have_jj_over_vl
+        && !(nloop>1 && vl0%jj!=0 && jj%vl0!=0) // ???
         && !(b_period>1 && !(nloop>1 && jj%vl0==0) && positivePow2(jj) && bcyc_regs<b_period_max)
         ;
     // print unrolling suggestion
@@ -482,50 +489,60 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     //    - have vl0%jj==0
     //    - have jj%vl0==0
     // Precalc for a positivePow2(jj) case may or may not be good.
-    if( have_jj_over_vl ){
-        ;/*nop*/
-    }else if( b_period == 1 ){
-        assert( ! have_b_period );
-        assert( vl0%jj == 0 );
-        cout<<" nloop="<<nloop<<", b_period="<<b_period
-            <<" has a trivial jj%vl==0 update (any small unroll ok)"
+    if( nloop == 1 ){
+        cout<<" A.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop
+            <<", b_period="<<b_period<<" no loop [precalc, no unroll]"<<endl;
+    }else if( vl0%jj == 0 ){
+        cout<<" B.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop
+            <<", b_period="<<b_period
+            <<" has a trivial vl%jj==0 update [no precalc, any small unroll]"
             <<endl;
+        //assert( !have_b_period );
     }else if( nloop > 1 && jj%vl0 == 0 ){
-        cout<<" nloop="<<nloop<<", b_period="<<b_period
-            <<" has a trivial vl%jj==0 update (any small unroll ok)"
+        cout<<" C.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop
+            <<", b_period="<<b_period
+            <<" has a trivial jj%vl==0 update [no precalc, any small unroll]"
             <<endl;
+        //assert( !have_b_period );
+        //assert("Never got case B"==nullptr);
     }else if( positivePow2(jj) ){
         if(nloop < b_period_max){
-            cout<<" nloop="<<nloop<<", b_period="<<b_period<<", bcyc_regs="<<bcyc_regs
+            cout<<" D.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop
+                <<", b_period="<<b_period<<", bcyc_regs="<<bcyc_regs
                 <<" has jj=2^"<<jj_shift<<" with precalc unroll(nloop="<<nloop<<")"
                 <<endl;
         }else if(bcyc_regs < b_period_max){
-            cout<<" nloop="<<nloop<<", b_period="<<b_period<<", bcyc_regs="<<bcyc_regs
+            cout<<" E.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop
+                <<", b_period="<<b_period<<", bcyc_regs="<<bcyc_regs
                 <<" has jj=2^"<<jj_shift<<" with precalc unroll(bcyc_regs="<<bcyc_regs<<")"
                 <<endl;
             //assert( have_b_period );
         }else{
-            cout<<" nloop="<<nloop<<", b_period="<<b_period<<", bcyc_regs="<<bcyc_regs
-                <<" has jj=2^"<<jj_shift<<" easy update, but large period [no precalc]"
+            cout<<" F.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop
+                <<", b_period="<<b_period<<", bcyc_regs="<<bcyc_regs
+                <<" has jj=2^"<<jj_shift<<" easy update, but large period [no precalc, any small unroll]"
                 <<endl;
-            //assert( ! have_b_period );
         }
     }else if( nloop < b_period_max ){ // small nloop, any b_period
-        cout<<" nloop="<<nloop<<", b_period="<<b_period
+        cout<<" G.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop
+            <<", b_period="<<b_period
             <<" suggest full precalc unroll(nloop="<<nloop<<")\n"
             <<"     Then a[]-b[] induction is 2 ops total, mov/mov from precalc regs to working"
             <<endl;
         // no. also ok for non-cyclic and low nloop ... assert( have_b_period );
-    }else if( have_b_period && nloop > bcyc_regs ){ // small b_period, high nloop
-        cout<<" nloop="<<nloop<<", b_period="<<b_period
+    }else if( bcyc_regs < b_period_max ){ // small b_period, high nloop
+        cout<<" H.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop
+            <<", b_period="<<b_period
             <<" suggest partial precalc unroll(b_period="<<b_period<<")\n"
             <<"   b[] and a[]-INCREMENT cycle through precalc values\n"
             <<"     Then a[]-b[] induction is 2 ops total, mov/add from precalc regs to working"
             <<endl;
-        assert( have_b_period );
+        // no...assert( have_b_period );
+        //assert(" never get to H"==nullptr);
     }else{ // nloop and b_period both high OR this is a simpler case
-        cout<<" nloop="<<nloop<<", b_period="<<b_period
-            <<" both high: full unroll(nloop="<<nloop<<") [no precalc] stil possible"
+        cout<<" I.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop
+            <<", b_period="<<b_period<<" both high:"
+            <<" full unroll(nloop="<<nloop<<") [no precalc] still possible"
             <<endl;
         assert( !have_b_period );
     }
@@ -584,24 +601,24 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
             // sq[i] and jj are < SAFEMAX, so we can avoid % and / operations
             FOR(i,vl) sq[i] = i;       // vseq_v
             if( jj==1 ){
-                if(verbose)cout<<" a";
+                if(verbose){cout<<" a";cout.flush();};
                 FOR(i,vl) a[i] = i;    // sq/jj
                 FOR(i,vl) b[i] = 0;    // sq%jj
                 assert(have_bA_bD==0); assert(have_sq==0); assert(have_jj_shift==0);
             }else if(jj>=vl){
-                if(verbose)cout<<" b";
+                if(verbose){cout<<" b";cout.flush();}
                 FOR(i,vl) a[i] = 0;    // sq < vl, so sq/jj < 1
                 FOR(i,vl) b[i] = i;
                 if(nloop<=1) {assert(have_bA_bD==0); assert(have_sq==0); assert(have_jj_shift==0); }
             }else if( positivePow2(jj) ){
-                if(verbose)cout<<" c";
+                if(verbose){cout<<" c";cout.flush();}
                 // 2 ops (shr, and)
                 FOR(i,vl) a[i] = (sq[i] >> jj_shift);  // bD = bA / jj; div_vsv
                 FOR(i,vl) b[i] = (sq[i] & jj_minus_1); // bM = bA % jj; mod_vsv
                 if(nloop<=1) assert(have_bA_bD==0); assert(have_sq==1); assert(have_jj_shift==1);
                 ++cnt_sq; ++cnt_jj_shift;
             }else{
-                if(verbose)cout<<" d";
+                if(verbose){cout<<" d";cout.flush();}
                 // 4 int ops (mul,shr, mul,sub)
                 //v_divmod_vs( sq, jj, /*sq[]/jj*/a, /*sq[]%jj*/b );
                 FOR(i,vl) a[i] = jj_M * sq[i] >> C;
@@ -617,37 +634,83 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
             // 2. Induction from a->ax, b->bx
             if(vl0%jj == 0){  // avoid div,mod -----1 vec op
                 // this includes cases with b_period==1 and high nloops
-                if(verbose)cout<<" e";
+                if(verbose){cout<<" e";cout.flush();}
                 FOR(i,vl) a[i] = a[i] + vl_over_jj;
-                assert(have_vl_over_jj==1);
+                assert(have_vl_over_jj==1); assert(!have_bA_bD);
                 ++cnt_vl_over_jj;
             }else if(jj%vl0 == 0){  // -------------1 or 2 vec op (conditional)
                 // often this case could be handled by have_b_period (with maybe more regs)
                 assert( have_bA_bD==0); assert(have_jj_shift==0); assert(have_vl_over_jj==0);
-                Lpi special = iloop % jj_over_vl;       // scalar cyclic mod
+                assert( jj > vl0 );
+                assert( jj/vl0 > 1 );
+                assert( have_jj_over_vl );
+                assert( have_reset || have_jj_over_vl );
+#if 0
+                Lpi special = iloop % (jj/vl0);       // scalar cyclic mod
                 // #pragma..unroll(jj/vl) could be branchless
                 // can be optimized further into 3 minimal-op cases
-                if( special ) { // slightly less likely // bump b[i], bD[i]==0
-                    if(verbose)cout<<" f";
+                if( special != 0 ) { // slightly less likely // bump b[i], bD[i]==0
+                    if(verbose){cout<<" f";cout.flush();}
                     FOR(i,vl) b[i] = b[i] + vl0;
+                    assert( have_jj_over_vl );
+                    ++cnt_jj_over_vl;
                 }else{                                  // reset b[i], bD[i]==1
-                    if(verbose)cout<<" g";
+                    if(verbose){cout<<" g";cout.flush();}
                     assert( have_sq==1 );
-                    assert( have_jj_over_vl==1 );
                     FOR(i,vl) b[i] = sq[i];
                     FOR(i,vl) a[i] = a[i] + 1;
-                    ++cnt_sq; ++cnt_jj_over_vl;
+                    ++cnt_sq;
+                    assert( have_reset );
+                    ++cnt_reset;
                 }
+#else
+                if( !have_reset ){
+                    // Note: this case should also be a "trivial" case for unroll suggestion
+                    if(verbose){cout<<" f";cout.flush();}
+                    FOR(i,vl) b[i] = b[i] + vl0;
+                    ++cnt_jj_over_vl;
+                    assert( have_jj_over_vl );
+                    //assert(" maybe here"==nullptr);
+                }else{
+                    // This case is potentially faster with a partial precalc unroll
+                    assert( have_jj_over_vl && have_reset );
+                    Lpi special = iloop % jj_over_vl;       // scalar cyclic mod
+                    // #pragma..unroll(jj/vl) could be branchless
+                    // can be optimized further into 3 minimal-op cases
+                    if( special != 0 ) { // slightly less likely // bump b[i], bD[i]==0
+                        if(verbose){cout<<" f";cout.flush();}
+                        FOR(i,vl) b[i] = b[i] + vl0;
+                        assert( have_jj_over_vl );
+                        ++cnt_jj_over_vl;
+                    }else{                                  // reset b[i], bD[i]==1
+                        if(verbose){cout<<" g";cout.flush();}
+                        assert( have_sq==1 );
+                        FOR(i,vl) b[i] = sq[i];
+                        FOR(i,vl) a[i] = a[i] + 1;
+                        ++cnt_sq;
+                        assert( have_reset );
+                        ++cnt_reset;
+                    }
+                }
+#endif
+                if( have_reset ) assert( have_jj_over_vl );
+                assert( !have_bA_bD );
             }else if( positivePow2(jj) ){ // ------4 vec ops (add, shr, and, add)
-                if(verbose)cout<<" h";
-                assert(have_bA_bD==1); assert(have_jj_shift==1); assert(have_vl_over_jj==0); assert(have_sq==(jj>1&&jj<vl));
+                if(verbose){cout<<" h";cout.flush();}
+                assert( vl0%jj != 0 );
+                assert( jj%vl0 != 0 );
+                assert(have_bA_bD==1);
+                assert(have_jj_shift==1);
+                assert(have_vl_over_jj==0);
+                // no...assert(have_sq==(jj>1&&jj<vl));
                 FOR(i,vl) bA[i] = vl0 + b[i];            // bA = b + vl; add_vsv
                 FOR(i,vl) bD[i] = (bA[i] >> jj_shift);  // bD = bA / jj; div_vsv
                 FOR(i,vl) b [i] = (bA[i] & jj_minus_1); // bM = bA % jj; mod_vsv
                 FOR(i,vl) a [i] = a[i] + bD[i]; // aA = a + bD; add_vvv
                 ++cnt_bA_bD; ++cnt_jj_shift;
+                assert( have_bA_bD );
             }else{ // div-mod ---------------------6 vec ops: add (mul,shr) (mul,sub) add
-                if(verbose)cout<<" i";
+                if(verbose){cout<<" i";cout.flush();}
                 assert(have_bA_bD==1); assert(have_sq==(jj>1&&jj<vl)); assert(have_jj_shift==0); assert(have_vl_over_jj==0);
                 assert( jj+vl < (1<<21) );
                 FOR(i,vl) bA[i] = vl0 + b[i];            // add_vsv
@@ -655,6 +718,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
                 FOR(i,vl) b [i] = bA[i] - bD[i]*jj;     // long-hand    : mul_vvs, sub_vvv
                 FOR(i,vl) a [i] = a[i] + bD[i];         // add_vvv
                 ++cnt_bA_bD; ++cnt_jj_M;
+                assert( have_bA_bD );
             }
             // Note: for some jj, esp if vl+jj<256
             //       the bM,bD divmod operation might be OPTIMIZED to rot at longer vlen
@@ -690,6 +754,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     assert( have_jj_shift       == (cnt_jj_shift   > 0) );
     assert( have_jj_M           == (cnt_jj_M       > 0) );
     assert( have_jj_over_vl     == (cnt_jj_over_vl > 0) ); // old "special" count, case 'g' needed
+    assert( have_reset          == (cnt_reset      > 0) ); // old "special" count, case 'g' needed
 }
 
 void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){ for c in [0,w] {...}}

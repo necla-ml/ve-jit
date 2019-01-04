@@ -5,7 +5,7 @@ force:
 	$(MAKE)
 
 fuse2: fuse2.cpp
-	g++ -Wall -std=c++11 -O3 $< -o $@
+	g++ -Wall -std=c++11 -ggdb -O3 $< -o $@
 tf2-m.log: fuse2 Makefile
 	( echo "$@" \
 		&& ./fuse2 -m  8  1  1 \
@@ -40,6 +40,9 @@ tf2-1.log: fuse2 Makefile # vl%jj == 0 (case 1)
 		&& ./fuse2 -t  8 97  2 \
 		&& ./fuse2 -t  8  1  3 \
 		&& ./fuse2 -t  8  2  3 \
+		&& ./fuse2 -t  8  3  3 \
+		&& ./fuse2 -t  8  4  3 \
+		&& ./fuse2 -t  8  5  3 \
 		&& ./fuse2 -t  8  1  4 \
 		&& ./fuse2 -t  8  2  4 \
 		&& ./fuse2 -t  8  3  4 \
@@ -75,6 +78,16 @@ tf2-1.log: fuse2 Makefile # vl%jj == 0 (case 1)
 		&& ./fuse2 -t  8 33  8 \
 		&& ./fuse2 -t  8 96  8 \
 		&& ./fuse2 -t  8 97  8 \
+		&& ./fuse2 -t  7  1  3 \
+		&& ./fuse2 -t  7  2  3 \
+		&& ./fuse2 -t  7  3  3 \
+		&& ./fuse2 -t  7  4  3 \
+		&& ./fuse2 -t  7  5  3 \
+		&& ./fuse2 -t  9  1  3 \
+		&& ./fuse2 -t  9  2  3 \
+		&& ./fuse2 -t  9  3  3 \
+		&& ./fuse2 -t  9  4  3 \
+		&& ./fuse2 -t  9  5  3 \
 		&& ./fuse2 -t 15  1  2 \
 		&& ./fuse2 -t 15  2  2 \
 		&& ./fuse2 -t 15  3  2 \
@@ -113,6 +126,18 @@ tf2-1.log: fuse2 Makefile # vl%jj == 0 (case 1)
 		) 2>&1 | tee $@
 tf2-2.log: fuse2 Makefile # jj > vl && jj%vl == 0 (case 2)
 	( echo "$@" \
+		&& ./fuse2 -t  3  1 27 \
+		&& ./fuse2 -t  3  2 27 \
+		&& ./fuse2 -t  3  3 27 \
+		&& ./fuse2 -t  3  4 27 \
+		&& ./fuse2 -t  3 13 27 \
+		&& ./fuse2 -t  3 24 27 \
+		&& ./fuse2 -t  3 96 27 \
+		&& ./fuse2 -t  3 97 27 \
+		&& ./fuse2 -t  9  1 90 \
+		&& ./fuse2 -t  9  2 90 \
+		&& ./fuse2 -t  9  3 90 \
+		&& ./fuse2 -t  9  4 90 \
 		&& ./fuse2 -t  8  1 16 \
 		&& ./fuse2 -t  8  2 16 \
 		&& ./fuse2 -t  8  3 16 \
@@ -133,6 +158,9 @@ tf2-2.log: fuse2 Makefile # jj > vl && jj%vl == 0 (case 2)
 		&& ./fuse2 -t  8 24 56 \
 		&& ./fuse2 -t  8 96 56 \
 		&& ./fuse2 -t  8 97 56 \
+		&& ./fuse2 -t  7  1 14 \
+		&& ./fuse2 -t  7  2 14 \
+		&& ./fuse2 -t  7  3 14 \
 		&& ./fuse2 -t  7  4 14 \
 		&& ./fuse2 -t  7 13 14 \
 		&& ./fuse2 -t  7 24 14 \
@@ -493,6 +521,9 @@ tf2-0.log: fuse2 Makefile tf2-3.log
 		&& ./fuse2 -t  6 13 8 \
 		&& ./fuse2 -t  6 13 9 \
 		&& ./fuse2 -t  9 13 6 \
+		&& ./fuse2 -t  1  1 2 \
+		&& ./fuse2 -t  1  2 2 \
+		&& ./fuse2 -t  1  3 2 \
 		&& ./fuse2 -t  1  4 2 \
 		&& ./fuse2 -t  1  2 4 \
 		&& ./fuse2 -t  1  6 3 \
