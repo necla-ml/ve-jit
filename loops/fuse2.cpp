@@ -747,19 +747,28 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
     // INIT-BLOCK
     int iloop = 0;
     if(iloop==0) { // cnt==0 equiv iloop==0
+        cout<<"=== // INIT_BLOCK:               # iloop=cnt=0\n";
         if(nloop==1) assert(have_vl_over_jj==0);
         // now load the initial vector-loop registers:
         // sq[i] and jj are < SAFEMAX, so we can avoid % and / operations
-        if(have_sq) FOR(i,vl) sq[i] = i;       // vseq_v
+        if(have_sq){
+            FOR(i,vl) sq[i] = i;       // vseq_v
+            cout<<"=== //   VSEQ sq             # sq[i]=i\n";
+        }
         if( jj==1 ){
-            FOR(i,vl) a[i] = i;    // sq/jj
+            FOR(i,vl) a[i] = i;    // sq/jj   or perhaps change have_sq?
             FOR(i,vl) b[i] = 0;    // sq%jj
             assert(have_bA_bD==0); assert(have_sq==0); assert(have_jj_shift==0);
+            cout<<"=== //    VSEQ a             # a[i] = i\n"
+                <<"=== //    VBRD b, 0          # b[i] = 0\n";
+
         }else if(jj>=vl){
             if(verbose)cout<<" b";
             FOR(i,vl) a[i] = 0;    // sq < vl, so sq/jj < 1
             FOR(i,vl) b[i] = i;
             if(nloop<=1) {assert(have_bA_bD==0); assert(have_sq==0); assert(have_jj_shift==0); }
+            cout<<"=== //    VBRD a, 0          # a[i] = 0\n"
+                <<"=== //    VSEQ b             # b[i] = i\n";
         }else if( positivePow2(jj) ){
             if(verbose)cout<<" c";
             // 2 ops (shr, and)
@@ -767,6 +776,8 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
             FOR(i,vl) b[i] = (sq[i] & jj_minus_1); // bM = bA % jj; mod_vsv
             if(nloop<=1) assert(have_bA_bD==0); assert(have_sq==1); assert(have_jj_shift==1);
             ++cnt_sq; ++cnt_jj_shift;
+            cout<<"=== //    VSRL a, sq, jjshift    # a[i] = sq[i] >> jj_shift\n"
+                <<"=== //    VAND b, sq, jj_minus_1 # b[i] = sq[i] & jj_minus_1\n";
         }else{
             if(verbose)cout<<" d";
             // 4 int ops (mul,shr, mul,sub)
@@ -778,6 +789,12 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
             // use mul_add_shr (fastdiv) approach if jj+vl>SAFEMAX (1 more vector_add_scalar)
             if(nloop<=1) assert(have_bA_bD==0); assert(have_sq==1); assert(have_jj_shift==0);
             ++cnt_sq; ++cnt_jj_M;
+            cout<<"=== //               # FOR(i,vl) a[i] = jj_M * sq[i] >> C;\n"
+                <<"=== //               # FOR(i,vl) b[i] = sq[i] - a[i]*jj;\n";
+            cout<<"=== //    VMPY tmp, sq, jj_M     # tmp[i] = sq[i] * jj_M\n"
+                <<"=== //    VSRL a, tmp, C         # a[i] = tmp[i] >> C\n"
+                <<"=== //    VMPY tmp2, a, jj       # tmp2[i] = a[i] * jj\n"
+                <<"=== //    VSUB b, sq, tmp2       # b[i] = sq[i] - tmp2[i]\n";
         }
     }
     goto KERNEL_BLOCK;
