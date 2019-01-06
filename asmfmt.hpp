@@ -9,7 +9,7 @@ inline std::string AsmFmtCols::str() const {
 }
 
 template<typename PAIRCONTAINER> inline
-unsigned AsmFmtCols::scope( PAIRCONTAINER const& pairs, std::string block_name ){
+std::size_t AsmFmtCols::scope( PAIRCONTAINER const& pairs, std::string block_name ){
     std::deque<std::string> un;
     {
         bool name_out = false;
@@ -50,6 +50,7 @@ unsigned AsmFmtCols::scope( PAIRCONTAINER const& pairs, std::string block_name )
     }
     // move the undefs string [a bunch of #undef lines] onto our scope-stack
     stack_undefs.push(undefs.flush());
+    return un.size();
 }
 
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break

@@ -67,7 +67,7 @@ class AsmFmtCols {
      * without having popped all scopes.  Or maybe we will auto-pop any remaining?
      */
     template<typename PAIRCONTAINER>
-    unsigned scope( PAIRCONTAINER const& pairs, std::string block_name="" );
+    std::size_t scope( PAIRCONTAINER const& pairs, std::string block_name="" );
     /** emit last set of #undefs. \return number of remaining stack-scopes
      * never errs (no-op if scope-stack is empty) */
     std::stack<std::string>::size_type pop_scope();
@@ -99,16 +99,19 @@ class AsmFmtCols {
     AsmFmtCols& lcom(std::string const& comment, LComments... lcomments){
         lcom(comment);
         lcom(lcomments...);
+        return *this;
     }
     template< typename... Comments >
     AsmFmtCols& com(std::string const& comment, Comments... comments){
         com(comment);
         com(comments...);
+        return *this;
     }
     template< typename... RComments >
     AsmFmtCols& rcom(std::string const& comment, RComments... rcomments){
         rcom(comment);
         rcom(rcomments...);
+        return *this;
     }
     /** ```
      * <    ><op          >[<args>]<      # <asmcomment>
@@ -120,6 +123,7 @@ class AsmFmtCols {
             std::string const& comment2, RComments... rcomments){
         ins(instruction,comment);
         rcom(comment2, rcomments...);
+        return *this;
     }
     ///}
   private:

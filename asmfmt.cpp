@@ -119,7 +119,7 @@ std::string AsmFmtCols::flush(){
         ret = (*a).str();
         if( of && a ){
             try{
-                cout<<"AsmFmtCols::write-->of"<<endl;
+                //cout<<"AsmFmtCols::write-->of"<<endl;
                 //(*of) << a->rdbuf(); // not working? ???
                 (*of) << ret;
                 of->flush();
@@ -143,11 +143,11 @@ void AsmFmtCols::write(){
         of->flush();
         of->close();
     }else{
-        cout<<"AsmFmtCols::write-->cout"<<endl;
-        (*a) << "\n// Goodbye\n";
+        //cout<<"AsmFmtCols::write-->cout"<<endl;
+        //(*a) << "\n// Goodbye\n";
         cout << a->str(); //a->rdbuf(); <-- for stringstream?
         cout.flush();
-        cout<<"AsmFmtCols::write-->cout DONE"<<endl;
+        //cout<<"AsmFmtCols::write-->cout DONE"<<endl;
     }
     this->written = true;
     delete of;  of = nullptr;
