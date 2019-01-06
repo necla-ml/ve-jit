@@ -3,12 +3,29 @@ all: fuse2 fuse2lin tf2-1.log tf2-2.log tf2-3.log tf2-4.log tf2-0.log tf2-5.log 
 force:
 	rm -f tf2-1.log tf2-2.log tf2-3.log tf2-4.log tf2-0.log tf2-5.log tf2-m.log
 	$(MAKE)
-
-fuse2: fuse2.cpp
-	g++ -Wall -std=c++11 -ggdb -O3 $< -o $@
+.PHONY: phony
+../libjit1.a: phony
+	$(MAKE) -C .. $(patsubst ../%,%,$@)
+fuse2: fuse2.cpp ../libjit1.a
+	g++ -Wall -std=c++11 -ggdb -O3 $^ -o $@
 tf2-m.log: fuse2 Makefile
 	( echo "$@" \
-		&& ./fuse2 -m  8  1  1 \
+		&& ./fuse2 -m  8 1 1 \
+		&& ./fuse2 -t  256 1024  1 \
+		&& ./fuse2 -t  256 1500  1 \
+		&& ./fuse2 -t  256 16  64 \
+		&& ./fuse2 -t  256 21  64 \
+		&& ./fuse2 -t  256 4  512 \
+		&& ./fuse2 -t  256 3 1024 \
+		&& ./fuse2 -t  256 256 3 \
+		&& ./fuse2 -t  256 250 3 \
+		&& ./fuse2 -t  255 250 3 \
+		&& ./fuse2 -t  255 5 510 \
+		&& ./fuse2 -t  255 5 500 \
+		&& ./fuse2 -t  255 5 500 \
+		&& ./fuse2 -t  256 5 384 \
+		&& ./fuse2 -t  256 13 13 \
+		&& ./fuse2 -t  256 26 13 \
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
 
