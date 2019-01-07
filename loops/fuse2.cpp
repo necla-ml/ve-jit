@@ -974,6 +974,7 @@ INDUCE:
     if(onceI) fi.lab("INDUCE");
     if( iijj % vl0 ){ // special loop condition case
         cnt += vl;
+        //cout<<" cnt="<<cnt<<endl;
         if(onceI) fi.ins("addu.l cnt, vl, cnt", "cnt 0..iijj-1");
     }
     if(1){
@@ -1172,22 +1173,25 @@ KERNEL_BLOCK:
     //     if(remain>0) goto INDUCE
     //
     ++iloop; // needed only sometimes
-    if( nloop > 1 ){
-        if( iijj % vl0 ){
-            if( vl == vl0 ){
-                // cnt += vl; move to induce-block
-                goto INDUCE;
-            }
-            // exit...
-            cnt += vl; // just for debug
-        }else
-        { // generic end-loop test
-            cnt += vl;
-            if( cnt < iijj ){
-                goto INDUCE;
-            }
+    if( nloop <= 1 ){
+        cnt += vl; // just for debug
+        //cout<<" exit C cnt="<<cnt<<endl;
+    }else if(iijj % vl0){
+        if( vl == vl0 ){
+            // cnt += vl; move to induce-block
+            goto INDUCE;
         }
+        // exit...
+        cnt += vl; // just for debug
+        //cout<<" exit A cnt="<<cnt<<endl;
+    }else{ // generic end-loop test
+        cnt += vl;
+        if( cnt < iijj ){
+            goto INDUCE;
+        }
+        //cout<<" exit B cnt="<<cnt<<endl;
     }
+
     if(onceL){
         if(nloop==1) fl.lcom("(nloop == 1, no need to check if done)");
         else if(iijj%vl0){
