@@ -15,7 +15,12 @@ tf2-m.log: fuse2 Makefile
 		&& ./fuse2 -t  256 1500  1 \
 		&& ./fuse2 -t  256 16  64 \
 		&& ./fuse2 -t  256 21  64 \
-		&& ./fuse2 -t  256 4  512 \
+		&& ./fuse2 -t  256 1 256 \
+		&& ./fuse2 -t  256 2 256 \
+		&& ./fuse2 -t  256 3 256 \
+		&& ./fuse2 -t  256 4 256 \
+		&& ./fuse2 -t  256 1 512 \
+		&& ./fuse2 -t  256 4 512 \
 		&& ./fuse2 -t  256 3 1024 \
 		&& ./fuse2 -t  256 256 3 \
 		&& ./fuse2 -t  255 256 3 \
@@ -29,6 +34,13 @@ tf2-m.log: fuse2 Makefile
 		&& ./fuse2 -t  256 5 384 \
 		&& ./fuse2 -t  256 13 13 \
 		&& ./fuse2 -t  256 26 13 \
+		&& ./fuse2 -t  256 5 256 \
+		&& ./fuse2 -t  256 2 512 \
+		&& ./fuse2 -t  255 1 255 \
+		&& ./fuse2 -t  255 2 255 \
+		&& ./fuse2 -t  255 3 255 \
+		&& ./fuse2 -t  255 4 255 \
+		&& ./fuse2 -t  255 2 510 \
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
 

@@ -434,7 +434,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     cout<<"test_vloop2( vlen="<<vlen<<" loops 0.."<<ii<<" 0.."<<jj<<" iijj="<<iijj;
 
     register int vl = vlen;
-    //if (cnt+vl > iijj) vl = iijj - cnt;  // simplifies for cnt=0
+    //if (cnt+vl > iijj) vl = iijj - cnt;  // we assume ii and jj loops begin at 0
     if ((uint64_t)vl > iijj) vl = iijj;
     int const vl0 = vl; // debug
     int const nloop = (iijj+vl-1) / vl;    // div_round_up(iijj,vl)
@@ -444,20 +444,6 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     assert( ii > 0 );
     assert( jj > 0 );
 
-    // pretty-printing via vecprt
-    //int const verbose = 1; // verbose
-    //int const n=8; // output up-to-n [ ... [up-to-n]] ints
-    //int const bignum = std::max( ii, jj );
-    //int const wide = 1 + (bignum<10? 1: bignum <100? 2: bignum<1000? 3: 4);
-
-    // Have reference vabs vectors. Now we try induction way.
-    // 1. initialize: could copy vabs[0] from const data storage, or...
-    //   - generate from seq + divmod.
-    //   - 2-loop induction uses 3 scalar registers:
-    //     - \c cnt 0.. \c iijj, and \c vl (for jit, iijj is CCC (compile-time-const))
-    //     - get final \c vl from cnt, vl and iij)
-#define FOR(I,VL) for(int I=0;I<VL;++I)
-
     cout<<"Verify-------"<<endl;
     // generate reference index outputs
     std::vector<Vab> vabs = ref_vloop2(vlen, ii, jj, 0/*verbose*/);
@@ -465,8 +451,16 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     assert(vabs.size() == (size_t)(((ii*jj) +vlen -1) / vlen));
     if(verbose>=2) cout<<"   vl="<<vl<<"   ii="<<ii<<"   jj="<<jj
         <<"   iijj="<<iijj<<" vabs.size() = "<<vabs.size()<<endl;
+    // Have reference vabs vectors. Now we try induction way.
+    // 1. initialize: could copy vabs[0] from const data storage, or...
+    //   - generate from seq + divmod.
+    //   - 2-loop induction uses 3 scalar registers:
+    //     - \c cnt 0.. \c iijj, and \c vl (for jit, iijj is CCC (compile-time-const))
+    //     - get final \c vl from cnt, vl and iij)
 
     if(verbose>=1) other_fastdiv_methods(jj);
+
+#define FOR(I,VL) for(int I=0;I<VL;++I)
 
     // various misc precalculated consts and declarations.
     VVlpi a(vl), b(vl);                 // calculated loop index vectors
@@ -533,6 +527,8 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     register uint64_t cnt = 0UL;
     for( ; cnt < iijj; cnt += vl )
     {
+#define VL_UP0 0
+#define VL_UP 1
         //cout<<"cnt "<<cnt<<" iloop "<<iloop<<" ii "<<ii<<" jj "<<jj<<endl;
         if (iloop == 0){
             if(nloop==1) assert(have_vl_over_jj==0);
@@ -568,8 +564,22 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
                 if(nloop<=1) assert(have_bA_bD==0); assert(have_sq==1); assert(have_jj_shift==0);
                 ++cnt_sq; ++cnt_jj_M;
             }
+#if VL_UP0
+            // Note: vl reduction must take place AFTER above use of "long" vl
+            if( cnt + vl > iijj ){ // last time might have reduced vl
+                vl = iijj - cnt;
+                cout<<" vl reduced for last loop to "<<vl<<endl;
+            }
+#endif
         }else{
             assert( nloop > 1 );
+#if VL_UP==1
+            // if careful about vl (possible lower value for last iter) vs vl0 can update here:
+            if( cnt + vl > iijj ){ // last time might have reduced vl
+                vl = iijj - cnt;
+                cout<<" vl reduced for last loop to "<<vl<<endl;
+            }
+#endif
             // 2. Induction from a->ax, b->bx
             if(vl0%jj == 0){  // avoid div,mod -----1 vec op
                 // this includes cases with b_period==1 and high nloops
@@ -612,7 +622,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
                 assert( vl0%jj != 0 ); assert( jj%vl0 != 0 ); assert(have_bA_bD==1);
                 assert(have_jj_shift==1); assert(have_vl_over_jj==0);
                 // no...assert(have_sq==(jj>1&&jj<vl));
-                FOR(i,vl) bA[i] = vl0 + b[i];            // bA = b + vl; add_vsv
+                FOR(i,vl) bA[i] = vl0 + b[i];            // bA = b + vl0; add_vsv
                 FOR(i,vl) bD[i] = (bA[i] >> jj_shift);  // bD = bA / jj; div_vsv
                 FOR(i,vl) b [i] = (bA[i] & jj_minus_1); // bM = bA % jj; mod_vsv
                 FOR(i,vl) a [i] = a[i] + bD[i]; // aA = a + bD; add_vvv
@@ -627,13 +637,21 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
                 assert(have_bA_bD); assert(have_sq==(jj>1&&jj<vl)); assert(!have_jj_shift);
                 assert(!have_vl_over_jj); assert( jj+vl < (int)SAFEMAX );
             }
+#if VL_UP==2
+            // if confused about vl vs vl0, this is safe (but induce might use too-long vl0)
+            if( cnt + vl > iijj ){ // last time might have reduced vl
+                vl = iijj - cnt;
+                cout<<" vl reduced for last loop to "<<vl<<endl;
+            }
+#endif
         }
-
+#if !VLUP0 && !VL_UP
         // Note: vl reduction must take place AFTER above use of "long" vl
         if( cnt + vl > iijj ){ // last time might have reduced vl
             vl = iijj - cnt;
             cout<<" vl reduced for last loop to "<<vl<<endl;
         }
+#endif
 
         if(verbose>=1){
             int const n=8; // output up-to-n [ ... [up-to-n]] ints
@@ -679,15 +697,6 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
     assert( ii > 0 );
     assert( jj > 0 );
 
-
-    // Have reference vabs vectors. Now we try induction way.
-    // 1. initialize: could copy vabs[0] from const data storage, or...
-    //   - generate from seq + divmod.
-    //   - 2-loop induction uses 3 scalar registers:
-    //     - \c cnt 0.. \c iijj, and \c vl (for jit, iijj is CCC (compile-time-const))
-    //     - get final \c vl from cnt, vl and iij)
-#define FOR(I,VL) for(int I=0;I<VL;++I)
-
     cout<<"Verify-------"<<endl;
     // generate reference index outputs
     std::vector<Vab> vabs = ref_vloop2(vlen, ii, jj, 1/*verbose*/);
@@ -695,6 +704,15 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
     assert(vabs.size() == (size_t)(((ii*jj) +vlen -1) / vlen));
     if(verbose>=2) cout<<"   vl="<<vl<<"   ii="<<ii<<"   jj="<<jj
         <<"   iijj="<<iijj<<" vabs.size() = "<<vabs.size()<<endl;
+    // Have reference vabs vectors. Now we try induction way.
+    // 1. initialize: could copy vabs[0] from const data storage, or...
+    //   - generate from seq + divmod.
+    //   - 2-loop induction uses 3 scalar registers:
+    //     - \c cnt 0.. \c iijj, and \c vl (for jit, iijj is CCC (compile-time-const))
+    //     - get final \c vl from cnt, vl and iij)
+    //     - new: interpret cnt as "remain", going from iijj to one
+
+#define FOR(I,VL) for(int I=0;I<VL;++I)
 
     // various misc precalculated consts and declarations.
     VVlpi a(vl), b(vl);                 // calculated loop index vectors
@@ -752,7 +770,8 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
         || (nloop>1 && vl0%jj!=0 && jj%vl0!=0 && positivePow2(jj));     // o/w
     bool const have_jj_M = (jj>1 && jj<vl0 && !positivePow2(jj))        // when iloop==0
         || (nloop>1 && vl0%jj!=0 && jj%vl0!=0 && !positivePow2(jj));    // o/w
-    bool const have_use_iijj = nloop > 1 && iijj%vl0 == 0;
+    //bool const have_use_iijj = nloop > 1 && iijj%vl0 == 0;
+    bool const have_use_iijj = false; // new: cnt down from iijj to 1 by vl0
 
     int cnt_vl_over_jj=0, cnt_bA_bD=0, cnt_sq=0, cnt_jj_shift=0, cnt_jj_M=0;
     int cnt_jjMODvl=0, cnt_jjMODvl_reset=0, cnt_use_iijj=0;
@@ -762,6 +781,10 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
     Vlpi tmod       = have_jjMODvl_reset? 0: 777; // used if have_jjMODvl_reset
     //uint64_t const jj_over_vl_M = (have_jjMODvl_reset? computeM_uB(jj_over_vl): 0);
     assert( !(have_vl_over_jj && have_jjMODvl_reset) ); // never need both these constants
+    assert( !(have_jj_M && have_jjMODvl_reset) ); // never both
+    //assert( !(have_jj_M && have_vl_over_jj) ); // HAPPENS ex: vl,ii,jj=9,4,3
+
+    register uint64_t cnt = iijj; // NEW: iijj to one [i.e. remain], rather than [0..iijj)
 
     AsmFmtCols fd,fp,fi,fk,fl,fz;
 
@@ -771,30 +794,40 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
         {"ii",   "%s1"},
         {"jj",   "%s2"},
         {"cnt",  "%s3"},
+        {"base", "%s7"},
     };
 
+#if 0 // now NEVER
     if(nloop <= 1) ;
-    else if(have_use_iijj){
+    else if(have_use_iijj){ // now NEVER
         if(iijj>=127) block.push_back({"iijj", "%s4"});
         else          block.push_back({"iijj", jitdec(iijj)});
     }else{
+        // no longer used with backward cnt: block.push_back({"remain","%s5"});
         block.push_back({"vl","%s4"});
-        block.push_back({"remain","%s5"});
     }
+#else
+    if(nloop > 1){
+        block.push_back({"vl","%s4"});
+    }
+#endif
 
     // XXX if vlojj is in range 0..255, it can be an immediate instead of a register
-    if( have_vl_over_jj ){
-        if(vl/jj <= 127) block.push_back({"vlojj",jitdec(vl/jj)});
-        else             block.push_back({"vlojj","%s6"});
-    }else if( have_jjMODvl_reset ){
+    if( have_jjMODvl_reset ){
         //block.push_back({"jjovl","%s7"});
         // new: iloop%vl as a cyclic counter simplifies things...
-        block.push_back({"tmod","%s6"});
-        if(jj/vl>2) block.push_back({"tm0","%s7"});
+        block.push_back({"tmod","%s5"});
+        if(jj/vl>2) block.push_back({"tm0","%s6"});
+    }else{
+        if( have_vl_over_jj ){
+            if(vl/jj <= 127) block.push_back({"vlojj",jitdec(vl/jj)});
+            else             block.push_back({"vlojj","%s5"});
+        }
+        if( have_jj_M ){
+            block.push_back({"jj_M", "%s6"}); // not a short/nice value
+        }
     }
 
-    if( have_jj_M )
-        block.push_back({"jj_M", "%s33"});
     // vector regs
     block.push_back({"a",    "%v0"});
     block.push_back({"b",    "%v1"});
@@ -815,31 +848,50 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
         fp.ins("vseq sq");
         FOR(i,vl) sq[i] = i;       // vseq_v
     }
-    if( have_jj_M ){
-        //fp.ins("lea jj_M,"+jitdec(jj_M), "jj_M ~ fast div by jj","XXX TODO jj_M is 42-bits");
-        // XXX 64-bit load could be lea,shift,lea
-        //     but faster might be computeM_UB which is division + increment (2 ops)
-        // init_block is long enough to absorb the division latency (probably)
-        fp.ins("div jj_M,"+string(CMASK_MVALUE)+",jj",  "fastdiv magic is")
-            .ins("add jj_M,1,jj_M",                     "jj_M = ((1<<"+jitdec(C)+")-1) / d + 1");
+    if( have_jjMODvl_reset ){
+        //fp.ins("lea jjovl,"+jitdec(jj/vl),      "jjovl = jj/vl = "+jitdec(jj)+"/"+jitdec(vl));
+        fp.ins("xor tmod, %s0,%s0",             "tmod=0, cycling < (jj/vl="+jitdec(jj/vl)+")");
+    }else{
+        if( have_jj_M ){
+            //fp.ins("lea jj_M,"+jitdec(jj_M), "jj_M ~ fast div by jj","XXX TODO jj_M is 42-bits");
+            // XXX 64-bit load could be lea,shift,lea
+            //     but faster might be computeM_UB which is division + increment (2 ops)
+            // init_block is long enough to absorb the division latency (probably)
+            //
+            //fp.ins("div jj_M,"+string(CMASK_MVALUE)+",jj",  "fastdiv magic is");
+            // oops.. the MASK immediate can only for Sz divisor :(
+            fp.ins("or jj_M,0,"+string(CMASK_MVALUE),       "C_ones = ((1<<"+jitdec(C)+")-1)");
+            fp.ins("div jj_M, jj_M,jj",                     " for fastdiv by jj");
+            fp.ins("add jj_M,1,jj_M",                       "jj_M = C_ones / d + 1");
+        }
+        if( have_vl_over_jj ){
+            if(vl/jj > 127)
+                fp.ins("lea vlojj,"+jitdec(vl/jj),  "vlojj = vl/jj = "+jitdec(vl)+"/"+jitdec(jj));
+        }
     }
+#if 0 // assert(have_use_iijj == false); // new
     if(have_use_iijj)
         if(iijj > 127)
             fp.ins("lea iijj,"+jitdec(ii*jj), "iijj = ii*jj = "+jitdec(ii)+"*"+jitdec(jj));
-    if( have_vl_over_jj ){
-        if(vl/jj > 127)
-            fp.ins("lea vlojj,"+jitdec(vl/jj),  "vlojj = vl/jj = "+jitdec(vl)+"/"+jitdec(jj));
-    }else if( have_jjMODvl_reset ){
-        //fp.ins("lea jjovl,"+jitdec(jj/vl),      "jjovl = jj/vl = "+jitdec(jj)+"/"+jitdec(vl));
-        fp.ins("xor tmod, %s0,%s0",             "tmod=0, cycling < (jj/vl="+jitdec(jj/vl)+")");
+    if(nloop > 1 && have_use_iijj){
+        //fp.ins("xor cnt, ii,ii",                "cnt  = 0");
+        if(iijj < (uint64_t{1}<<32)) fp.ins("lea cnt,"+jitdec(iijj), "cnt=ii*jj= "+jitdec(ii)+"*"+jitdec(jj)+" to 1 by "+jitdec(vl0));
+        else                         fp.ins("mulu cnt, ii,jj",       "cnt=ii*jj= "+jitdec(ii)+"*"+jitdec(jj)+" to 1 by "+jitdec(vl0));
     }
-    if(nloop>1 && !have_use_iijj)
-        fp.ins("or  vl, vl0,vl0",               "vl   = vl0");
-    if(nloop > 1 && have_use_iijj)
-        fp.ins("xor cnt, ii,ii",                "cnt  = 0");
     if( have_jj_shift ){
         ;// jj_shift is always an OK immediate
         // mask is also a nice immediate bitstring 0(64-jj_shift)
+    }
+    if(nloop>1 && !have_use_iijj)
+        fp.ins("or  vl, vl0,vl0",               "vl   = vl0");
+#endif
+    if(nloop>1) fp.ins("or  vl, vl0,vl0", "vl = vl0");
+    if(nloop > 1 && 1){
+        //fp.ins("xor cnt, ii,ii",                "cnt  = 0");
+        if(iijj < (uint64_t{1}<<32)) fp.ins("lea cnt,"+jitdec(iijj)
+                                            , "cnt=ii*jj= "+jitdec(ii)+"*"+jitdec(jj)+" to 1 by "+jitdec(vl0));
+        else                         fp.ins("mulu cnt, ii,jj"
+                                            , "cnt=ii*jj= "+jitdec(ii)+"*"+jitdec(jj)+" to 1 by "+jitdec(vl0));
     }
 
     //
@@ -878,9 +930,6 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
     // then jump into loop (after induction formula)
     //    (more assembly-like)
 
-    register uint64_t cnt = 0UL;
-
-
     verbose = 0; // cleans up the pseudocode output a bit
     // during loop, output pseudocode just once
     bool onceI = true; // induce-block code output at most once
@@ -891,10 +940,13 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
 
     // We are writing
     //     ```for( ; cnt < iijj; cnt += vl )```
-    //          a bit differently now...
-    // INIT-BLOCK
+    //     NEW: ```for( ; cnt>0; cnt -= vl )```
+    //          with gotos
+    // PRECALC-BLOCK
+    //  jit also puts the "first time through the loop" precalc into fp
+    //  *before* the induce and kernel (fi,fk) blocks
     int iloop = 0;
-    if(iloop==0) { // cnt==0 equiv iloop==0
+    if(iloop==0) { // iloop==0 (cnt=0, or now iijj)
         //cout<<"=== // INIT_BLOCK:               # iloop=cnt=0\n";
         fp.lcom("INIT_BLOCK:");
         if(nloop==1) assert(have_vl_over_jj==0);
@@ -949,20 +1001,68 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
         }
     }
     //if(onceI) cout<<"=== //   BR KERNEL_BLOCK\n"; // skip induce-block if we will have one
-    if(onceI && nloop>1) {
+    // base register holds absolute address of BASE label
+    bool have_base_addr = false;
+    auto reladdr=[&have_base_addr](std::string label){
+        std::ostringstream oss;
+        if(have_base_addr){
+            oss<<label+" -BASE+."<<"(,%base)";
+        }else{
+            oss<<label<<" /* ERROR failed to initialize BASE for relative addressing*/";
+        }
+        return oss.str();
+            
+    };
+    if(onceI){
+        fp.ins("sic base", "BASE -> register for relocatable branching");
+        fp.lab("BASE");
+        have_base_addr = true;
+    }
+    if(onceI && nloop > 1) {
         std::ostringstream oss;
         oss<<"vl,ii,jj="<<vl<<","<<ii<<","<<jj;
-        fp.ins("br KERNEL_BLOCK", "initial a[], b[] ok!", oss.str().c_str());
+        fp.ins("bsic base,"+reladdr("KERNEL_BLOCK"), "goto KERNEL_BLOCK"
+              , oss.str()+" a[], b[] loop indices OK");
     }
+    cout<<" fp.cnt="<<cnt;
     goto KERNEL_BLOCK;
     // INDUCE-BLOCK
 INDUCE:
     //if(onceI) cout<<"=== // #INDUCE: (fall-through)\n";
     if(onceI) fi.lab("INDUCE");
     if( iijj % vl0 ){ // special loop condition case
-        cnt += vl0;     // (vl, if you you to exacty hit iijj)
-        if(onceI) fi.ins("addu.l cnt, vl0, cnt", "cnt 0..iijj-1");
+        //cnt += vl0;     // (vl, if you you to exacty hit iijj)
+        //if(onceI) fi.ins("addu.l cnt, vl0, cnt", "cnt 0..iijj-1");
+        cnt -= vl0;
+        cout<<" fi.cnt="<<cnt;
+        if(onceI) fi.ins("subu.l cnt, cnt, vl0", "cnt 0..iijj-1");
     }
+#define VL_LAST_ITER 1
+#if VL_LAST_ITER==1
+#if 0
+    // if careful about vl (possible lower value for last iter) vs vl0 can update here:
+    if( cnt + vl > iijj ){ // last time might have reduced vl
+        vl = iijj - cnt;
+        cout<<" vl reduced for last loop to "<<vl<<endl;
+    }
+#endif
+    // Careful: vl = new value for last iteration, vl0 = original = old value
+    if( iijj % vl0 ){
+        // VE has single-op MIN
+        //vl = std::min( (uint64_t)vl, /*remain =*/ iijj - cnt );
+        vl = std::min( (uint64_t)vl, /*remain =*/ cnt );
+        if(onceI){
+            //AsmScope const block = {{"remain","%s40"}};
+            //fi.scope(block, "last time reduce vl");
+            //fi.ins("subu.l remain,iijj,cnt",    "remain = iijj -cnt");
+            //fi.ins("mins.l vl, vl0, remain",    "vl = min(vl,remain)");
+            //fi.ins("svl vl");
+            //fi.pop_scope();
+            fi.ins("mins.l vl, vl0, cnt",       "vl = min(vl,remain=cnt)");
+            fi.ins("svl vl",                    "  vl0 = orig = prev value)");
+        }
+    }
+#endif
     if(1){
         assert( nloop > 1 );
         // 2. Induction from a->ax, b->bx
@@ -971,13 +1071,13 @@ INDUCE:
             if(verbose){cout<<" e";cout.flush();}
             FOR(i,vl) a[i] = a[i] + vl_over_jj;
             ++cnt_vl_over_jj; assert(have_vl_over_jj); assert(!have_bA_bD);
-            if(onceI) fi.ins("vadd a, vlojj, a",        "a[i] += (vl/jj="+jitdec(vl/jj)+")");
+            if(onceI) fi.ins("vadd a, vlojj, a",        "a[i] += (vl/jj="+jitdec(vl0/jj)+")");
         }else if(jj%vl0 == 0 ){  // -------------1 or 2 vec op (conditional)
             // unroll often nice w/ have_b_period (with maybe more regs)
             assert( have_bA_bD==0); assert(have_jj_shift==0); assert(have_vl_over_jj==0);
             assert( jj > vl0 ); assert( jj/vl0 > 1 ); assert( have_jjMODvl );
             if( !have_jjMODvl_reset ){
-                if(onceI) fi.com("jj%vl==0 and a[] never changes from 0");
+                if(onceI) fi.com("jj%vl0==0 and a[] never changes from 0");
                 // Note: this case should also be a "trivial" case for unroll suggestion
                 if(verbose){cout<<" f";cout.flush();}
                 FOR(i,vl) b[i] = b[i] + vl0;
@@ -988,10 +1088,13 @@ INDUCE:
                 // This case is potentially faster with a partial precalc unroll
                 // The division should be done with compute_uB
                 assert( have_jjMODvl && have_jjMODvl_reset );
+                // recall: have_jjMODvl_reset [HERE] is
+                // (vl0%jj!=0 && jj%vl0==0 && nloop >jj/vl0), so nloop > jj/vl0 > 1
+                // ==> Cannot optimize loop exit by querying the "reset" condition.
 #if 0
                 //Lpi easy = iloop % jj_over_vl;       // scalar cyclic mod
                 Lpi easy = fastmod_uB( iloop, jj_over_vl_M, jj_over_vl );
-                // #pragma..unroll(jj/vl) could be branchless
+                // #pragma..unroll(jj/vl0) could be branchless
                 // can be optimized further into 3 minimal-op cases
                 if( easy ){                         // bump b[i], a[i] unchanged
                     if(verbose){cout<<" f";cout.flush();}
@@ -1005,15 +1108,20 @@ INDUCE:
                     ++cnt_jjMODvl_reset;
                 }
 #else
-                // iloop % jj_over_vl is implemented as a cyclic [0,jj/vl) count
-                if(jj/vl>2){
+                // iloop % jj_over_vl is implemented as a cyclic [0,jj/vl0) count
+                if(jj/vl0==2){                          // cyclic period 2 counter
+                    assert(jj/vl0==2);
+                    tmod = 1-tmod;
+                }else if(positivePow2(jj/vl0)){         // cyclic power-of-2 counter
+                    uint64_t const shift = positivePow2Shift((uint32_t)(jj/vl0));
+                    uint64_t const mask  = (1ULL<<shift) - 1U;
+                    tmod = (tmod+1U) & mask;
+                }else{                                  // cyclic period jj/vl0 counter
                     tmod += 1;
                     int64_t const tmp = tmod - jj_over_vl;
-                    if( tmp==0 ) tmod = tmp;                 // cmov tmod,tmp,tmp
-                }else{
-                    assert(jj/vl==2);
-                    tmod = 1-tmod;
+                    if(tmp==0) tmod=tmp; // cmov tmod,tmp,tmp
                 }
+
                 if( tmod ){
                     if(verbose){cout<<" f";cout.flush();}
                     FOR(i,vl) b[i] = b[i] + vl0;
@@ -1033,21 +1141,27 @@ INDUCE:
                     //
                     //AsmScope const block = {{"tmp","%s40"}};
                     //fi.scope(block,"vectorized double-loop --> index vectors");
-                    fi.com("jj%vl==0 : iloop%(jj/vl) check via cyclic tmod < jj/vl="+jitdec(jj/vl));
-                    if(jj/vl > 2){
-                        fi.ins("add tmod, 1, tmod",           "++tmod");
-                        fi.ins("sub tm0,tmod,"+jitdec(jj/vl));
-                        fi.ins("cmov.eq tmod,tm0,tm0",        "reset tmod of jj/vl to zero");
-                    }else{
-                        fi.ins("sub tmod, 1,tmod",      "tmod=1-tmod (toggle 0|1)");
+                    fi.com("jj%vl0==0 : iloop%(jj/vl0) check via cyclic tmod < jj/vl0="+jitdec(jj/vl0));
+                    if(jj/vl0==2){                      // cyclic period 2 counter
+                        fi.ins("sub tmod, 1,tmod",              "tmod period 2 (toggle 0|1)");
+                    }else if(positivePow2(jj/vl0)){     // cyclic power-of-2 counter
+                        uint64_t const shift = positivePow2Shift((uint32_t)(jj/vl0));
+                        uint64_t const mask  = (1ULL<<shift) - 1U;
+                        //tmod = (tmod+1) & mask;
+                        fi.ins("add tm0, 1,tmod",               "tmod period jj/vl0="+jitdec(jj/vl0));
+                        fi.ins("and tmod, tm0,"+jitimm(mask),   "     pow2 mask to reset");
+                    }else{                              // cyclic period jj/vl0 counter
+                        fi.ins("add tmod, 1,tmod",              "tmod period jj/vl0="+jitdec(jj/vl0));
+                        fi.ins("sub tm0,tmod,"+jitdec(jj/vl0));
+                        fi.ins("cmov.eq tmod,tm0,tm0",          "cmov reset tmod=0");
                     }
-                    fi.ins("beq.w.t tmod, JJMODVL_RESET-.");
-                    fi.ins("vadd b, b,vl0",             "b[i] += vl0 (easy case)")
-                        .ins("b JJMODVL_DONE-.");
-                    fi.lab("JJMODVL_RESET")
+                    fi.ins("beq.w.t tmod,"+reladdr("RESET"));
+                    fi.ins("vadd b, b,vl0",             "b[i] += vl0 (easy, a[] unchanged)")
+                        .ins("b "+reladdr("INDUCE_DONE"), "branch around reset case");
+                    fi.lab("RESET")
                         .ins("or b,0,sq",               "b[i] = sq[i] (reset case)")
                         .ins("vadd a,1,a",              "a[i] += 1");
-                    fi.lab("JJMODVL_DONE");
+                    fi.lab("INDUCE_DONE");
                     //fi.pop_scope();
                 }
             }
@@ -1057,21 +1171,21 @@ INDUCE:
             if(verbose){cout<<" h";cout.flush();}
             assert( vl0%jj != 0 ); assert( jj%vl0 != 0 ); assert(have_bA_bD==1);
             assert(have_jj_shift==1); assert(have_vl_over_jj==0);
-            // no...assert(have_sq==(jj>1&&jj<vl));
-            FOR(i,vl) bA[i] = vl0 + b[i];            // bA = b + vl; add_vsv
+            // no...assert(have_sq==(jj>1&&jj<vl0));
+            FOR(i,vl) bA[i] = vl0 + b[i];           // bA = b + vl0; add_vsv
             FOR(i,vl) bD[i] = (bA[i] >> jj_shift);  // bD = bA / jj; div_vsv
             FOR(i,vl) b [i] = (bA[i] & jj_minus_1); // bM = bA % jj; mod_vsv
             FOR(i,vl) a [i] = a[i] + bD[i]; // aA = a + bD; add_vvv
             ++cnt_bA_bD; ++cnt_jj_shift; assert( have_bA_bD );
             if(onceI){
-            fi.ins("vaddu.l bA,"+jitdec(vl0)+",b",
-                   "bA[i] = b[i]+vl0 (jj="+jitdec(jj)+" power-of-two)")
-                .ins("vsrl.l.zx bD,bA,"+jitdec(jj_shift),
-                     "bD[i] = bA[i]>>jj_shift["+jitdec(jj_shift)+"]")
-                .ins("vand b,"+jitimm(jj_minus_1)+",bA",
-                     "b[i] = bA[i]&jj_mask = bA[i]%"+jitdec(vl0))
-                .ins("vaddu.l a,a,bD",
-                     "a[i] += bD[i]");
+            fi.ins("vaddu.l bA,"+jitdec(vl0)+",b"
+                   , "bA[i] = b[i]+vl0 (jj="+jitdec(jj)+" power-of-two)")
+                .ins("vsrl.l.zx bD,bA,"+jitdec(jj_shift)
+                     , "bD[i] = bA[i]>>jj_shift["+jitdec(jj_shift)+"]")
+                .ins("vand b,"+jitimm(jj_minus_1)+",bA"
+                     , "b[i] = bA[i]&jj_mask = bA[i]%"+jitdec(vl0))
+                .ins("vaddu.l a,a,bD"
+                     , "a[i] += bD[i]");
             }
         }else{ // div-mod ---------------------6 vec ops: add (mul,shr) (mul,sub) add
             if(verbose){cout<<" i";cout.flush();}
@@ -1080,8 +1194,8 @@ INDUCE:
             FOR(i,vl) b [i] = bA[i] - bD[i]*jj;     // long-hand    : mul_vvs, sub_vvv
             FOR(i,vl) a [i] = a[i] + bD[i];         // add_vvv
             ++cnt_bA_bD; ++cnt_jj_M;
-            assert(have_bA_bD); assert(have_sq==(jj>1&&jj<vl)); assert(!have_jj_shift);
-            assert(!have_vl_over_jj); assert( jj+vl < (int)SAFEMAX );
+            assert(have_bA_bD); assert(have_sq==(jj>1&&jj<vl0)); assert(!have_jj_shift);
+            assert(!have_vl_over_jj); assert( jj+vl0 < (int)SAFEMAX );
             if(onceI){
 #if 0
                 if(0)cout<<"=== //      # bA[i] = vl0 + b[i];            // add_vsv\n"
@@ -1108,25 +1222,31 @@ INDUCE:
             }
         }
     }
-    // Note: vl reduction must take place AFTER above use of "long" vl
-    if( iijj % vl0 ){
+#if VL_LAST_ITER==2
 #if 0
-        if( cnt + vl > iijj ){ // last time might have reduced vl
-            vl = iijj - cnt;
-            cout<<" vl reduced for last loop to "<<vl<<endl;
-        }
-#else // VE has single-op MIN
-        vl = std::min( (uint64_t)vl, /*remain =*/ iijj - cnt );
+    // if careful about vl (possible lower value for last iter) vs vl0 can update here:
+    if( cnt + vl > iijj ){ // last time might have reduced vl
+        vl = iijj - cnt;
+        cout<<" vl reduced for last loop to "<<vl<<endl;
+    }
 #endif
+    // Careful: vl = new value for last iteration, vl0 = original = old value
+    if( iijj % vl0 ){
+        // VE has single-op MIN
+        //vl = std::min( (uint64_t)vl, /*remain =*/ iijj - cnt );
+        vl = std::min( (uint64_t)vl, /*remain =*/ cnt );
         if(onceI){
             //AsmScope const block = {{"remain","%s40"}};
             //fi.scope(block, "last time reduce vl");
-            fi.ins("subu.l remain,iijj,cnt",    "remain = iijj -cnt");
-            fi.ins("mins.l vl, vl0, remain",    "vl = min(vl,remain)");
-            fi.ins("svl vl");
+            //fi.ins("subu.l remain,iijj,cnt",    "remain = iijj -cnt");
+            //fi.ins("mins.l vl, vl0, remain",    "vl = min(vl,remain)");
+            //fi.ins("svl vl");
             //fi.pop_scope();
+            fi.ins("mins.l vl, vl0, cnt",    "vl = min(vl,cnt)");
+            fi.ins("svl vl");
         }
     }
+#endif
     if(onceI){
         fi.com("...KERNEL_BLOCK fall-through, a[], b[] induced");
         onceI = false;
@@ -1160,31 +1280,44 @@ KERNEL_BLOCK:
     //
     ++iloop; // needed only sometimes
     if( nloop <= 1 ){
-        cnt += vl; // just for debug
+        //cnt += vl; // for tighter exit assertion
+        cout<<" exit A cnt="<<cnt<<endl;
     }else if(iijj % vl0){
         if( vl == vl0 ){
             // cnt += vl; move to induce-block
             goto INDUCE;
         }
         // exit...
-        cnt += vl; // just for debug
+        cout<<" exit B cnt="<<cnt<<endl;
+        //cnt += vl; // just for tighter exit assertion
     }else{ // generic end-loop test
+        //++cnt_use_iijj; // XXX old!
+#if 0 // cnt 0..iijj
         cnt += vl0;
-        ++cnt_use_iijj;
         if( cnt < iijj ){
             goto INDUCE;
         }
+#else // cnt iijj..0
+        cnt -= vl0;
+        if( (int64_t)cnt > 0 ){
+            cout<<" again B cnt="<<cnt<<endl;
+            goto INDUCE;
+        }
+        cout<<" exit B cnt="<<cnt<<endl;
+#endif
     }
 
     if(onceL){
         if(nloop==1) fl.lcom("(nloop == 1, no need to check if done)");
         else if(iijj%vl0){
-            fl.lcom("DONE_CHECK A : loop again if vl is not the reduced last value")
-                .ins("breq"+string(nloop>2?".t":".nt")+" vl,vl0, INDUCE-.", "iijj%vl!=0 so vl<vl0 means DONE");
+            fl.lcom("DONE_CHECK A : loop again if vl is not the reduced last value");
+            fl.ins("breq"+string(nloop>2?".t":".nt")+" vl,vl0,"+reladdr("INDUCE"), "iijj%vl!=0 so vl<vl0 means DONE");
         }else{
-            fl.lcom("DONE_CHECK B : loop again if next cnt still < iijj")
-                .ins("add cnt,vl0,cnt",  "cnt += vl")
-                .ins("brlt"+string(nloop>2?".t":".nt")+" cnt,iijj, INDUCE-.", "next a[],b[]");
+            fl.lcom("DONE_CHECK B : loop again if next cnt still < iijj");
+            //fl.ins("add cnt,vl0,cnt",  "cnt += vl");
+            //    .ins("brlt"+string(nloop>2?".t":".nt")+" cnt,iijj, INDUCE-.", "next a[],b[]");
+            fl.ins("subu cnt,vl0,cnt",  "cnt -= vl (or vl0)");
+            fl.ins("bgt"+string(nloop>2?".t":".nt")+" cnt,"+reladdr("INDUCE"), "next a[],b[]");
         }
         onceL = false;
     }
@@ -1193,13 +1326,15 @@ KERNEL_BLOCK:
 
 #undef FOR
     cout<<" Yay! induction formulas worked! iloop,nloop="<<iloop<<","<<nloop<<endl;
-    assert( cnt == iijj || cnt == iijj/cnt*cnt+vl );
+    //assert( cnt == iijj || cnt == iijj/cnt*cnt );
+    assert( cnt == 0 || (nloop<=1 && cnt == iijj) || (nloop>1 && cnt == iijj - iijj/vl0*vl0) ); //iijj/vl0*vl0 + vl0);
     assert( nloop == iloop );
     assert( have_vl_over_jj     == (cnt_vl_over_jj    > 0) );
     assert( have_bA_bD          == (cnt_bA_bD         > 0) );
     assert( have_sq             == (cnt_sq            > 0) );
     assert( have_jj_shift       == (cnt_jj_shift      > 0) );
-    assert( have_use_iijj       == (cnt_use_iijj      > 0) );
+    //assert( have_use_iijj       == (cnt_use_iijj      > 0) );
+    assert( cnt_use_iijj == 0); // cnt iijj-->1 now
     assert( have_jj_M           == (cnt_jj_M          > 0) );
     assert( have_jjMODvl        == (cnt_jjMODvl       > 0) ); // old "special" count, case 'g' needed
     assert( have_jjMODvl_reset  == (cnt_jjMODvl_reset > 0) ); // old "special" count, case 'g' needed
