@@ -13,6 +13,7 @@ tf2-m.log: fuse2 Makefile
 		&& ./fuse2 -m  8 1 1 \
 		&& ./fuse2 -t  256 1024  1 \
 		&& ./fuse2 -t  256 1500  1 \
+		&& ./fuse2 -t  256 512  2 \
 		&& ./fuse2 -t  256 16  64 \
 		&& ./fuse2 -t  256 21  64 \
 		&& ./fuse2 -t  256 1 256 \
