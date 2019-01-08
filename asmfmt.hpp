@@ -3,6 +3,7 @@
 #include "asmfmt_fwd.hpp"
 #include <sstream>
 #include <deque>
+#include <iostream>
 
 inline std::string AsmFmtCols::str() const {
     return (*a).str();
@@ -50,6 +51,7 @@ std::size_t AsmFmtCols::scope( PAIRCONTAINER const& pairs, std::string block_nam
     }
     // move the undefs string [a bunch of #undef lines] onto our scope-stack
     stack_undefs.push(undefs.flush());
+    //std::cout<<"\nscope-->undefs:\n"<<stack_undefs.top()<<std::endl;
     return un.size();
 }
 

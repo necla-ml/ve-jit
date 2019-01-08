@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <algorithm> // max
 #include <cstdlib>
+#include <cassert>
 //#include <cstdio> // FILE, ftell
 
 using namespace std;
@@ -94,9 +95,19 @@ AsmFmtCols::AsmFmtCols( string const& fname )
     a->fill(' ');
 }
 AsmFmtCols::~AsmFmtCols(){
+    //std::cout<<"~AsmFmtCols,"<<stack_undefs.size()<<"undefs "; std::cout.flush();
+    while(stack_undefs.size()){
+        //std::cout<<" destructor pop_scope"; std::cout.flush();
+        this->pop_scope();
+        //std::cout<<" destructor write"; std::cout.flush();
+        //this->write();
+    }
     if( !written ){
+        //std::cout<<" destructor write"; std::cout.flush();
         this->write();
     }
+    if(of){ of->flush(); of->close(); delete of; of = nullptr; }
+    delete a;    a = nullptr;
 }
 inline void throw_if_written( AsmFmtCols const* asmfmt, string const& cannot ){
     if( asmfmt->written ){
@@ -106,9 +117,11 @@ inline void throw_if_written( AsmFmtCols const* asmfmt, string const& cannot ){
 std::stack<std::string>::size_type AsmFmtCols::pop_scope(){
     auto sz = stack_undefs.size();
     if(sz) {
+        assert( a != nullptr );
         (*a) << stack_undefs.top(); // #undef lines, no endl here
         stack_undefs.pop();
         --sz;
+        written = false;
     }
     return sz;
 }
@@ -123,14 +136,16 @@ std::string AsmFmtCols::flush(){
                 //(*of) << a->rdbuf(); // not working? ???
                 (*of) << ret;
                 of->flush();
-                of->close();
+                //of->close();
             }catch(...){
                 cout<<" ERROR: could not write to output file!"<<endl;
             }
-            delete of;  of = nullptr;
+            //delete of;  of = nullptr;
+            a->str("");
+            a->clear();
         }
         this->written = true;
-        delete a; a = nullptr;
+        //delete a; a = nullptr;
     }
     return ret;
 }
@@ -138,10 +153,10 @@ std::string AsmFmtCols::flush(){
 void AsmFmtCols::write(){
     throw_if_written(this,__FUNCTION__);
     if( of ){
-        cout<<"AsmFmtCols::write-->of"<<endl;
+        //cout<<"AsmFmtCols::write-->of"<<endl;
         (*of) << a->rdbuf();
         of->flush();
-        of->close();
+        //of->close();
     }else{
         //cout<<"AsmFmtCols::write-->cout"<<endl;
         //(*a) << "\n// Goodbye\n";
@@ -150,8 +165,12 @@ void AsmFmtCols::write(){
         //cout<<"AsmFmtCols::write-->cout DONE"<<endl;
     }
     this->written = true;
-    delete of;  of = nullptr;
-    delete a;   a  = nullptr;
+    // reset ostringstream for further output (like from pop_scope)
+    a->clear();
+    a->str("");
+    // There is valid reason for allowing pop_scope to run during the destructor
+    //delete of;  of = nullptr;
+    //delete a;   a  = nullptr;
 }
 AsmFmtCols& AsmFmtCols::raw(string const& anything){
     throw_if_written(this,__FUNCTION__);
@@ -352,6 +371,7 @@ int main(int,char**){
         {{"counter","%s1"},{"counter_beg","0"},{"to","5"}};
         a.scope(block,"opt_block_name");
         a.pop_scope();
+        a.scope(block,"a second block (not explicitly popped)");
         a.lcom("For really long comments you can use 'lcom', which also"
                 ,"can accept a list of long-line strings as arguments");
         a.ins("fence","this has no args and a comment");

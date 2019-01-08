@@ -683,6 +683,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
 
 void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){ for c in [0,w] {...}}
     ExecHash tr;
+    {
     int verbose=1;
     assert( vlen > 0 );
     register uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
@@ -839,15 +840,6 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
 
     fd.scope(block,"vectorized double-loop --> index vectors");
 
-    if(nloop > 1 && iijj%vl0){
-        //fp.ins("xor cnt, ii,ii",                "cnt  = 0");
-        if(iijj < (uint64_t{1}<<32)) fp.ins("lea cnt,"+jitdec(iijj)
-                                            , "cnt=ii*jj= "+jitdec(ii)+"*"+jitdec(jj)+" to 1 by "+jitdec(vl0));
-        else                         fp.ins("mulu cnt, ii,jj"
-                                            , "cnt=ii*jj= "+jitdec(ii)+"*"+jitdec(jj)+" to 1 by "+jitdec(vl0));
-    }
-    // ii and jj regs are now free registers
-    fp.rcom("ii and jj regs now reusable");
 
     if(nloop>1 && (iijj%vl0) ){
         fp.ins("or  vl, vl0,vl0", "vl = vl0");
@@ -860,6 +852,16 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
         fp.ins("vseq sq");
         FOR(i,vl) sq[i] = i;       // vseq_v
     }
+
+    if(nloop > 1 /*&& iijj%vl0==0*/ ){
+        //fp.ins("xor cnt, ii,ii",                "cnt  = 0");
+        if(iijj < (uint64_t{1}<<32)) fp.ins("lea cnt,"+jitdec(iijj)
+                                            , "cnt=ii*jj= "+jitdec(ii)+"*"+jitdec(jj)+" to 1 by "+jitdec(vl0));
+        else                         fp.ins("mulu cnt, ii,jj"
+                                            , "cnt=ii*jj= "+jitdec(ii)+"*"+jitdec(jj)+" to 1 by "+jitdec(vl0));
+    }
+    fp.rcom("ii and jj regs now reusable");
+
     if( have_jjMODvl_reset ){
         //fp.ins("lea jjovl,"+jitdec(jj/vl),      "jjovl = jj/vl = "+jitdec(jj)+"/"+jitdec(vl));
         fp.ins("xor tmod, %s0,%s0",             "tmod=0, cycling < (jj/vl="+jitdec(jj/vl)+")");
@@ -1004,7 +1006,7 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
     if(onceI && nloop > 1) {
         fp.ins("b "+reladdr("KERNEL_BLOCK"), "goto KERNEL_BLOCK");
     }
-    if(nloop <= 1){ // comment
+    if(1 || nloop <= 1){ // comment
         std::ostringstream oss;
         oss<<"vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop;
         if(vl0%jj==0) oss<<" vl%jj==0";
@@ -1072,13 +1074,11 @@ INDUCE:
             assert( jj > vl0 ); assert( jj/vl0 > 1 ); assert( have_jjMODvl );
             if( !have_jjMODvl_reset ){
                 tr+="induce:jj%vl0 A: b[]+=vl0, a[] const";
-                if(onceI) fi.com("jj%vl0==0 and a[] never changes from 0");
                 // Note: this case should also be a "trivial" case for unroll suggestion
                 if(verbose){cout<<" f";cout.flush();}
                 FOR(i,vl) b[i] = b[i] + vl0;
                 ++cnt_jjMODvl; assert( have_jjMODvl );
-                //if(onceI) cout<<"=== //   VADD b, vl0, b          # add imm/Sy\n";
-                if(onceI) fi.ins("add b, "+jitdec(vl0)+",b",    "b[i] += vl0");
+                if(onceI) fi.ins("add b, "+jitdec(vl0)+",b",    "b[i] += vl0, a[] const");
             }else{
                 // This case is potentially faster with a partial precalc unroll
                 // The division should be done with compute_uB
@@ -1105,7 +1105,7 @@ INDUCE:
 #else
                 // iloop % jj_over_vl is implemented as a cyclic [0,jj/vl0) count
                 if(jj/vl0==2){                          // cyclic period 2 counter
-                    tr+="induce:jj%vl0 tmod toggle";
+                    tr+="induce:jj%vl0 case: tmod toggle";
                     assert(jj/vl0==2);
                     tmod = 1-tmod;
                 }else if(positivePow2(jj/vl0)){         // cyclic power-of-2 counter
@@ -1358,8 +1358,10 @@ KERNEL_BLOCK:
     fk.write();
     fl.write();
     fz.write();
+    fd.pop_scope();
     // XXX multiple scope write/destroy has issues! (missing #undefs for fd right now)
     //fd.pop_scope();     // TODO: destructors should auto-pop any AsmFmtCols scopes!!!
+    }
     cout<<tr.str()<<" vlen,ii,jj= "<<vlen<<" "<<ii<<" "<<jj<<endl;
     cout<<tr.dump();
 }
