@@ -125,6 +125,7 @@ void jit_parm_opt2( unsigned long const parm, char * const jit_parm, size_t cons
                 // and also by instructions such as addu.l, which covers
                 // a few more constants
                 // I don't think the cases covered will by particularly common
+                // NOTE: Better is to use add %out, [-63,64], Mconst !!!
                 if( strMconst(mconst, parm/2) && parm/2*2 == parm ){
                     JOUT(COMM(Imm * 2) "\tmulu.l %%s2, 2, %s\n", mconst);
                 }else if( strMconst(mconst, lparm/(-20)) && lparm/(-20)*(-20) == lparm ){

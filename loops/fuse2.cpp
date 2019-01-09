@@ -22,6 +22,7 @@
 #include <type_traits>
 #include <unordered_set>
 #include <map>
+#include <array>
 
 #include <cstring>
 #include <cstddef>
@@ -129,7 +130,7 @@ std::string jithex(T const t){
  */
 template<typename T>
 std::string jitimm(T const t){
-    int64_t i=t;
+    int64_t i=static_cast<int64_t>(t);
     // common and special cases
     if(i==0) return std::string("(0)1");
     if(i==-1) return std::string("(0)0");
@@ -144,6 +145,112 @@ std::string jitimm(T const t){
     int const trailing = popcount(i); // in |t|
     oss<<"("<<64-trailing<<")"<<leading_bit;
     return oss.str();
+}
+template<typename T>
+bool isimm(T const t){
+    int64_t i=static_cast<int64_t>(t);
+    // common and special cases
+    if(i==0) return true;
+    if(i==-1) return true;
+    if(i==1) return true;
+    // remaing cases generic
+    //std::ostringstream oss;
+    bool const neg = i<0;
+    //char const* leading_bit=(neg? "1": "0");    // string for 1|0 MSB
+    if(neg) i=~i;                               // now i == |t|, positive
+    if(!positivePow2(i+1))
+        //THROW("oops")
+        return false;
+    //int const trailing = popcount(i); // in |t|
+    //oss<<"("<<64-trailing<<")"<<leading_bit;
+    //return oss.str();
+    return true;
+}
+
+struct CodeGenAsm
+{
+public:
+    CodeGenAsm() : used(), latest(0) {
+        used.fill(0);
+    }
+    /** scoped tmp reg */
+    struct TmpReg
+    {
+        TmpReg( CodeGenAsm* owner );    ///< allocate and mark used an entry
+        ~TmpReg();
+        //operator std::string() const { return str; }
+        CodeGenAsm * const owner;
+        int const tmp;
+        //char const* const creg;
+        std::string const str;
+    };
+    struct TmpReg tmp() { return TmpReg(this); }
+
+    /** return asm string to load \c value into scalar register \c reg. */
+    std::string load( std::string const reg, uint64_t value ){
+        std::ostringstream oss;
+        if( (int64_t)value >= -64 && (int64_t)value <= 63 ){
+            auto t=tmp();
+            oss<<"or "<<reg<<","<<(int64_t)value<<","<<jitimm(0);
+        }else if( isimm(value) ){
+            auto t=tmp();
+            oss<<"or "<<reg<<","<<0<<","<<jitimm(value);
+        }else if( value < (uint64_t{1}<<32) ){
+            oss<<"lea "<<reg<<","<<jitdec(value);
+        }else if( (int64_t)value < (int64_t)(int32_t)value ){
+            // sext(32-bit) can yield 64-bit value exactly
+            oss<<"lea "<<reg<<","<<jitdec(value);
+            //else search for xor I,M
+            //else search for eqv I,M
+            //else search for nnd I,M
+            //else search for add I,M
+            //else search for sub I,M
+            //else search for mpy I,M
+            // ?? 2 instruction LEA ??
+        }else{
+            // needs testing !!! -- often have an explicit shl !!!
+            uint32_t hi = (value>>32);
+            uint32_t lo = (value & ((uint64_t{1}<<32)-1));
+            if((int32_t)lo >= 0){ // sext(lo) has zeros in hi word
+                oss<<"lea.sl "<<reg<<",0x"<<std::hex<<hi<<";";
+                oss<<"lea "<<reg<<",0x"<<lo<<"(,"<<reg<<")";
+            }else{
+                oss<<"lea.sl "<<reg<<",0x"<<std::hex<<~hi<<";"; // sext of lo will toggle hi bits to OK
+                oss<<"lea "<<reg<<","<<lo<<"(,"<<reg<<")";
+            }
+        }
+        return oss.str();
+    }
+private:
+    /** return and mark used an entry in tmpRegs */
+    int alloc() {
+        int f = (latest+1)%10;
+        for(int i=0; i<10; ++i){
+            if( !used[f] ){
+                used[f] = 1;
+                return latest = f;
+            }
+        }
+        THROW(" too many tmp regs in use");
+    }
+    void free(int const u){
+        used[u] = 0;
+    }
+    char const* tmpRegs[10] = {
+        "%s40","%s41","%s42","%s43","%s44",
+        "%s41","%s42","%s43","%s44","%s45"
+    };
+    std::array<int,10> used;
+    int latest;         ///< latest allocated reg
+};
+void foo() { std::cout<<"asdfasdf"<<std::endl; }
+
+inline CodeGenAsm::TmpReg::TmpReg( CodeGenAsm* owner )
+    : owner(owner), tmp(owner->alloc()), str(std::string(owner->tmpRegs[tmp]))
+{
+}
+inline CodeGenAsm::TmpReg::~TmpReg() {
+    owner->free(tmp);
 }
 
 struct Unroll_data {
@@ -683,6 +790,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
 
 void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){ for c in [0,w] {...}}
     ExecHash tr;
+    CodeGenAsm cg;
     {
     int verbose=1;
     assert( vlen > 0 );
@@ -877,9 +985,13 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
             //fp.ins("div jj_M,"+string(CMASK_MVALUE)+",jj",  "fastdiv magic is");
             // oops.. the MASK immediate can only for Sz divisor :(
             assert( vl/jj <= 85 );
+#if 0 // full calc is 3 instr, but maybe div has long latency
             fp.ins("or jj_M,0,"+jitimm(CMASK),  "   C_ones 2*B = "+jitdec(C)+" lsb ones");
             fp.ins("div jj_M, jj_M,jj",         "   for fastdiv A/jj, ok for B-bit A,jj");
             fp.ins("add jj_M,1,jj_M",           "jj_M = C_ones / d + 1 = 0x"+jithex(jj_M));
+#else
+            fp.ins(cg.load("jj_M", jj_M), "jj_M = "+jithex(jj_M)+" (fastdiv by "+jitdec(jj)+")");
+#endif
         }else{
             assert( !have_jj_M && !have_vl_over_jj );
         }
