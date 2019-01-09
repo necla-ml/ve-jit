@@ -89,9 +89,6 @@ void jit_parm_opt1( unsigned long parm, char *jit_parm, size_t const jsz ){
 }
 void jit_parm_opt2( unsigned long const parm, char * const jit_parm, size_t const jsz ){
     size_t n=0;
-#define JOUT(...) do { \
-    n += snprintf(&jit_parm[n],jsz-n,__VA_ARGS__); \
-    assert(n<jsz); }while(0)
     long const lparm = (long)parm;
     char mconst[6];
     int ok=0, add_ok=0, sub_ok=0, loaded_neg_parm=0;
@@ -211,14 +208,15 @@ int call_loadreg( Jitpage *page, uint64_t const expect){
 }
 void test_kernel_loadreg(char const* const cmd, unsigned long const parm, int const opt_level){
     printf("\nTest: %s\n", cmd);
-    printf("        opt_level=%d\n",opt_level);
+    printf("        opt_level=%d (unused)\n",opt_level);
     printf("        parm=0x%16lx = %lu = %ld\n",parm, parm, (signed long)parm);
-    printf("      Here we create JIT assembly code to add and subtract a constant\n");
-    printf("      to %%s0, returning %%s0+parm and %%s0-parm in %%s1 and %%s2.\n");
+    printf("      Here we create JIT assembly code to load parm into a register");
     printf("      Depending on the size of the constant, we will output different\n");
     printf("      assembly code; i.e. we do a tiny JIT optimization\n");
     char kernel_loadreg_opt[4096U];
     {
+        stringstrem
+        AsmFmtCols ve_loadreg(ss);
         printf("// create the JIT assembly code\n");
         fflush(stdout);
         char const* kernel_math_begin =
