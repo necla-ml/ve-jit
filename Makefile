@@ -11,7 +11,9 @@ SHELL:=/bin/bash
 CFLAGS:=-O2 -g2
 CXXFLAGS:=$(CFLAGS) -std=c++1z
 else
-TARGETS=asmkern0.asm syscall_hello asmkern.bin asmkern1.bin msk \
+TARGETS=asmkern0.asm syscall_hello \
+	test_naspipe test_vejitpage_sh \
+	asmkern.bin asmkern1.bin msk \
 	jitve0 jitve_hello test_strMconst jitve_math jitpp_hello
 CC?=ncc-1.5.1
 CXX?=nc++-1.5.1
@@ -73,6 +75,22 @@ asmkern0.asm: asmkern0.c
 	$(CC) $(CFLAGS) -c $< -DOPT=1 -o asmkern0.o
 	$(CC) $(CFLAGS) -Wa,adhln -S $< -o asmkern0.asm
 	$(OBJDUMP) -d asmkern0.o > asmkern0.dis
+#
+# pstreams demo piping a std::string of VE asm code
+# into a shell script (naspipe.sh) that returns
+# a disassembled dump on stdout
+# and errors on stderr.
+#
+# The script stdout and stderr are captured into C++ strings using pstream.h
+# (More interesting is to use vejitpage.sh and capture the binary blob
+#  output into a std::string that can be used to define a jit code page)
+#
+test_naspipe: test_naspipe.cpp naspipe.sh
+	$(CXX) -O2 $< -o $@
+	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
+test_vejitpage_sh: test_vejitpage_sh.cpp vejitpage.sh
+	$(CXX) -O2 $< -o $@
+	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
 #
 # low-level C-api, using jitve_util.h
 #

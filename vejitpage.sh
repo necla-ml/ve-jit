@@ -18,26 +18,26 @@
 #    that you stick into a real executable code page
 #    (and then call with a 'C' inline asm wrapper)
 #
-# not so sure about nas/nobjcopy error handling.
+# See test_naspipe.cpp and naspipe.sh for an example of how to
+# pipe input, and get std::string versions of stderr and stdout
+# easily using the "pstreams header library" (boost license).
 #
-# pstreams example (tentative)
-#	std::string ve_asm_code; // ...
-#	std::string machine_code;
-#	{
-#		using namespace redi;
-#		using namespace redi::pstreams;
-#		redi::pstream jitcmd("./vejitpage.sh", pstdout|pstdin|pstderr);
-#		jitcmd << ve_asm_code << peof; // maybe
-#		std::stringstream ss;
-#		ss << jitcmd.rdbuf();
-#		std::string machine_code = ss.str();
-#	}
+# by hand ...
+#     nas ./tmp_cpp_3EL8EeME.s -o xx.o; ls -l xx.o; nobjcopy -O binary xx.o xx.bin; ls -l xx.bin; nobjdump -b binary -mve -D xx.bin
 #
-( nas - -o ${vejitpage_ELF:=$(mktemp --tmpdir=.)} 1>&2;
-nobjcopy -O binary ${vejitpage_ELF} ${vejitpage_BIN:=$(mktemp --tmpdir=.)} 1>&2;
-cat ${vejitpage_BIN};
-echo "removing tmp files ELF:${vejitpage_ELF} BIN:${vejitpage_BIN}" 1>&2
-rm -f ${vejitpage_ELF} ${vejitpage_BIN} 1>&2
-)
+#
+(
+OBJ=$(mktemp --tmpdir=. tmp_jit_XXXXXXXX.o) >2;
+BIN=$(basename ${OBJ} .o).bin >2;
+echo "will use tmp files ${OBJ} ${BIN}" >2;
 
-  
+cpp - | nas - -o ${OBJ} 1>&2;
+ls -l ${OBJ} 1>&2;
+
+nobjcopy -O binary ${OBJ} ${BIN} 1>&2;
+ls -l ${BIN} 1>&2;
+cat ${BIN}; #				---> stdout
+
+rm -f ${OBJ} ${BIN} 1>&2
+)
+#
