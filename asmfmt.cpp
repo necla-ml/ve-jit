@@ -240,7 +240,7 @@ std::string reduce(const std::string& str,
 }
 AsmFmtCols::AsmLine AsmFmtCols::parts(std::string const& instruction){
     throw_if_written(this,__FUNCTION__);
-    int const v=1;
+    int const v=0;
     AsmLine ret;
     if(v)cout<<"parts.."<<instruction<<endl;
     auto inst = instruction;
@@ -393,7 +393,7 @@ AsmFmtCols& AsmFmtCols::ins(string const& instruction, string const& asmcomment)
         }
 #endif
         remain = p.remain;
-        cout<<" iterate: remain = "<<remain<<endl;
+        //cout<<" iterate: remain = "<<remain<<endl;
     }
     if( !did_asmcomment )
         rcom(asmcomment);
@@ -417,7 +417,7 @@ AsmFmtCols& AsmFmtCols::def(std::string const& symbol, std::string const& subst,
     }else{
         auto const col = inwidth + 7 + std::max(symbol.size(),10UL) + 1 + subst.size();
         auto const wnt = inwidth + opwidth + argwidth;
-        cout<<"col="<<col<<" cf "<<wnt<<endl;
+        //cout<<"col="<<col<<" cf "<<wnt<<endl;
 
         if(col < wnt){
             (*a) << setw(wnt - col) << "";

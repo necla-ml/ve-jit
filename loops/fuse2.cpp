@@ -212,11 +212,13 @@ public:
             uint32_t hi = (value>>32);
             uint32_t lo = (value & ((uint64_t{1}<<32)-1));
             if((int32_t)lo >= 0){ // sext(lo) has zeros in hi word
-                oss<<"lea.sl "<<reg<<",0x"<<std::hex<<hi<<";";
-                oss<<"lea "<<reg<<",0x"<<lo<<"(,"<<reg<<")";
+                auto t=tmp();
+                oss<<"lea.sl "<<t.str<<",0x"<<std::hex<<hi<<"#(TmpReg);";
+                oss<<"lea "<<reg<<",0x"<<setfill('0')<<setw(8)<<lo<<"(,"<<t.str<<")";
             }else{
-                oss<<"lea.sl "<<reg<<",0x"<<std::hex<<~hi<<";"; // sext of lo will toggle hi bits to OK
-                oss<<"lea "<<reg<<","<<lo<<"(,"<<reg<<")";
+                auto t=tmp();
+                oss<<"lea.sl "<<t.str<<",0x"<<std::hex<<~hi<<";"; // sext of lo will toggle hi bits to OK
+                oss<<"lea "<<reg<<","<<setfill('0')<<setw(8)<<lo<<"(,"<<t.str<<")";
             }
         }
         return oss.str();
