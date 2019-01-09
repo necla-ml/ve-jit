@@ -48,7 +48,10 @@ ExecutablePage asm2page( std::string const& fname_S );
 class AsmFmtCols {
   public:
       AsmFmtCols();                           ///< destructor writes to cout
-      AsmFmtCols(std::string const& fname);   ///< destructor write to file instead of cout
+      /** destructor write to file instead of cout.
+       * Use an empty string for no file/cout output when you want
+       * to grab the output only as std::string */
+      AsmFmtCols(std::string const& fname);
       ~AsmFmtCols();  ///< write to cout if !this->written, or constructor fname if there is one
       /** Can force a pre-destructor write (destructor won't write);
        * Any subsequent non-const function calls will throw an error.
@@ -78,6 +81,7 @@ class AsmFmtCols {
           std::string op;
           std::string args;
           std::string comment;
+          std::string remain; ///< allow multi-statement, ';' as separator
       } AsmLine;
       AsmLine parts(std::string const& instruction);        ///< split into op and args (only?)
 

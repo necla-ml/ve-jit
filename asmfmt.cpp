@@ -87,7 +87,8 @@ AsmFmtCols::AsmFmtCols()
     a->fill(' ');
 }
 AsmFmtCols::AsmFmtCols( string const& fname )
-    : a(new ostringstream()), written(false), of(new ofstream(fname, std::ios::out))
+    : a(new ostringstream()), written(false),
+    of(fname.size()? new ofstream(fname, std::ios::out): (std::ofstream*)nullptr)
 {
     //of->rdbuf()->pubsetbuf(charBuffer,BUFFER_SIZE); // opt
     if(of) (*of) <<"// auto-generated via AsmFmtCols!\n";
@@ -239,7 +240,7 @@ std::string reduce(const std::string& str,
 }
 AsmFmtCols::AsmLine AsmFmtCols::parts(std::string const& instruction){
     throw_if_written(this,__FUNCTION__);
-    int const v=0;
+    int const v=1;
     AsmLine ret;
     if(v)cout<<"parts.."<<instruction<<endl;
     auto inst = instruction;
@@ -260,28 +261,77 @@ AsmFmtCols::AsmLine AsmFmtCols::parts(std::string const& instruction){
         if(v)cout<<" op<"<<ret.op<<">";
         auto iargbeg = inst.find_first_not_of(ws,opend);
         if (iargbeg != string::npos){
-            auto const iargend = inst.find_last_not_of(ws);
+            auto iargend = inst.find_last_not_of(ws);
             if(v)cout<<" args"<<iargbeg<<":"<<iargend;
             ret.args = inst.substr(iargbeg, iargend-iargbeg+1);
             if(v)cout<<"<"<<ret.args<<">";
+            // currently ret.args is "everything else",
+            // new: ret.args needs some massaging:
+            //      after ';' --> remain,
+            //  and after '#' (before ';' if any) --> comment
+            // Suppose comments are not allowed to contain semicolons
+            iargend = string::npos;
+            auto isemicolon = ret.args.find_first_of(";",0);
+            if( isemicolon != string::npos ){
+                iargend = isemicolon;
+                auto iback = ret.args.find_last_not_of(ws);
+                ret.remain = ret.args.substr( isemicolon+1, iback-isemicolon );
+                if(v) cout<<" remain"<<isemicolon+1<<":"<<iback<<" "<<ret.remain<<endl;
+            }
+            auto icomment = ret.args.find_first_of("#",0);
+            if( icomment != string::npos && icomment < isemicolon ){
+                iargend = icomment;
+                ret.comment = ret.args.substr( icomment+1, isemicolon-icomment-1 );
+                if(v) cout<<" comment"<<icomment+1<<":"<<isemicolon-1<<" "<<ret.comment<<endl;
+            }
+            // chop any comment or multi-line asm
+            if( iargend != string::npos ){
+                ret.args = ret.args.substr(0,iargend);
+                if(v) cout<<" final ret.args "<<0<<":"<<iargend<<" "<<ret.args<<endl;
+                // chop ws again
+                iargend = ret.args.find_last_not_of(ws);
+                if( iargend != string::npos ){
+                    ret.args = ret.args.substr(0,iargend+1);
+                }
+            }
         }
+        if(v) cout<<" final ret.label   "<<ret.label<<endl;
+        if(v) cout<<" final ret.op      "<<ret.op<<endl;
+        if(v) cout<<" final ret.args    "<<ret.args<<endl;
+        if(v) cout<<" final ret.comment "<<ret.comment<<endl;
+        if(v) cout<<" final ret.remain  "<<ret.remain<<endl;
         if(v)cout<<" DONE"<<endl;
     }
     return ret;
 }
 AsmFmtCols& AsmFmtCols::ins(string const& instruction){
     throw_if_written(this,__FUNCTION__);
-    auto const p = parts(instruction);
-    if(p.op.size() == 0){
-        ins();
-    }else{
-        (*a) << left << indent;
-        if(p.args.size() == 0){
-            (*a) << p.op << endl;
+    // for multiline, we need a bit more than just 'parts(instruction)'
+    std::string remain = instruction;
+    //cout<<" remain = "<<remain<<endl;
+    while( remain.size() ){
+        auto const p = parts(remain);
+        if(p.op.size() == 0){
+            ins();
         }else{
-            (*a) << setw(opwidth-1) << p.op << " "
-                << p.args <<endl;
+            (*a) << left << indent;
+            if(p.args.empty()){
+                if( p.comment.empty() )
+                    (*a) << p.op << endl;
+                else
+                    (*a) << setw(inwidth+opwidth+argwidth) << "";
+            }else{
+                (*a) << setw(opwidth-1) << p.op << " ";
+                if( p.comment.empty() )
+                    (*a) << p.args <<endl;
+                else
+                    (*a) << setw(argwidth-1) << p.args << " ";
+            }
+            if( p.comment.size() )
+                (*a) << "# " << p.comment << endl;
         }
+        remain = p.remain;
+        //cout<<" iterate: remain = "<<remain<<endl;
     }
     return *this;
 }
@@ -289,8 +339,14 @@ AsmFmtCols& AsmFmtCols::ins(string const& instruction, string const& asmcomment)
     throw_if_written(this,__FUNCTION__);
     if(asmcomment.find_first_of(ws) == string::npos){
         ins(instruction);
-    }else{
-        auto const p = parts(instruction);
+        return *this;
+    }
+    bool did_asmcomment = false;
+    std::string remain = instruction;
+    std::string comment;
+    while( remain.size() ){
+        auto const p = parts(remain);
+#if 0
         (*a) << left;
         if(p.op.size() == 0){
             (*a) << setw(inwidth+opwidth+argwidth) << "";
@@ -304,7 +360,43 @@ AsmFmtCols& AsmFmtCols::ins(string const& instruction, string const& asmcomment)
             }
         }
         (*a) << "#  " << asmcomment <<endl;
+#elif 1
+        comment = p.comment;
+        if( p.remain.empty() && p.comment.empty() ){
+            comment = asmcomment;
+            did_asmcomment = true;
+            // if final instruction comes with a comment, then
+            // push asmcomment to a separate line (as an rcom)
+        }
+        if(p.op.size() == 0){
+            if( p.comment.empty() )
+                ins(); // blank line
+            else
+                (*a) << setw(inwidth+opwidth+argwidth) << "";
+        }else{
+            (*a) << left << indent;
+            if(p.args.empty()){
+                if( comment.empty() )
+                    (*a) << p.op << endl;
+                else
+                    (*a) << setw(inwidth+opwidth+argwidth) << "";
+            }else{
+                (*a) << setw(opwidth-1) << p.op << " ";
+                if( comment.empty() )
+                    (*a) << p.args <<endl;
+                else
+                    (*a) << setw(argwidth-1) << p.args << " ";
+            }
+        }
+        if( comment.size() ){
+            (*a) << "# " << comment << endl;
+        }
+#endif
+        remain = p.remain;
+        cout<<" iterate: remain = "<<remain<<endl;
     }
+    if( !did_asmcomment )
+        rcom(asmcomment);
 #if 0
     // tellp also seemed buggy on Aurora
     //auto const sz0 = a->tellp();
@@ -370,6 +462,9 @@ int main(int,char**){
         std::forward_list<std::pair<std::string,std::string>> block =
         {{"counter","%s1"},{"counter_beg","0"},{"to","5"}};
         a.scope(block,"opt_block_name");
+        a.ins("mpy %s0,%s1,%s2#FIRST;mpy %s0,%s1,%s2#AGAIN"); // multi-line asm
+        a.ins("add %s0,%s1,%s2;add %s0,%s1,%s2","add twice"); // multi-line asm
+        a.ins("sub %s0,%s1,%s2;sub %s0,%s1,%s2#DIFF","diff twice"); // multi-line asm
         a.pop_scope();
         a.scope(block,"a second block (not explicitly popped)");
         a.lcom("For really long comments you can use 'lcom', which also"
