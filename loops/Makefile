@@ -4,13 +4,15 @@ all: fuse2 fuse2lin mega1-sample.log
 	@echo 'ALL DONE with make all'
 more: all tf2-1.log tf2-2.log tf2-3.log tf2-4.log tf2-0.log tf2-5.log tf2-m.log tf2-sample.log
 
-force:
+# This may be somewhat lengthy
+force: force-lib
 	rm -f tf2-1.log tf2-2.log tf2-3.log tf2-4.log tf2-0.log tf2-5.log tf2-m.log
 	$(MAKE) 2>&1 | tee tf2-force.log
-force-lib:
-	$(MAKE) -C .. libjit1.a
 ../libjit1.a:
 	$(MAKE) -C .. $(patsubst ../%,%,$@)
+force-lib:
+	$(MAKE) -C .. force
+
 fuse2: fuse2.cpp ../libjit1.a
 	g++ -Wall -std=c++11 -ggdb -O3 $^ -o $@
 .PHONY: mega1

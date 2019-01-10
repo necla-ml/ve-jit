@@ -239,14 +239,13 @@ void test_kernel_loadreg(char const* const cmd, unsigned long const parm, int co
             ;
         switch(opt_level){
             case(0):
-                // Here's an unoptimized version, ok for all values of parm
-                //    2 instructions to load %s2
-                //    2 instructions to add, sub
-                //    1 instruction to return
+                // WRONG: lea.sl CLOBBERS the high bits, so if 
+                // Here's an unoptimized version
                 n += snprintf(jit_parm,jsz-n,
                         "\t# load JIT parm into %%s2\n"
-                        "\tlea    %%s2, 0x%x\n"
-                        "\tlea.sl %%s2, 0x%x(,%%s2)\n",
+                        "\tlea    %%s1, 0x%x        # might sign-extend into hi bits\n"
+                        "\tor     %%s1, 0, (32)0    # keep only lowest 32 bits\n"
+                        "\tlea.sl %%s2, 0x%x(,%%s1) # add the high bits\n",
                         (uint32_t)parm,  (uint32_t)(parm>>32) + ((int32_t)parm<0? 1: 0));
                 assert(n<jsz);
                 break;

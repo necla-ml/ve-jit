@@ -32,7 +32,12 @@ VE_EXEC:=ve_exec
 OBJDUMP:=nobjdump
 OBJCOPY:=nobjcopy
 endif
-all: $(TARGETS)
+all: $(TARGETS) libjit1.a
+
+.PHONY: force
+force: # force libjit1.a to be recompiled
+	rm -f libjit1.a asmfmt.o jitpage.o jit_data.o
+	$(MAKE) libjit1.a
 
 vejit.tar.gz: asmfmt.hpp asmfmt_fwd.hpp jitpage.h libjit1.a
 	rm -rf vejit
@@ -116,11 +121,14 @@ jitve_math: jitve_math.c jitve_util.o
 # newer api uses jitpage.h (instead of jitve_util.h)
 # and supports C++         (asmfmt_fwd.hpp)
 # 
-libjit1.a: asmfmt.o jitpage.o
+libjit1.a: asmfmt.o jitpage.o jit_data.o
 	$(AR) cq $@ $^
 .PRECIOUS: asmfmt.o
 asmfmt.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
 	$(CXX) ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
+.PRECIOUS: jit_data.o
+jit_data.o: jit_data.c jit_data.h
+	$(CC) ${CFLAGS} -O2 -c $< -o $@
 .PRECIOUS: jjitpage.o
 jitpage.o: jitpage.c jitpage.h
 	$(CXX) $(CXXFLAGS) -O2 -c $< -o $@

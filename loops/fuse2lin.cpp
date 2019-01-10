@@ -25,7 +25,7 @@ typedef int Lpi; // Loop-index type
 /** string up-to-n first, dots, up-to-n last of vector \c v[0..vl-1] w/ \c setw(wide) */
 template<typename T>
 std::string vecprt(int const n, int const wide, std::vector<T> v, int const vl){
-    assert( v.size() >= vl );
+    assert( v.size() >= (size_t)vl );
     std::ostringstream oss;
     for(int i=0; i<vl; ++i){
         if( i < n ){ oss <<setw(wide)<< v[i]; }
@@ -88,7 +88,7 @@ std::vector<Vab> ref_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
         int const bignum = std::max( ii, jj );
         int const wide = 1 + (bignum<10? 1: bignum <100? 2: bignum<1000? 3: 4);
 
-        for(int l=0; l<vabs.size(); ++l){
+        for(size_t l=0; l<vabs.size(); ++l){
             auto const& a = vabs[l].a;
             auto const& b = vabs[l].b;
             auto const& vl = vabs[l].vl;
@@ -123,7 +123,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
     // generate reference vectorized loop-index values into vabs.a and vabs.b
     std::vector<Vab> vabs = ref_vloop2(vlen, ii, jj, 1/*verbose*/);
     assert( vabs.size() > 0 );
-    assert(vabs.size() == ((ii*jj) +vlen -1) / vlen);
+    assert(vabs.size() == (size_t)(((ii*jj) +vlen -1) / vlen));
     // generate reference set of offset vectors
     // output:  offs (linear combination output)
     std::vector<std::vector<Lpi>> offs;
@@ -137,7 +137,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
         offs.push_back(offsets);
         cout<<"offs: "<<vecprt(n,wide+2,offsets,vl)<<endl;
     }
-    for(int i=0; i<offs.size(); ++i){
+    for(size_t i=0; i<offs.size(); ++i){
         auto const vl = vabs[i].vl;
         cout<<"offs: "<<vecprt(n,wide+2,offs[i],vl)<<endl;
     }
@@ -154,7 +154,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
     register int vl = vlen;
     register uint64_t cnt = 0UL;
     //if (cnt+vl > iijj) vl = iijj - cnt;  // simplifies for cnt=0
-    if (vl > iijj) vl = iijj;
+    if ((uint64_t)vl > iijj) vl = iijj;
 
 #define FOR(I,VL) for(int I=0;I<VL;++I)
     if(0){
@@ -426,7 +426,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
         assert( vl == vabs[iloop].vl );
         FOR(i,vl) assert( a[i] == vabs[iloop].a[i] );
         FOR(i,vl) assert( b[i] == vabs[iloop].b[i] );
-        FOR(i,vl) assert( o[i] == offs[iloop][i] );
+        FOR(i,vl) assert( o[i] == (uint64_t)offs[iloop][i] );
         ++iloop; // just for above debug assertions
         //cout<<" next loop??? cnt+vl="<<cnt+vl<<" iijj="<<iijj<<endl;
 #undef FOR
@@ -541,7 +541,7 @@ void test_vloop2_no_unroll(Lpi const vlen, Lpi const ii, Lpi const jj)
     register uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
     register int vl = vlen;
     register uint64_t cnt = 0UL;
-    if (vl > iijj) vl = iijj; //in general: if (cnt+vl > iijj) vl=iijj-cnt;
+    if ((uint64_t)vl > iijj) vl = iijj; //in general: if (cnt+vl > iijj) vl=iijj-cnt;
     cout<<"===   lea %iijj, 0,"<<ii<<"(,0)"<<endl;
     cout<<"===   lea %vl,   0,"<<jj<<"(,0) // vl used as tmp reg"<<endl;
     cout<<"===   mulu.l %iijj, %iijj, %vl  // opt last 3 for small ii, jj !"<<endl;
