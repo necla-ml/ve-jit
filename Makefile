@@ -11,10 +11,31 @@ SHELL:=/bin/bash
 CFLAGS:=-O2 -g2
 CXXFLAGS:=$(CFLAGS) -std=c++1z
 else
-TARGETS=asmkern0.asm syscall_hello \
-	test_naspipe test_vejitpage_sh \
+#
+# we may want to generate jit code on host OR ve
+# Ex. 1: Simple tests, libraries of complex kernels precompiled for VE:
+#         Host precompiles a jit kernel to a PERSISTENT .bin file,
+#         which is mmaped and executed on the VE.
+#         Host program invokes 'ncc' or 'nas' or ... main output-->file
+# Ex. 2: Repetitive testing (avoiding zillions of .bin files):
+#         test program runs on VE already and generates a string of
+#         code and (somehow) converts the string to machine code that
+#         it puts in a JIT page.  Only TEMPORARY files are used on the
+#         host filesystem.
+#         VE program invokes 'ncc' or 'nas' or ... main output-->memory
+#         (but originally I kept around the .bin files)
+#
+# Originally, I ran JIT testing code entirely on VE, keeping the .bin files.
+# A big speedup would be to run a simplified 'nas' entirely on the VE, avoiding
+# all temporary files.  Unfortunately 'ncc' and 'nas' and tools run on host only,
+# and some steps require real files on the host filesystem :(
+#
+TARGETS=asmkern0.asm libjit1.a libjit1-x86.a \
 	asmkern.bin asmkern1.bin msk \
-	jitve0 jitve_hello test_strMconst jitve_math jitpp_hello
+	syscall_hello \
+	jitve0 jitve_hello test_strMconst jitve_math \
+	jitpp_hello test_naspipe test_vejitpage_sh \
+	jitpp_loadreg
 CC?=ncc-1.5.1
 CXX?=nc++-1.5.1
 CC:=ncc-1.5.1
@@ -121,20 +142,30 @@ jitve_math: jitve_math.c jitve_util.o
 # newer api uses jitpage.h (instead of jitve_util.h)
 # and supports C++         (asmfmt_fwd.hpp)
 # 
+# Note that libjit1.a could be running x86 code or VE code
+#
+.PRECIOUS: asmfmt.o jit_data.o jitpage.o
 libjit1.a: asmfmt.o jitpage.o jit_data.o
 	$(AR) cq $@ $^
-.PRECIOUS: asmfmt.o
 asmfmt.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
 	$(CXX) ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
-.PRECIOUS: jit_data.o
 jit_data.o: jit_data.c jit_data.h
 	$(CC) ${CFLAGS} -O2 -c $< -o $@
-.PRECIOUS: jjitpage.o
 jitpage.o: jitpage.c jitpage.h
 	$(CXX) $(CXXFLAGS) -O2 -c $< -o $@
-	#$(CC) $(CFLAGS) -O2 -c $< -o $@
+libjit1-x86.a: asmfmt-x86.o jitpage-x86.o jit_data-x86.o
+	ar cq $@ $^
+asmfmt-x86.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
+	g++ ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
+jit_data-x86.o: jit_data.c jit_data.h
+	g++ ${CFLAGS} -O2 -c $< -o $@
+jitpage-x86.o: jitpage.c jitpage.h
+	g++ $(CXXFLAGS) -O2 -c $< -o $@
 #asmfmt.cpp has a standalone demo program with -D_MAIN compiler	
 asmfmt: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp jitpage.o
+	g++ $(CXXFLAGS) -O2 -E -dD $< >& $(patsubst %,%.i,$@)
+	g++ ${CXXFLAGS} -D_MAIN asmfmt.cpp jitpage.c -o $@
+asmfmt-ve: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp jitpage.o
 	$(CXX) $(CXXFLAGS) -O2 -E -dD $< >& $(patsubst %,%.i,$@)
 	#$(CXX) $(CXXFLAGS) -O2 -D_MAIN $(filter-out %.hpp,$^) -o $@
 	$(CXX) ${CXXFLAGS} -D_MAIN asmfmt.cpp jitpage.c -o $@
@@ -166,6 +197,11 @@ msk: msk.cpp
 	$(OBJDUMP) -d $@ >& msk.dis
 	$(VE_EXEC) ./$@ 2>&1 | tee msk.log
 endif
+jitpp_loadreg: jitpp_loadreg.cpp asmfmt.o jitpage.o jit_data.o
+	$(CXX) $(CFLAGS) -O2 -E -dD $< >& $(patsubst %.cpp,%.i,$<)
+	$(CXX) $(CFLAGS) -O2 $^ -o $@
+	$(CXX) $(CFLAGS) -Wa,-adhln -c $^ >& $(patsubst %.cpp,%.asm,$<)
+	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
 %.asm: %.c
 	$(CC) $(CFLAGS) -g2 -Wa,-adhln -S $< >& $*.s
 	$(CC) $(CFLAGS) -Wa,-adhln -c $< >& $*.asm

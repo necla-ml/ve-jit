@@ -8,12 +8,14 @@ more: all tf2-1.log tf2-2.log tf2-3.log tf2-4.log tf2-0.log tf2-5.log tf2-m.log 
 force: force-lib
 	rm -f tf2-1.log tf2-2.log tf2-3.log tf2-4.log tf2-0.log tf2-5.log tf2-m.log
 	$(MAKE) 2>&1 | tee tf2-force.log
-../libjit1.a:
-	$(MAKE) -C .. $(patsubst ../%,%,$@)
+../libjit1-x86.a:
+	#$(MAKE) -C .. $(patsubst ../%,%,$@)
+	cd .. && $(MAKE) force
 force-lib:
-	$(MAKE) -C .. force
+	rm -f ../*-x86.a ../*-x86.o
+	$(MAKE) -C .. libjit1-x86.a
 
-fuse2: fuse2.cpp ../libjit1.a
+fuse2: fuse2.cpp ../libjit1-x86.a
 	g++ -Wall -std=c++11 -ggdb -O3 $^ -o $@
 .PHONY: mega1
 # Instead of randomly trying a bunch of tf2-FOO.log targets,

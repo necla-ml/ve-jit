@@ -3,7 +3,9 @@
  * - merge with ve_regs (symbolic registers, scopes) work should continue
  *   in a separate directory (before things get overly complicated).
  */
+#include "jitpage.h"
 #include "asmfmt.hpp"
+#include "codegenasm.hpp"
 
 #include <iostream>
 #include <iomanip>
@@ -18,7 +20,7 @@
  * - VE inline assembly ==> probably need VE ncc compiler
  * - please use plain 'C' for this [and other] jit abi wrappers
  * \return 0 or 1 error count (returned %s0 must equal \c expect) */
-int call_loadreg( Jitpage *page, uint64_t const expect){
+int call_loadreg( JitPage *page, uint64_t const expect){
     int nerr = 0;
     uint64_t cval;
     //
@@ -31,8 +33,8 @@ int call_loadreg( Jitpage *page, uint64_t const expect){
             "\tbsic %lr,(,%s12)\n"
             "\tor %[cval], 0,%s1\n" /* retrieve kernel compute results */
             :[cval]"=r"(cval)
-            :[page]"r"(page->addr)
-            :"%s0","%s1" "%s12"
+            :[page]"r"(page->mem)
+            :"%s0","%s1","%s12"
        );
     // Check for errors in our kernel outputs:
     if( cval != expect ) ++nerr;
@@ -45,16 +47,15 @@ int call_loadreg( Jitpage *page, uint64_t const expect){
 
 using namespace std;
 
-void test_kernel_loadreg(char const* const cmd, unsigned long const parm, int const opt_level){
+void test_loadreg(char const* const cmd, unsigned long const parm, int const opt_level){
     string veasm_code;
     {
         // more advanced: I output the assembler code to a std::string
         string fname(""); // do not output to file (just get the std::string)
-        AsmFmtCols loadreg(); // assembler line pretty printer
-        loadreg
-            .lcom(STR(Input:    None))
-            .lcom(STR(Output:   %s0 : loaded with some jit constant))
-            .lcom(STR(Clobbers: %s0, maybe %s1))
+        AsmFmtCols loadreg; // assembler line pretty printer
+        loadreg.lcom("Input:    None")
+            .lcom("Output:   %s0 : loaded with some jit constant")
+            .lcom("Clobbers: %s0, maybe %s1")
             ;
         veasm_code = loadreg.flush();
         cout<<"veasm_code:\n"<<veasm_code<<endl;
@@ -62,7 +63,6 @@ void test_kernel_loadreg(char const* const cmd, unsigned long const parm, int co
     printf("\nTest: %s\n", cmd);
     printf("        opt_level=%d\n",opt_level);
     printf("        parm=0x%16lx = %lu = %ld\n",parm, parm, (signed long)parm);
-    printf("        kase=%d\n", kase);
 
     int kase = 0; // for simple stuff, don't need execution path machinery.
     string program;
@@ -72,7 +72,7 @@ void test_kernel_loadreg(char const* const cmd, unsigned long const parm, int co
     {
         printf("// create the JIT assembly code\n");
         fflush(stdout);
-        AsmFmtCols prog(ss);
+        AsmFmtCols prog("");
         prog.lcom(STR(Input:    None))
             .lcom(STR(Output:   %s0 : loaded with some jit constant))
             .lcom(STR(Clobbers: %s0, maybe %s1))
@@ -116,7 +116,7 @@ void test_kernel_loadreg(char const* const cmd, unsigned long const parm, int co
                 lea="lea "+reg+","+jithex(lo)+"# load: sext(32-bit)";
             }else if(lo==0){
                 kase+=3;
-                lea="lea.sl "+reg+","+jihex(hi)+"# load: hi-only";
+                lea="lea.sl "+reg+","+jithex(hi)+"# load: hi-only";
             }
             // (more lea kases below, in 2-op section)
             if(!lea.empty()) lea.append("->"+jithex(parm)+" = "+jitdec(parm));
@@ -132,12 +132,16 @@ void test_kernel_loadreg(char const* const cmd, unsigned long const parm, int co
             }else{ // search for logical combination of I and M values
                 // set or reset 7 LSBs to zero, and check if that is an M value
                 // alt. check properties of sign-extending the lowest 7 bits
-                if( isimm(sext7^lo7) ){
+                if( isimm(parm^sext7) ){
                     kase+=30;
                     // if A = B^C, then B = A^C and C = B^A
-                    uint64_t mval = sext7^lo7;
-                    uint64_t ival = sext7;
-                    assert( mval & ival == sext7 );
+                    int64_t const ival = sext7;
+                    uint64_t const mval = parm^sext7;
+                    cout<<" parm =0x"<<hex<<parm<<endl;
+                    cout<<" lo7  =0x"<<lo7<<endl;
+                    cout<<" sext7=0x"<<sext7<<endl;
+                    cout<<" mval =0x"<<mval<<dec<<endl;
+                    assert( parm == (ival ^ mval) );
                     log="xor "+reg+","+jitdec(sext7)+","+jitimm(mval)+"# load: xor(I,M)";
                 }
                 if(log.empty() && isimm(parm|0x7f) && sext7 < 0){ // 7th lsb == 1 to sign extend
@@ -145,7 +149,15 @@ void test_kernel_loadreg(char const* const cmd, unsigned long const parm, int co
                     // AND with sext7 retains the upper bits and allows some variation in lower 6 bits
                     // Ex. 0b1\+ 0\+ 1[01]{1,6}$        7th lsb always '1',
                     // Ex. 0b0\+ 1\+ 1[01]{1,6}$        so sext7 has all higher bits set
-                    log="and "+reg+",~"+jithex(~lo7)+","+jitimm(parm|0x3f)+"# load: and(I<0,M)";
+                    int64_t const ival = sext7;
+                    uint64_t const mval = parm & sext7;
+                    cout<<" parm =0x"<<hex<<parm<<endl;
+                    cout<<" lo7  =0x"<<lo7<<endl;
+                    cout<<" sext7=0x"<<sext7<<endl;
+                    cout<<" mval =0x"<<mval<<dec<<endl;
+                    assert( parm == (ival & mval) );
+                    assert( sext7 == (0xffffFFFFffff80 & lo7) );
+                    log="and "+reg+","+jitdec(sext7)+","+jitimm(parm|0x3f)+"# load: and(I<0,M)";
                 }
                 if(log.empty() && isimm(parm & ~0x3f)){ // can we OR some lsbs?
                     kase+=50;
@@ -190,9 +202,12 @@ void test_kernel_loadreg(char const* const cmd, unsigned long const parm, int co
             // do not check multiply, since it might take longer that 2-op sequences
             if(!ari.empty()) ari.append("->"+jithex(parm)+" = "+jitdec(parm));
 
-            have_1op_load = !( lea.empty() && log.empty() && ari.empty() );
+            bool const have_1op_load = !( lea.empty() && log.empty() && ari.empty() );
 
             if( have_1op_load ){
+                cout<<" lea: "<<lea<<endl;
+                cout<<" log: "<<log<<endl;
+                cout<<" ari: "<<ari<<endl;
                 // a dedicated "lea generator" would have options to prefer lea vs logical vs arith,
                 // perhaps based on context.
                 if( !lea.empty() )
@@ -207,7 +222,7 @@ void test_kernel_loadreg(char const* const cmd, unsigned long const parm, int co
                 if((int32_t)lo > 0){
                     kase+=4;
                     assert( hi != 0 );
-                    lea="lea "+reg+","+jithex(lo)+"# lo>0
+                    lea="lea "+reg+","+jithex(lo)+"# lo>0"
                         + ";lea.sl "+reg+","+jithex(hi)+"(,"+reg+") # load: 2-op";
                 }else{ // sign extension means lea.sl of hi will have -1 added to it...
                     kase+=5;
@@ -227,12 +242,12 @@ void test_kernel_loadreg(char const* const cmd, unsigned long const parm, int co
         // and return to caller, "parm has been loaded in %s0"
         //
         prog.ins("b.l (,%lr)", "return");
-        prog.lcom("finished loadreg_opt"+jitdec(opt_level)+" case "<<kase<<"\n");
-        program = a.flush();
+        prog.lcom("finished loadreg_opt"+jitdec(opt_level)+" case "+jitdec(kase)+"\n");
+        program = prog.flush();
     }
     assert( program.size() < 4095 ); // will add a zero terminator
     char kernel[4096U];
-    snprintf(kernel_loadreg,4096,"%s\0",program);
+    snprintf(kernel,4096,"%s\0",program.c_str());
     printf("        kase=%d\n", kase);
     printf("Raw kernel string:\n%s\n-------------",&kernel[0]);
     // (the file routines are plenty verbose...)
@@ -285,6 +300,28 @@ void test_kernel_loadreg(char const* const cmd, unsigned long const parm, int co
 }
 int main(int,char**)
 {
-    test_loadreg();
+    uint64_t const one=1U;
+    uint64_t parm;
+    int opt_level = 1;
+    {
+        parm = (one<<49)-27; // 1-op add
+        string cmd="ldreg"+jitdec(opt_level)+"-2^49-27";
+        test_loadreg( cmd.c_str(), parm, opt_level );
+    }
+    {
+        parm = ((one<<49)-1U)^0x25; // with 7 lsbs 1, get an Mval
+        string cmd="ldreg"+jitdec(opt_level)+"-xor2^49-1,0x25";
+        test_loadreg( cmd.c_str(), parm, opt_level );
+    }
+    {
+        parm = ~((one<<49)-1) ^ 0x27; // with 7 lsbs 0, get an Mval
+        string cmd="ldreg"+jitdec(opt_level)+"-xor ~(2^49-1),0x2r79";
+        test_loadreg( cmd.c_str(), parm, opt_level );
+    }
+    {
+        parm = ((one<<49)-1) & 0x29; // with 7 lsbs 0, achieve Mval
+        string cmd="ldreg"+jitdec(opt_level)+"-and (2^49-1),0x29";
+        test_loadreg( cmd.c_str(), parm, opt_level );
+    }
 }
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
