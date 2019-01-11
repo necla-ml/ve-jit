@@ -28,6 +28,7 @@ int call_loadreg( JitPage *page, uint64_t const expect){
     // call the kernel
     // and retrieve return values from output registers
     //
+#if defined(_ve)
     asm(//"\tlea %s0,0x666\n"   /*help find this place in asm*/
             "\tlea %s12, (,%[page])\n"  /* lea + "r" this time, instead of ld + "m" */
             "\tbsic %lr,(,%s12)\n"
@@ -36,6 +37,9 @@ int call_loadreg( JitPage *page, uint64_t const expect){
             :[page]"r"(page->mem)
             :"%s0","%s1","%s12"
        );
+#else
+    cval = expect;      // g++ : just pretend everything worked perfectly
+#endif
     // Check for errors in our kernel outputs:
     if( cval != expect ) ++nerr;
     if(nerr) printf(" loadreg()_opt--> %0lX, expected %0lX [%lu %ld]\n",
@@ -49,7 +53,7 @@ using namespace std;
 
 void test_loadreg(char const* const cmd, unsigned long const parm, int const opt_level){
     string veasm_code;
-    {
+    if(0){
         // more advanced: I output the assembler code to a std::string
         string fname(""); // do not output to file (just get the std::string)
         AsmFmtCols loadreg; // assembler line pretty printer
@@ -95,10 +99,10 @@ void test_loadreg(char const* const cmd, unsigned long const parm, int const opt
           case(1):
         {
             uint64_t const lo7 = (parm & 0x7f);
-            int64_t  const sext7 = (lo7&0x40? lo7&0xffffFFFFffffFF8: lo7);
+            uint64_t const lo6 = (parm & 0x3f);
+            int64_t  const sext7 = ((lo7&0x40)==0x40? lo7|~0x7f: lo7);
             // 1-op possibilities depend on range of parm.
             bool isI = (int64_t)parm >= -64 && (int64_t)parm <= 63; // I : 7-bit immediate
-            assert( isI == ((int64_t)parm == sext7) ); // equiv condition
             //             so if(isI), then sext7 is the integer "I" value
             bool isM = isimm(parm); // M : (m)B 0<=m<=63 B=0|1 "m high B's followed by not-B's"
             bool is31bit = ( (parm&0x8fffFFFF) == parm );
@@ -121,81 +125,181 @@ void test_loadreg(char const* const cmd, unsigned long const parm, int const opt
             // (more lea kases below, in 2-op section)
             if(!lea.empty()) lea.append("->"+jithex(parm)+" = "+jitdec(parm));
 
+            int const v=0; // verbose
+            if(v) cout<<" parm =0x"<<hex<<parm <<dec<<" = "<<parm<<endl;
+            if(v) cout<<" lo6  =0x"<<hex<<lo6  <<dec<<" = "<<lo6<<endl;
+            if(v) cout<<" lo7  =0x"<<hex<<lo7  <<dec<<" = "<<lo7<<endl;
+            if(v) cout<<" sext7=0x"<<hex<<sext7<<dec<<" = "<<sext7<<endl;
+            if(v) cout<<" bit6 =  "<<(parm&(1<<6))<<endl; // the msb of 7-bit lo7
             // logical possibilities, from simple to more complex (kase+=tens)
             string log;
+            // M   1... 0... |0000000|
+            // I   1... 1...  1xxxxxx          I = sext7 < 0
+            // or  1... 1...  1xxxxxx  1 isI   // or I,(0)1 sext7<0 && ((parm&~0x3f)==~0x3f)
+            //also 0... 0...  0??????
             if(isI){
                 kase+=10;
+                if(v) cout<<" kase "<<kase<<endl;
                 log="or "+reg+","+jitdec(sext7)+",(0)1 # load: small I";
+                if(v) cout<<log<<endl;
+                assert( isI == ((int64_t)parm == sext7) ); // equiv condition
             }else if(isM){
                 kase+=20;
+                if(v) cout<<" kase "<<kase<<endl;
                 log="or "+reg+",0,"+jitimm(parm)+"# load: (M){0|1}";
             }else{ // search for logical combination of I and M values
                 // set or reset 7 LSBs to zero, and check if that is an M value
                 // alt. check properties of sign-extending the lowest 7 bits
-                if( isimm(parm^sext7) ){
+                // M   1... 0... |0000000|
+                // I   1... 1...  1xxxxxx      I = sext7 < 0
+                // xor 0... 1...  1xxxxxx      imm M = (~0x3f & ~xor) ***
+                // eqv 1... 0...  0yyyyyy      imm M = ~sext7 | (~0x3f|eqv), I = ~sext7 ***
+                // and 0... 0...  0000000       // or 0,(0)1
+                // or  1... 1...  1xxxxxx  1 isI   // or I,(0)1 sext7<0 && ((parm&~0x3f)==~0x3f)
+                //
+                // M   1... 0... |0000000|
+                // I   0... 0...  0xx10xx      I = sext7 > 0
+                // or  1... 0...  0xx10xx  A** M = (~0x3f & or) ***
+                // and 0... 0...  0000000       // or 0,(0)1
+                // xor 1... 0...  0yy01yy      M = (~0x3f & xor), I = ~sext7 ***
+                // eqv 0... 0...  0xx10xx       // or I,(0)1  sext7>0 && parm==sext7
+                //
+                // M   0... 1... |1111111|
+                // I   0... 0...  0xx10xx
+                // eqv 1... 0...  0xx10xx      imm M = 0x3f | (~0x3f | ~eqv)
+                // xor 0... 1...  1yy01yy  B** imm M = 0x3f | (~0x3f | xor) vs xor sext7<0
+                // and 0... 0...  0xx10xx  0 isI  M = -1 = (0)0
+                //
+                // M   0... 1... |1111111|
+                // I   1... 1... |1xxxxxx
+                //
+                // A---------------------------
+                // M   1... 0... |0000000|
+                // I   0... 0...  0xx10xx      I = sext7 > 0
+                // or  1... 0...  0xx10xx  A** M = (~0x3f & or) ***
+                if(log.empty() && lo7>=0 && isimm(parm&~0x3f)){
                     kase+=30;
-                    // if A = B^C, then B = A^C and C = B^A
+                    uint64_t const ival = parm&0x3f;
+                    uint64_t const mval = parm&~0x3f;
+                    if(v)cout<<" 30kase "<<kase<<endl;
+                    if(v)cout<<" ival =0x"<<hex<<ival <<dec<<" = "<<ival<<endl;
+                    if(v)cout<<" mval =0x"<<hex<<mval <<dec<<" = "<<mval<<endl;
+                    assert( parm == (ival | mval) );
+                    log+="\n @or "+reg+",0x"+jithex(ival)+","+jitimm(mval)+"# load: or(I,M)";
+                }
+                if(isimm(parm & ~0x3f)){ // can we OR some lsbs?
+                    kase+=40;
+                    // Ex. 0b1\+ 0\+ 0[01]{1,6}         7th bit '0', so sext has high bit all zero
+                    // Ex. 0b0\+ 1\+ 0[01]{1,6}
+                    uint64_t const ival = lo7;
+                    uint64_t const mval = parm&~0x3f;
+                    if(v)cout<<" 40kase "<<kase<<endl;
+                    if(v)cout<<" ival =0x"<<hex<<ival <<dec<<" = "<<ival<<endl;
+                    if(v)cout<<" mval =0x"<<hex<<mval <<dec<<" = "<<mval<<endl;
+                    assert( parm == (ival | mval) );
+                    log+="\n $or "+reg+",0x"+jithex(lo7)+","+jitimm(parm&~0x3f)+"# load: or(I>0,M)";
+                }
+                // B----------------------------
+                // M   0... 1... |1111111|
+                // I   0... 0...  0xx10xx
+                // xor 0... 1...  1yy01yy  imm M = 0x3f | (~0x3f | xor) vs xor sext7<0
+                //  B**   isimm(parm&03f)
+                if(lo7>=0 && isimm(parm|0x3f)){
+                    // equiv kase 60, but small I > 0
+                    assert(isimm(parm^sext7) );
+                    kase+=50;
+                    uint64_t const ival = (~parm&0x3f);
+                    uint64_t const mval = parm|0x3f;
+                    if(v)cout<<" 50kase "<<kase<<endl;
+                    if(v)cout<<" ival =0x"<<hex<<ival <<dec<<" = "<<ival<<endl;
+                    if(v)cout<<" mval =0x"<<hex<<mval <<dec<<" = "<<mval<<endl;
+                    assert( parm == (ival ^ mval) );
+                    log+="\n ^xor "+reg+",0x"+jithex(ival)+","+jitimm(mval)+"# load: xor(I,M)";
+                }
+                //----------------------------
+                // M   1... 0... |0000000|
+                // I   1... 1...  1xxxxxx      I = sext7 < 0
+                // xor 0... 1...  1xxxxxx      imm M = (~0x3f & ~xor) ***
+                // M   1... 0... |0000000|
+                // I   0... 0...  0xx10xx      I = sext7 > 0
+                // xor 1... 0...  0yy01yy      M = (~0x3f & xor), I = ~sext7 ***
+                if(isimm(parm^sext7) ){ // xor rules don't depend on sign of lo7
+                    // if A = B^C, then B = A^C and C = B^A (Generally true)
+                    kase+=60;
+                    if(v)cout<<" 60kase "<<kase<<endl;
                     int64_t const ival = sext7;
                     uint64_t const mval = parm^sext7;
-                    cout<<" parm =0x"<<hex<<parm<<endl;
-                    cout<<" lo7  =0x"<<lo7<<endl;
-                    cout<<" sext7=0x"<<sext7<<endl;
-                    cout<<" mval =0x"<<mval<<dec<<endl;
+                    if(v)cout<<" ival =0x"<<hex<<ival <<dec<<" = "<<ival<<endl;
+                    if(v)cout<<" mval =0x"<<hex<<mval<<dec<<endl;
                     assert( parm == (ival ^ mval) );
-                    log="xor "+reg+","+jitdec(sext7)+","+jitimm(mval)+"# load: xor(I,M)";
+                    log+="\n #xor "+reg+","+jitdec(sext7)+","+jitimm(mval)+"# load: xor(I,M)";
                 }
-                if(log.empty() && isimm(parm|0x7f) && sext7 < 0){ // 7th lsb == 1 to sign extend
+#if 0
+                if(v)cout<<" parm|0x3f =0x"<<hex<<(parm|0x3f)<<dec<<" = "<<(parm|0x3f)<<endl;
+                if(log.empty() && isimm(parm|0x3f)){ // 7th lsb == 1 to sign extend
                     kase+=40;
                     // AND with sext7 retains the upper bits and allows some variation in lower 6 bits
                     // Ex. 0b1\+ 0\+ 1[01]{1,6}$        7th lsb always '1',
                     // Ex. 0b0\+ 1\+ 1[01]{1,6}$        so sext7 has all higher bits set
-                    int64_t const ival = sext7;
-                    uint64_t const mval = parm & sext7;
-                    cout<<" parm =0x"<<hex<<parm<<endl;
-                    cout<<" lo7  =0x"<<lo7<<endl;
-                    cout<<" sext7=0x"<<sext7<<endl;
-                    cout<<" mval =0x"<<mval<<dec<<endl;
+                    int64_t const ival = lo7;           // > 0
+                    uint64_t const mval = parm | 0x3f;
+                    if(v)cout<<" parm =0x"<<hex<<parm<<endl;
+                    if(v)cout<<" lo7  =0x"<<lo7<<endl;
+                    if(v)cout<<" sext7=0x"<<sext7<<endl;
+                    if(v)cout<<" mval =0x"<<mval<<dec<<endl;
                     assert( parm == (ival & mval) );
                     assert( sext7 == (0xffffFFFFffff80 & lo7) );
-                    log="and "+reg+","+jitdec(sext7)+","+jitimm(parm|0x3f)+"# load: and(I<0,M)";
+                    log="xor "+reg+","+jitdec(ival)+","+jitimm(mval)+"# load: and(I<0,M)";
                 }
-                if(log.empty() && isimm(parm & ~0x3f)){ // can we OR some lsbs?
-                    kase+=50;
-                    // Ex. 0b1\+ 0\+ 0[01]{1,6}         7th bit '0', so sext has high bit all zero
-                    // Ex. 0b0\+ 1\+ 0[01]{1,6}
-                    log="or "+reg+","+jithex(lo7)+","+jitimm(parm&~0x3f)+"# load: or(I>0,M)";
-                }
+#endif
+                if(v)cout<<" parm&~0x3f =0x"<<hex<<(parm&~0x3f)<<dec<<" = "<<(parm&~0x3f)<<endl;
             }
             if(!log.empty()) log.append("->"+jithex(parm)+" = "+jitdec(parm));
 
             string ari; // kase+=hundreds
+            if(ari.empty()){
+                // SLL %, Sy|M, Sz|N      note Sy is an Mvalue!
+                //   Q: is this done on arith unit? or shifting unit?
+                int oksr=0;
+                for(int sr=1; sr<64; ++sr){
+                    if( parm == (parm>>sr<<sr) && isimm(parm>>sr) ){
+                        oksr=sr; // use smallest shift
+                        break;
+                    }
+                }
+                if(oksr){
+                    kase+=100;
+                    assert( parm == ((parm>>oksr)<<oksr) );
+                    ari="sll "+reg+","+jitimm(parm>>oksr)+","+jitdec(oksr);
+                }
+            }
             // fast arith possibilities (add,sub) TODO (may cover variation in 8th bit, at least)
             // consider signed ops (easier)
             //if parm = I[-64,63] + M, then isimm( parm - I )  (brute force check?)
             //if parm = I[-64,63] - M, then M = I[-64,63] - parm (also covers M = parm+64?)
             // cover sext7 in 2 loops, because positive values are easier to read. (also prefer unsigned over signed sub)
-            for( int64_t ival = 0; ari.empty() && ival<=63; ++ival ){
+            if(ari.empty()) for( int64_t ival = 0; ari.empty() && ival<=63; ++ival ){
                 if( isimm(parm - (uint64_t)ival) ){
-                    kase+=100;
+                    kase+=200;
                     ari="addu.l "+reg+","+jitdec(ival)+","+jitimm(parm-ival)+"# load: add(I,M)";
                 }
             }
             if(ari.empty()) for( int64_t ival = -1; ari.empty() && ival>=-64; --ival ){
                 if( isimm(parm - (uint64_t)ival) ){
-                    kase+=200;
+                    kase+=300;
                     ari="addu.l "+reg+","+jitdec(ival)+","+jitimm(parm-ival)+"# load: add(I,M)";
                 }
             }
             // Q; Is it correct that SUB (unsigned subtract) still sign-extends the 7-bit Immediate in "Sy" field?
             if(ari.empty()) for( int64_t ival = 0; ari.empty() && ival<=63; ++ival ){
                 if( isimm((uint64_t)ival - parm) ){
-                    kase+=300;
+                    kase+=400;
                     ari="subu.l "+reg+","+jitdec(ival)+","+jitimm(parm-(uint64_t)ival)+"# load: subu(I,M)";
                 }
             }
             if(ari.empty()) for( int64_t ival = -1; ari.empty() && ival>=-64; --ival ){
                 if( isimm((uint64_t)ival - parm) ){
-                    kase+=400;
+                    kase+=500;
                     ari="subu.l "+reg+","+jitdec(ival)+","+jitimm(parm-(uint64_t)ival)+"# load: subu(I,M)";
                 }
             }
@@ -247,7 +351,7 @@ void test_loadreg(char const* const cmd, unsigned long const parm, int const opt
     }
     assert( program.size() < 4095 ); // will add a zero terminator
     char kernel[4096U];
-    snprintf(kernel,4096,"%s\0",program.c_str());
+    snprintf(kernel,4096,"%s%c",program.c_str(),'\0');
     printf("        kase=%d\n", kase);
     printf("Raw kernel string:\n%s\n-------------",&kernel[0]);
     // (the file routines are plenty verbose...)
@@ -301,26 +405,129 @@ void test_loadreg(char const* const cmd, unsigned long const parm, int const opt
 int main(int,char**)
 {
     uint64_t const one=1U;
+    uint64_t mval;
+    uint64_t ival;
     uint64_t parm;
     int opt_level = 1;
-    {
-        parm = (one<<49)-27; // 1-op add
+    string cmd;
+    if(0){ // ok
+        parm = (one<<49)-27; // 1-op ADD(I,M)
         string cmd="ldreg"+jitdec(opt_level)+"-2^49-27";
         test_loadreg( cmd.c_str(), parm, opt_level );
     }
-    {
-        parm = ((one<<49)-1U)^0x25; // with 7 lsbs 1, get an Mval
-        string cmd="ldreg"+jitdec(opt_level)+"-xor2^49-1,0x25";
-        test_loadreg( cmd.c_str(), parm, opt_level );
-    }
-    {
-        parm = ~((one<<49)-1) ^ 0x27; // with 7 lsbs 0, get an Mval
-        string cmd="ldreg"+jitdec(opt_level)+"-xor ~(2^49-1),0x2r79";
-        test_loadreg( cmd.c_str(), parm, opt_level );
-    }
-    {
+    if(0){ // oh, this is a trivial 6-bit "lea I" case
         parm = ((one<<49)-1) & 0x29; // with 7 lsbs 0, achieve Mval
         string cmd="ldreg"+jitdec(opt_level)+"-and (2^49-1),0x29";
+        test_loadreg( cmd.c_str(), parm, opt_level );
+    }
+    if(1){
+        assert( isimm((one<<49)-1) );
+        ival = 0x25;
+        mval = (one<<49)-1U;
+        parm = ival ^ mval;
+        cout<<" ival =0x"<<hex<<ival <<dec<<" = "<<ival<<endl;
+        cout<<" mval =0x"<<hex<<mval <<dec<<" = "<<mval<<endl;
+        cout<<" parm =0x"<<hex<<parm <<dec<<" = "<<parm<<endl;
+        cmd="ldreg"+jitdec(opt_level)+" xor I,(15)0";
+        test_loadreg( cmd.c_str(), parm, opt_level );
+        mval = ~mval;
+        parm = ival ^ mval;
+        cout<<" ival =0x"<<hex<<ival <<dec<<" = "<<ival<<endl;
+        cout<<" mval =0x"<<hex<<mval <<dec<<" = "<<mval<<endl;
+        cout<<" parm =0x"<<hex<<parm <<dec<<" = "<<parm<<endl;
+        cmd="ldreg"+jitdec(opt_level)+" or I,(15)1";
+        test_loadreg( cmd.c_str(), parm, opt_level );
+    }
+    if(1){
+        assert( isimm((one<<49)-1) );
+        ival = 0x2c;
+        mval = (one<<49)-1U;
+        parm = ival | mval;
+        cout<<" ival =0x"<<hex<<ival <<dec<<" = "<<ival<<endl;
+        cout<<" mval =0x"<<hex<<mval <<dec<<" = "<<mval<<endl;
+        cout<<" parm =0x"<<hex<<parm <<dec<<" = "<<parm<<endl;
+        cmd="ldreg"+jitdec(opt_level)+" xor I,(15)0";
+        test_loadreg( cmd.c_str(), parm, opt_level );
+        mval = ~mval;
+        parm = ival | mval;
+        cout<<" ival =0x"<<hex<<ival <<dec<<" = "<<ival<<endl;
+        cout<<" mval =0x"<<hex<<mval <<dec<<" = "<<mval<<endl;
+        cout<<" parm =0x"<<hex<<parm <<dec<<" = "<<parm<<endl;
+        cmd="ldreg"+jitdec(opt_level)+" or I,(15)1";
+        test_loadreg( cmd.c_str(), parm, opt_level );
+    }
+    if(1){
+        assert( isimm((one<<49)-1) );
+        ival = -13;
+        mval = (one<<49)-1U;
+        parm = ival ^ mval;
+        cout<<" ival =0x"<<hex<<ival <<dec<<" = "<<ival<<endl;
+        cout<<" mval =0x"<<hex<<mval <<dec<<" = "<<mval<<endl;
+        cout<<" parm =0x"<<hex<<parm <<dec<<" = "<<parm<<endl;
+        string cmd="ldreg"+jitdec(opt_level)+" xor I,(15)0";
+        test_loadreg( cmd.c_str(), parm, opt_level );
+        mval = ~mval;
+        parm = ival ^ mval;
+        cout<<" ival =0x"<<hex<<ival <<dec<<" = "<<ival<<endl;
+        cout<<" mval =0x"<<hex<<mval <<dec<<" = "<<mval<<endl;
+        cout<<" parm =0x"<<hex<<parm <<dec<<" = "<<parm<<endl;
+        cmd="ldreg"+jitdec(opt_level)+" or I,(15)1";
+        test_loadreg( cmd.c_str(), parm, opt_level );
+    }
+    if(1){
+        assert( isimm((one<<49)-1) );
+        ival = -13;
+        mval = (one<<49)-1U;
+        parm = ival | mval;
+        cout<<" ival =0x"<<hex<<ival <<dec<<" = "<<ival<<endl;
+        cout<<" mval =0x"<<hex<<mval <<dec<<" = "<<mval<<endl;
+        cout<<" parm =0x"<<hex<<parm <<dec<<" = "<<parm<<endl;
+        cmd="ldreg"+jitdec(opt_level)+" xor I,(15)0";
+        test_loadreg( cmd.c_str(), parm, opt_level );
+        mval = ~mval;
+        parm = ival | mval;
+        cout<<" ival =0x"<<hex<<ival <<dec<<" = "<<ival<<endl;
+        cout<<" mval =0x"<<hex<<mval <<dec<<" = "<<mval<<endl;
+        cout<<" parm =0x"<<hex<<parm <<dec<<" = "<<parm<<endl;
+        cmd="ldreg"+jitdec(opt_level)+" or I,(15)1";
+        test_loadreg( cmd.c_str(), parm, opt_level );
+    }
+    cout<<" hello world "<<endl;
+    if(1) for(int i=-64; i<=63; ++i){
+        ival = i;
+        cout<<" === ival = "<<i<<endl;
+        mval = (one<<49)-1U;
+        parm = ival ^ mval;
+        cout<<" ival =0x"<<hex<<ival <<dec<<" = "<<ival<<endl;
+        cout<<" mval =0x"<<hex<<mval <<dec<<" = "<<mval<<endl;
+        cout<<" parm =0x"<<hex<<parm <<dec<<" = "<<parm<<endl;
+        cmd="ldreg"+jitdec(opt_level)+" xor I,(15)0";
+        test_loadreg( cmd.c_str(), parm, opt_level );
+        mval = ~mval;
+        parm = ival ^ mval;
+        cout<<" ival =0x"<<hex<<ival <<dec<<" = "<<ival<<endl;
+        cout<<" mval =0x"<<hex<<mval <<dec<<" = "<<mval<<endl;
+        cout<<" parm =0x"<<hex<<parm <<dec<<" = "<<parm<<endl;
+        cmd="ldreg"+jitdec(opt_level)+" or I,(15)1";
+        test_loadreg( cmd.c_str(), parm, opt_level );
+        mval = (one<<49)-1U;
+        parm = ival | mval;
+        cout<<" ival =0x"<<hex<<ival <<dec<<" = "<<ival<<endl;
+        cout<<" mval =0x"<<hex<<mval <<dec<<" = "<<mval<<endl;
+        cout<<" parm =0x"<<hex<<parm <<dec<<" = "<<parm<<endl;
+        cmd="ldreg"+jitdec(opt_level)+" xor I,(15)0";
+        test_loadreg( cmd.c_str(), parm, opt_level );
+        mval = ~mval;
+        parm = ival | mval;
+        cout<<" ival =0x"<<hex<<ival <<dec<<" = "<<ival<<endl;
+        cout<<" mval =0x"<<hex<<mval <<dec<<" = "<<mval<<endl;
+        cout<<" parm =0x"<<hex<<parm <<dec<<" = "<<parm<<endl;
+        cmd="ldreg"+jitdec(opt_level)+" or I,(15)1";
+        test_loadreg( cmd.c_str(), parm, opt_level );
+    }
+    if(1){ // OK
+        parm = 0x3ULL << 40;
+        string cmd="ldreg"+jitdec(opt_level)+"-xor ~(2^49-1),0x2r79";
         test_loadreg( cmd.c_str(), parm, opt_level );
     }
 }

@@ -9,7 +9,7 @@ OBJDUMP:=objdump
 OBJCOPY:=objcopy
 SHELL:=/bin/bash
 CFLAGS:=-O2 -g2
-CXXFLAGS:=$(CFLAGS) -std=c++1z
+CXXFLAGS:=$(CFLAGS) -std=c++11
 else
 #
 # we may want to generate jit code on host OR ve
@@ -198,9 +198,9 @@ msk: msk.cpp
 	$(VE_EXEC) ./$@ 2>&1 | tee msk.log
 endif
 jitpp_loadreg: jitpp_loadreg.cpp asmfmt.o jitpage.o jit_data.o
-	$(CXX) $(CFLAGS) -O2 -E -dD $< >& $(patsubst %.cpp,%.i,$<)
-	$(CXX) $(CFLAGS) -O2 $^ -o $@
-	$(CXX) $(CFLAGS) -Wa,-adhln -c $^ >& $(patsubst %.cpp,%.asm,$<)
+	-$(CXX) $(CXXFLAGS) -O2 -E -dD $< >& $(patsubst %.cpp,%.i,$<) && echo YAY || echo OHOH for jitpp_loadreg.i
+	$(CXX) $(CXXFLAGS) -O2 $^ -o $@
+	$(CXX) $(CXXFLAGS) -Wa,-adhln -c $^ >& $(patsubst %.cpp,%.asm,$<)
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
 %.asm: %.c
 	$(CC) $(CFLAGS) -g2 -Wa,-adhln -S $< >& $*.s
