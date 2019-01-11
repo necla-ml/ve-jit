@@ -8,6 +8,7 @@
 #include <sstream>
 #include <array>
 #include <cassert>
+#include <type_traits>
 
 #include "regs/throw.hpp"
 #include <typeinfo>
@@ -165,7 +166,12 @@ std::string jitimm(T const t){
     return oss.str();
 }
 template<typename T>
-bool isimm(T const t){
+bool isIval(T const t){
+    typename std::make_signed<T>::type i = t;
+    return i >= -64 && i <= 63;
+}
+template<typename T>
+bool isMval(T const t){
     int64_t i=static_cast<int64_t>(t);
     // common and special cases
     if(i==0) return true;
@@ -183,6 +189,10 @@ bool isimm(T const t){
     //oss<<"("<<64-trailing<<")"<<leading_bit;
     //return oss.str();
     return true;
+}
+template<typename T>
+bool isimm(T const t){ // deprecated original name
+    return isMval(t);
 }
 
 #if 1-1 // original version

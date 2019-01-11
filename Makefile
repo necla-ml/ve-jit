@@ -10,6 +10,7 @@ OBJCOPY:=objcopy
 SHELL:=/bin/bash
 CFLAGS:=-O2 -g2
 CXXFLAGS:=$(CFLAGS) -std=c++11
+LIBVELI_TARGETS:=libveli.a
 else
 #
 # we may want to generate jit code on host OR ve
@@ -36,6 +37,7 @@ TARGETS=asmkern0.asm libjit1.a libjit1-x86.a \
 	jitve0 jitve_hello test_strMconst jitve_math \
 	jitpp_hello test_naspipe test_vejitpage_sh \
 	jitpp_loadreg
+LIBVELI_TARGETS:=libveli-x86.a
 CC?=ncc-1.5.1
 CXX?=nc++-1.5.1
 CC:=ncc-1.5.1
@@ -53,6 +55,7 @@ VE_EXEC:=ve_exec
 OBJDUMP:=nobjdump
 OBJCOPY:=nobjcopy
 endif
+TARGETS+=$(LIBVELI_TARGETS)
 all: $(TARGETS) libjit1.a
 
 .PHONY: force
@@ -161,6 +164,17 @@ jit_data-x86.o: jit_data.c jit_data.h
 	g++ ${CFLAGS} -O2 -c $< -o $@
 jitpage-x86.o: jitpage.c jitpage.h
 	g++ $(CXXFLAGS) -O2 -c $< -o $@
+
+LIBVELI_SRC:=veliFoo.cpp wrpiFoo.cpp
+libveli.a:     $(patsubst %.cpp,%.o,    $(LIBVELI_SRC))
+libveli-x86.a: $(patsubst %.cpp,%-x86.o,$(LIBVELI_SRC))
+	$(AR) cq $@ $^
+#$(patsubst $(LIBVELI_SRC),%.cpp,%.o):    %.o:     %.cpp
+#	$(CXX) ${CXXFLAGS} -O2 -c $< -o $@
+#veliFoo.o wrpiFoo.o:    %.o:     %.cpp
+$(patsubst $(LIBVELI_SRC),%.cpp,%-x86.o) %-x86.o: %.cpp
+	g++    ${CXXFLAGS} -O2 -c $< -o $@
+
 #asmfmt.cpp has a standalone demo program with -D_MAIN compiler	
 asmfmt: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp jitpage.o
 	g++ $(CXXFLAGS) -O2 -E -dD $< >& $(patsubst %,%.i,$@)
