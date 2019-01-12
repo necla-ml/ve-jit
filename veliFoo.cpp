@@ -83,13 +83,14 @@ VeliErr     veliFoo(uint64_t start, uint64_t count){
 #endif // empty sample templates
 
 // first define prgiFoo (it has *more* code), then prune it to create veliFoo.
-VeliErr veliLoadreg(uint64_t start){
+VeliErr     veliLoadreg(uint64_t start, uint64_t count/*=1U*/)
+{
     uint64_t kase = 0; // for simple stuff, don't need execution path machinery.
     VeliErr ret;
     ret.i = start;
     ret.error = 0; // set via KASE macro, if condition fails
     ret.other = 0;
-    int const v=1; // verbose
+    int const v = 1; // verbose
     //string program;
     //
     // program ~ jit subroutine to load 'parm' into '%s0'
@@ -142,6 +143,7 @@ VeliErr veliLoadreg(uint64_t start){
             /* failed condition */ \
             if( ret.error == 0 ) ret.error = where; \
             KASEDBG; \
+            cout<<" Failure "<<STR<<" kase "<<where<<endl; \
             THROW("Failure "<<STR<<" kase "<<where); \
         } \
     } catch (...) { /**/ } \
@@ -204,7 +206,11 @@ VeliErr veliLoadreg(uint64_t start){
         // and 0... 0...  0xx10xx  0 isI  M = -1 = (0)0
         //
         // M   0... 1... |1111111|
-        // I   1... 1... |1xxxxxx
+        // I   1... 1...  1xx10xx
+        // xor 1... 0...  0yy01yy
+        // eqv 0... 1...  1xx10xx
+        // and 0... 1...  1xx10xx
+        // or  1... 1...  1111111
         //
         // A---------------------------
         // M   1... 0... |0000000|
@@ -248,7 +254,8 @@ VeliErr veliLoadreg(uint64_t start){
             if(v)cout<<" mval =0x"<<hex<<mval <<dec<<" = "<<mval<<endl;
             KASE(8,"xor OUT,Ival,Mvval", parm == (ival ^ mval) );
             //log+="\n ^xor "+reg+",0x"+jithex(ival)+","+jitimm(mval)+"# load: xor(I,M)";
-            assert( isMval(parm & ~0x3f) ); // ok, so far
+            //assert( isMval(parm & ~0x3f) );
+            //    failed for sext7=0xffffffffffffffed = -19
         }
         //----------------------------
         // M   1... 0... |0000000|
@@ -363,33 +370,52 @@ VeliErr veliLoadreg(uint64_t start){
     //if( have_1op_load ){
     //    ;
     //}else
-    if(1){ // assert( !have_1op_load );
-        // extend lea case (previously used 1,2,3)
-        assert( lo != 0 );
+    //if(lo!=0)
+    { // assert( !have_1op_load );
         //
-        // lea:         Sx <-- Sy + Sz + sext(D,64)
-        // lea.sl:      Sx <-- Sy + Sz + (sext(D,64)<<32)
+        // NOTE: I should also create a 32-bit loadreg that exercises the different
+        //       possible execution units.
+        // Rationale:
+        //       Instead of lea + lea.sl, I can use logic+load or arith+load or shift+load
+        //       which mixes different instruction types.
+        //
+        //       In absence of preceding/following instruction-type context, this seems
+        //       a good approach to on average distribute nearby instruction types
+        //       among different execution units.
+        //
+        // extend lea case (previously used 1,2,3)
+#if 1
+        //
+        // 'C' version of lea + lea.sl combo.
+        //  Input: <hi,lo> words
+        //  Output: Sx = <hi,lo>
+        //  LEA operations:
+        //    lea    :  Sx <-- Sy + Sz + sext(D,64)
+        //    lea.sl :  Sx <-- Sy + Sz + (sext(D,64)<<32)
         // lea TMP, lo
-        uint64_t lea_out = (int64_t)(int32_t)lo;
-        // lea.sl OUT, <hi or hi+1>, 
-        uint64_t tmphi = (lo>=0? hi: hi+1); // -ve lo puts 1-bits into hi, so hi+1 to get correct sum
+        uint64_t tmplo = (int64_t)(int32_t)lo;
+        // lea.sl OUT, <hi or hi+1> (,TMP)
+        //        -ve lo will fill hi with ones i.e. -1
+        //        so we add hi+1 to MSBs to restore desired sums
+        uint64_t tmphi = ((int32_t)lo>=0? hi: hi+1);
         uint64_t tmp2 = tmphi << 32;    // (sext(D,64)<<32)
-        uint64_t out = tmp2 + tmphi;     // lea.sl lea_out, tmphi(,lea_out);
-        assert( parm == out );
-        if((int32_t)lo > 0){
+        uint64_t out = tmp2 + tmplo;     // lea.sl lea_out, tmphi(,lea_out);
+        assert( parm == out ); // <---- TROUBLE
+#endif
+        if((int32_t)lo >= 0){
             // simulate and check...
-            uint64_t tmplo = (int64_t)(int32_t)lo; // lo bits ok, hi bits all-0 or all-1
-            uint64_t dd = ((int32_t)lo>=0? hi: hi+1); // hi+1 to counteract the all-1
-            uint64_t tmp2 = dd << 32;    // tmp2 = (sext(tmphi,64)<<32)
+            uint64_t tmplo = (int64_t)(int32_t)lo; // lo bits ok, hi bits all-0
+            uint64_t dd = /**/ hi /**/;
+            uint64_t tmp2 = dd << 32;           // tmp2 = (sext(tmphi,64)<<32)
             uint64_t out = tmp2 + tmplo;
             KASE(50,"lea+lea.sl", parm == out );
             //lea="lea "+reg+","+jithex(lo)+"# lo>0"
             //    + ";lea.sl "+reg+","+jithex(hi)+"(,"+reg+") # load: 2-op";
         }else{ // sign extension means lea.sl of hi will have -1 added to it...
             // simulate and check...
-            uint64_t tmplo = (int64_t)(int32_t)lo; // lo bits ok, hi bits all-0 or all-1
-            uint64_t dd = ((int32_t)lo>=0? hi: hi+1); // hi+1 to counteract the all-1
-            uint64_t tmp2 = dd << 32;    // tmp2 = (sext(tmphi,64)<<32)
+            uint64_t tmplo = (int64_t)(int32_t)lo; // lo bits ok, hi bits all-1
+            uint64_t dd = /**/ hi+1 /**/;       // hi+1 to counteract the all-1
+            uint64_t tmp2 = dd << 32;           // tmp2 = (sext(tmphi,64)<<32)
             uint64_t out = tmp2 + tmplo;
             KASE(51,"lea+lea.sl", parm == out );
             //lea="lea "+reg+","+jithex(lo)+"# (int)lo<0"
@@ -416,12 +442,12 @@ VeliErr veliLoadreg(uint64_t start){
     printf("        kase=%d\n", kase);
     printf("Raw kernel string:\n%s\n-------------",&kernel[0]);
     return prog;
-#else
-    return ret;
 #endif
+    cout<<" test "<<setw(20)<<parm<<" "<<setw(4)<<ret.error<<" "<<setw(4)<<ret.other<<" "<<ret.i<<endl;
+    return ret;
 }
 
-VeliErr     veliLoadreg(uint64_t start, uint64_t count){
+VeliErr     prgiLoadreg(uint64_t start, uint64_t count){
     uint64_t end = start + count; // ok if wraps
     for(uint64_t in=start; in!=end; ++in){
         ;

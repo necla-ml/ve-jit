@@ -1,8 +1,10 @@
 ifneq ($(CC),ncc)
+.PRECIOUS: jitpp_loadreg
 #
 # only a few things can compile for x86...
 #
-TARGETS:=test_strMconst asmfmt
+TARGETS:=test_strMconst asmfmt jitpp_loadreg veliFoo.o
+TARGETS+=veliFoo.o veli_loadreg
 VE_EXEC:=time
 OBJDUMP:=objdump
 OBJDUMP:=objdump
@@ -71,6 +73,10 @@ vejit.tar.gz: asmfmt.hpp asmfmt_fwd.hpp jitpage.h libjit1.a
 	cp -av asmfmt*.hpp jitpage.h vejit/include/
 	cp -av libjit1.a vejit/bin/
 	tar czf $@ vejit
+#veli_loadreg: veli_loadreg.cpp veliFoo.o wrpiFoo.o libjit1.a
+#	$(CXX) $(CXXFLAGS) -g -O2 $(filter-out %.cpp,$^) -o $@
+veli_loadreg-x86: veli_loadreg.cpp libveli-x86.a libjit1-x86.a
+	g++ $(CXXFLAGS) -g -O2 -o $@ $^
 #
 # Aurora assembler.S: cpp->.asm, $(CC)->.o, nobjcopy->.bin, .bin-->.dump
 # Actually, jitpage.h (newer version of ve_util.h) will use 'bin.mk' makefile
@@ -171,9 +177,10 @@ libveli-x86.a: $(patsubst %.cpp,%-x86.o,$(LIBVELI_SRC))
 	$(AR) cq $@ $^
 #$(patsubst $(LIBVELI_SRC),%.cpp,%.o):    %.o:     %.cpp
 #	$(CXX) ${CXXFLAGS} -O2 -c $< -o $@
-#veliFoo.o wrpiFoo.o:    %.o:     %.cpp
 $(patsubst $(LIBVELI_SRC),%.cpp,%-x86.o) %-x86.o: %.cpp
-	g++    ${CXXFLAGS} -O2 -c $< -o $@
+	g++ ${CXXFLAGS} -O2 -c $< -o $@
+$(patsubst $(LIBVELI_SRC),%.cpp,%.o) %.o: %.cpp
+	g++ ${CXXFLAGS} -O2 -c $< -o $@
 
 #asmfmt.cpp has a standalone demo program with -D_MAIN compiler	
 asmfmt: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp jitpage.o

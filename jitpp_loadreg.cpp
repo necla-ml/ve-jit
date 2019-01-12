@@ -10,6 +10,9 @@
 #include <iostream>
 #include <iomanip>
 #include <sstream>
+#include <unordered_set>
+#include <vector>
+#include <array>
 #define STR0(...) #__VA_ARGS__
 #define STR(...) STR0(__VA_ARGS__)
 
@@ -176,6 +179,10 @@ void test_loadreg(char const* const cmd, unsigned long const parm, int const opt
                 //
                 // M   0... 1... |1111111|
                 // I   1... 1... |1xxxxxx
+                // xor 1... 0...  0yy01yy
+                // eqv 0... 1...  1xx10xx
+                // and 0... 1...  1xx10xx
+                // or  1... 1...  1111111
                 //
                 // A---------------------------
                 // M   1... 0... |0000000|
@@ -588,6 +595,58 @@ int main(int,char**)
         cmd="ldreg"+jitdec(opt_level)+" or I,(15)1";
         test_loadreg( cmd.c_str(), parm, opt_level );
     }
+    unordered_set<uint64_t> mvals;
+    // add all r'0+1+' mvals and their complements
+    cout<<hex<<setfill('0')<<endl;
+    for(uint64_t i=0, mval=0; i<64; mval=(mval<<1U)+1U, ++i ){
+        mvals.insert( mval); // mval = 0... 1...
+        mvals.insert(~mval); //~mval = 1... 0...
+        cout<<setw(2)<<dec<<i<<hex<<" 0x"<<setw(16)<<mval<<"   "<<setw(16)<<~mval<<endl;
+    }
+    cout<<dec<<setfill(' ');
+    cout<<"\n Using "<<mvals.size()<<" mvals for binary-op targets"<<endl;
+    // generate a set of target around exact formula values
+    std::unordered_set<uint64_t> targ; // target for various Mval,Ival PairS
+    for(int64_t ival = -64; ival<=63; ++ival){
+        uint64_t const i = (uint64_t)ival;
+        for(auto const m: mvals){
+            std::array<uint64_t,8> exact =
+            { i&m, i|m, i^m, ~(i&m), 
+                i+m, i-m, (uint64_t)((int64_t)i-(int64_t)m), m<<(int)(i&0xf) };
+            for(auto const e: exact){
+                targ.insert( e );
+                targ.insert( e+1U );
+                targ.insert( e-1U );
+            }
+        }
+    }
+    cout<<" generated "<<targ.size()<<" nice targets"<<endl;
+    // generate all [1,2]-bit patterns and complements
+    for(int i=0; i<64; ++i){
+        targ.insert(  ((uint64_t{1}<<i)  ) );
+        targ.insert( ~((uint64_t{1}<<i)  ) );
+        targ.insert(  ((uint64_t{0x3}<<i)) );
+        targ.insert( ~((uint64_t{0x3}<<i)) );
+    }
+    // generate all 'or's of 4 consecutive 1's
+    for(int i=0; i<60; ++i)
+        for(int j=i+1; j<60; ++j)
+            targ.insert( (uint64_t{1}<<i) | (uint64_t{1}<<j) );
+    cout<<" now have "<<targ.size()<<", after simple bit patterns"<<endl;
+    // make sure to cover full range [-1024,+1024]
+    for(int64_t i=-1024; i<=1024; ++i){
+        targ.insert((uint64_t)i);
+    }
+    cout<<" now have "<<targ.size()<<", after adding [-1024,1024]"<<endl;
+    // Using 128 mvals for binary-op targets
+    // generated 16299 nice targets
+    // now have 17726, after simple bit patterns
+    // now have 18726, after adding [-1024,1024]
+    //  conclusion:   most >7bit values will go be lea (up to 2^31),
+    //                and after, only a tiny fraction have 1-op load.
+    //     2-op loads could search first for different
+    //     instruction type for the first "lea" (lo 32bit) load.
+             
     if(1){ // OK
         parm = 0x3ULL << 40;
         string cmd="ldreg"+jitdec(opt_level)+"-xor ~(2^49-1),0x2r79";
