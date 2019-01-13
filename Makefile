@@ -4,7 +4,7 @@ ifneq ($(CC),ncc)
 # only a few things can compile for x86...
 #
 TARGETS:=test_strMconst asmfmt jitpp_loadreg veliFoo.o
-TARGETS+=veliFoo.o veli_loadreg
+TARGETS+=veliFoo.o veli_loadreg-x86
 VE_EXEC:=time
 OBJDUMP:=objdump
 OBJDUMP:=objdump

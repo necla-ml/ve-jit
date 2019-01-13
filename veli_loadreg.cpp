@@ -22,7 +22,10 @@ unordered_set<uint64_t> init_tvals(){
         for(uint64_t i=0, mval=0; i<64; mval=(mval<<1U)+1U, ++i ){
             mvals.insert( mval); // mval = 0... 1...
             mvals.insert(~mval); //~mval = 1... 0...
-            cout<<setw(2)<<dec<<i<<hex<<" 0x"<<setw(16)<<mval<<"   "<<setw(16)<<~mval<<endl;
+            cout<<setw(2)<<dec<<setfill('0')<<i<<hex<<" 0x"<<setw(16)<<mval
+                <<"   "<<setw(16)<<~mval
+                <<"   "<<dec<<setw(3)<<setfill(' ')<<-(int64_t)i<<"=0x"<<hex<<setw(16)<<-i
+                <<endl;
         }
         cout<<dec<<setfill(' ');
     }
@@ -79,7 +82,8 @@ int main(int,char**)
     for(auto t: tvals){
         VeliErr e = { 7, 7, 7 };
         e = veliLoadreg(t /*,count=1U*/);
-        cout<<" veliLoadreg("<<t<<" "<<e.i<<") --> "
+        cout<<"\n------------\n"
+            <<"veliLoadreg("<<t<<" "<<e.i<<") --> "
             <<" error="<<e.error
             <<" other="<<e.other
             <<endl;

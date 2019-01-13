@@ -137,7 +137,7 @@ std::string jitdec(T const t){
 template<typename T>
 std::string jithex(T const t){
     std::ostringstream oss;
-    oss << std::hex << t << std::dec;
+    oss << "0x" << std::hex << t << std::dec;
     return oss.str();
 }
 
