@@ -1676,86 +1676,86 @@ enum Unroll unroll_suggest( int const vl, int const ii, int const jj, int const 
  *   sampled values 0..jj in the b[] vector, so no single-vector Aurora VMV suffices.
  * - You can \b only do rotate method easily if \f$Vcyc = (vl/b_period)*b_period + b_period\f$
  *   can EXACTLY equal 256 in a SINGLE Aurora VMV, though.
-*   - but this happens for vl > jj only for jj already a power of two (already fast)
-    *   - and implies jj is a power of two,
-    *     - so we already have a fast update (vl%jj==0 or otherwise)
-    *
-    * Conclusion: Aurora does not allow a fast vlen ~ MVL rotation method
-    *
-    */
+ *   - but this happens for vl > jj only for jj already a power of two [already fast]
+ *   - and implies jj is a power of two,
+ *     - so we already have a fast update : vl%jj==0 or otherwise
+ *
+ * Conclusion: Aurora does not allow a fast vlen ~ MVL rotation method
+ *
+ */
 
 
-    int main(int argc,char**argv){
-        int vl = 8;
-        int h=20, w=3;
-        int opt_t=1, opt_u=0, opt_l=0, opt_h=0, opt_m=0;
-        int a=0;
+ int main(int argc,char**argv){
+     int vl = 8;
+     int h=20, w=3;
+     int opt_t=1, opt_u=0, opt_l=0, opt_h=0, opt_m=0;
+     int a=0;
 #if 0
-        cout<<"jitimm ...";
-        cout<<"jitimm(0) = "<<jitimm(0)<<endl;
-        cout<<"jitimm(1) = "<<jitimm(1)<<endl;
-        cout<<"jitimm(-1) = "<<jitimm(-1)<<endl;
-        cout<<"popcount(0) = "<<popcount(0)<<endl;
-        cout<<"popcount(1) = "<<popcount(1)<<endl;
-        cout<<"popcount(-1) = "<<popcount(-1)<<endl;
-        cout<<std::hex;
-        for(uint64_t i=1,j=1; i<64; j+=j, ++i){
-            cout<<" jitimm("<< j-1    <<") = "<<jitimm(j-1)<<endl;
-            cout<<" jitimm("<< ~(j-1) <<") = "<<jitimm(~(j-1))<<endl;
-        }
-        cout<<std::dec;
+     cout<<"jitimm ...";
+     cout<<"jitimm(0) = "<<jitimm(0)<<endl;
+     cout<<"jitimm(1) = "<<jitimm(1)<<endl;
+     cout<<"jitimm(-1) = "<<jitimm(-1)<<endl;
+     cout<<"popcount(0) = "<<popcount(0)<<endl;
+     cout<<"popcount(1) = "<<popcount(1)<<endl;
+     cout<<"popcount(-1) = "<<popcount(-1)<<endl;
+     cout<<std::hex;
+     for(uint64_t i=1,j=1; i<64; j+=j, ++i){
+         cout<<" jitimm("<< j-1    <<") = "<<jitimm(j-1)<<endl;
+         cout<<" jitimm("<< ~(j-1) <<") = "<<jitimm(~(j-1))<<endl;
+     }
+     cout<<std::dec;
 #endif
 
-        if(argc > 1){
-            // actually only the last -[tlu] option is used
-            for( ; argv[a+1][0]=='-'; ++a){
-                char *c = &argv[1][1];
-                for( ; *c != '\0'; ++c){
-                    if(*c=='h'){
-                        cout<<" fuse2lin [-h|t|l|u] VLEN H W"<<endl;
-                        cout<<"  -t    just test correctness"<<endl;
-                        cout<<"  -a    alt test correctness"<<endl;
-                        cout<<"  -l    [default] pseudo-asm-code for loops (+correctness)"<<endl;
-                        cout<<"  -u    pseudo-asm-code for unrolled loops (+correctness)"<<endl;
-                        cout<<"  -m    try for extended-range (a/d) ~ a*M>>N forms"<<endl;
-                        cout<<"  -h    this help"<<endl;
-                        cout<<"   VLEN = vector length"<<endl;
-                        cout<<"   I    = 1st loop a=0..i-1"<<endl;
-                        cout<<"   J    = 2nd loop b=0..j-1"<<endl;
-                        cout<<" double loop --> loop over vector registers a[VLEN], b[VLEN]"<<endl;
-                        opt_h = 1;
-                    }else if(*c=='t'){ opt_t=2; opt_l=0; opt_u=0;
-                    }else if(*c=='a'){ opt_t=1; opt_l=0; opt_u=0;
-                    }else if(*c=='l'){ opt_t=0; opt_l=1; opt_u=0;
-                    }else if(*c=='u'){ opt_t=0; opt_l=0; opt_u=1;
-                    }else if(*c=='m'){ opt_m=1;
-                    }
-                }
-            }
-        }
-        cout<<" args: a = "<<a<<endl;
-        if(argc > a+1) vl = atof(argv[a+1]);
-        if(argc > a+2) h  = atof(argv[a+2]);
-        if(argc > a+3) w  = atof(argv[a+3]);
-        cout<<"vlen="<<vl<<", h="<<h<<", w="<<w<<endl;
+     if(argc > 1){
+         // actually only the last -[tlu] option is used
+         for( ; a+1<argc && argv[a+1][0]=='-'; ++a){
+             char *c = &argv[1][1];
+             for( ; *c != '\0'; ++c){
+                 if(*c=='h'){
+                     cout<<" fuse2lin [-h|t|l|u] VLEN H W"<<endl;
+                     cout<<"  -t    just test correctness"<<endl;
+                     cout<<"  -a    alt test correctness"<<endl;
+                     cout<<"  -l    [default] pseudo-asm-code for loops (+correctness)"<<endl;
+                     cout<<"  -u    pseudo-asm-code for unrolled loops (+correctness)"<<endl;
+                     cout<<"  -m    try for extended-range (a/d) ~ a*M>>N forms"<<endl;
+                     cout<<"  -h    this help"<<endl;
+                     cout<<"   VLEN = vector length"<<endl;
+                     cout<<"   I    = 1st loop a=0..i-1"<<endl;
+                     cout<<"   J    = 2nd loop b=0..j-1"<<endl;
+                     cout<<" double loop --> loop over vector registers a[VLEN], b[VLEN]"<<endl;
+                     opt_h = 1;
+                 }else if(*c=='t'){ opt_t=2; opt_l=0; opt_u=0;
+                 }else if(*c=='a'){ opt_t=1; opt_l=0; opt_u=0;
+                 }else if(*c=='l'){ opt_t=0; opt_l=1; opt_u=0;
+                 }else if(*c=='u'){ opt_t=0; opt_l=0; opt_u=1;
+                 }else if(*c=='m'){ opt_m=1;
+                 }
+             }
+         }
+     }
+     cout<<" args: a = "<<a<<endl;
+     if(argc > a+1) vl = atof(argv[a+1]);
+     if(argc > a+2) h  = atof(argv[a+2]);
+     if(argc > a+3) w  = atof(argv[a+3]);
+     cout<<"vlen="<<vl<<", h="<<h<<", w="<<w<<endl;
 
-        if(opt_m){
-            // removed test_mod_inverse<uint32_t>();
-            //test_mod_inverse<uint64_t>();
-            cout<<" (mod_inverse OK)";
-            exit(0);
-        }
+     if(opt_m){
+         // removed test_mod_inverse<uint32_t>();
+         //test_mod_inverse<uint64_t>();
+         cout<<" (mod_inverse OK)";
+         exit(0);
+     }
 
-        // INCORRECT verify1();
-        //cout<<" verify1 OK"<<endl;
+     // INCORRECT verify1();
+     //cout<<" verify1 OK"<<endl;
 
-        if(opt_h == 0){
-            if(opt_t==1) test_vloop2(vl,h,w);
-            else if(opt_t==2) test_vloop2_no_unrollX(vl,h,w);
-            if(opt_u) test_vloop2_unroll(vl,h,w);
-            if(opt_l) test_vloop2_no_unroll(vl,h,w); // C++ code more like asm generic loop
-        }
-        cout<<"\nGoodbye"<<endl;
-        return 0;
-    }
+     if(opt_h == 0){
+         if(opt_t==1) test_vloop2(vl,h,w);
+         else if(opt_t==2) test_vloop2_no_unrollX(vl,h,w);
+         if(opt_u) test_vloop2_unroll(vl,h,w);
+         if(opt_l) test_vloop2_no_unroll(vl,h,w); // C++ code more like asm generic loop
+     }
+     cout<<"\nGoodbye"<<endl;
+     return 0;
+ }
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break

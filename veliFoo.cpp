@@ -42,16 +42,20 @@ std::string prgiFoo(uint64_t start)
     string program;
     AsmFmtCols prog("");
     prog.lcom(STR(__FUNCTION__) " (i="+jithex(start)+" = "+jitdec(start));
+    string func("Foo");
     if(1){ // if you need relative addressing ...
         prog
+#if 0
             .def("STR0(...)", "#__VA_ARGS__")
             .def("STR(...)",  "STR0(__VA_ARGS__)")
-            .def("FN",STR(__FUNCTION__))           // func name (characters)
-            .def("FNS", "\"" STR(__FUNCTION__) "\"") // quoted-string func name
-            .def("L(X)", STR(__FUNCTION__##X))
+            .def("CAT(X,Y)", "X##Y")
+            .def("FN",func)             // func name (characters)
+            .def("FNS", "\""+func+"\"") // quoted-string func name
+            .def("L(X)", "CAT("+func+"_,X)")
             .def("SI","%s0",            "input value")
             .def("ALG","%s1",           "alg modifier [rarely]")
             .def("BP","%s2",            "internal base pointer for const 'here' data")
+#endif
             // prgiFoo tests have real outputs:
             .def("OUT","%s3",           "output value")
             .def("OUT2","%s4",          "2nd output [sometimes]")
@@ -67,11 +71,14 @@ std::string prgiFoo(uint64_t start)
             .def("V1","%V1")  // etc
             // macros for relocatable branching
             .def("REL(YOURLABEL)", "L(YOURLABEL) - L(BASE)(,BP)", "relocatable address of 'here' data")
+            // The following is needed if you use branches
             .ins("sic   BP","%s1 is icbase, used as base ptr")
             .lab("L(BASE)")     // this label is reserved
+            // Here is an example branch
             .ins("b REL(USELESS)","demonstrate a useless branch")
             .lab("L(USELESS)")
-            .ins()
+            .ins() // blank line
+            .com("SNIPPET START")
             .com("YOUR CODE")
             // add more core code to prog, %s0 is the input, output|error-->%s2,...
             .ins()
@@ -80,7 +87,10 @@ std::string prgiFoo(uint64_t start)
             //
             // and return to caller, "parm has been loaded in %s0"
             //
+            .com("SNIPPET END")
             .ins("b.l (,%lr)",          "return (no epilogue)")
+            .ins()
+            // here is an example of storing some const data in the executable page
             .lab("L(DATA)")
             .lab("L(szstring)")
             .ins(".byte L(strend) - L(strstart)", "asciz data length")
@@ -173,11 +183,15 @@ VeliErr     veliLoadreg(uint64_t start, uint64_t count/*=1U*/)
     { // lea logic
         bool is31bit = ( (parm&0x8fffFFFF) == parm );
         bool is32bit = ( (parm&0xffffFFFF) == parm );
-        bool isSext32 = (hi==0xffffFFFFF);
+        bool hiOnes  = ( (int)hi == -1 );
+        if(v){ HD(hi); HD(lo);
+            cout<<" is31bit="<<is31bit<<" is32bit="<<is32bit<<" hiOnes="<<hiOnes<<endl;
+        }
         if(is31bit){
             KASE(1,"lea 31-bit",parm == (parm&0x3fffFFFF));
             //lea="lea "+reg+","+jithex(lo)+"# load: 31-bit";
-        }else if(isSext32){
+        }else if((int)lo < 0 && hiOnes){
+            assert( (int64_t)parm < 0 ); assert((int)lo < 0);
             KASE(2,"lea 32-bit -ve",parm == (uint64_t)(int64_t)(int32_t)lo);
             //lea="lea "+reg+","+jithex(lo)+"# load: sext(32-bit)";
         }else if(lo==0){
@@ -534,11 +548,12 @@ VeliErr     veliLoadreg(uint64_t start, uint64_t count/*=1U*/)
 /** suggested VE code string, ready to compile into an ABI=jit \ref JitPage */
 std::string prgiLoadreg(uint64_t start)
 {
+    std::string func("LoadS"); // basename for labels, etc.
     uint64_t const parm = start;
     int kase = 0; // for simple stuff, don't need execution path machinery.
     string program;
     AsmFmtCols prog("");
-    prog.lcom(STR(__FUNCTION__) " (i="+jithex(start)+" = "+jitdec(start));
+    prog.lcom(func+"( i = "+jithex(start)+" = "+jitdec(start)+" )");
     uint32_t const hi = ((parm >> 32) & 0xffffFFFF); // unsigned shift-right
     uint32_t const lo = (uint32_t)parm;              // 32 lsbs (trunc)
     uint64_t const lo7 = (parm & 0x7f);              // 7 lsbs (trunc)
@@ -550,15 +565,15 @@ std::string prgiLoadreg(uint64_t start)
     { // lea logic
         bool is31bit = ( (parm&0x8fffFFFF) == parm );
         bool is32bit = ( (parm&0xffffFFFF) == parm );
-        bool isSext32 = (hi==0xffffFFFFF);
+        bool hiOnes  = ( (int)hi == -1 );
         if(is31bit){
             //KASE(1,"lea 31-bit",parm == (parm&0x3fffFFFF));
             lea="lea OUT, "+(lo<=1000000? jitdec(lo): jithex(lo))
                 +"# load: 31-bit";
-        }else if(isSext32){
+        }else if((int)lo < 0 && hiOnes){
+            assert( (int64_t)parm < 0 ); assert((int)lo < 0);
             //KASE(2,"lea 32-bit -ve",parm == (uint64_t)(int64_t)(int32_t)lo);
-            assert( parm < 0 );
-            lea="lea OUT, "+(parm >= -100000? jitdec(lo): jithex(lo))
+            lea="lea OUT, "+(parm >= -100000? jitdec((int32_t)lo): jithex(lo))
                 +"# load: sext(32-bit)";
         }else if(lo==0){
             //KASE(3,"lea.sl hi only",lo == 0);
@@ -685,16 +700,21 @@ std::string prgiLoadreg(uint64_t start)
     assert( !chosen.empty() );
 
     if(1){
-        prog.def("STR0(...)", "#__VA_ARGS__")
+        prog
+#if 0
+            .def("STR0(...)", "#__VA_ARGS__")
             .def("STR(...)",  "STR0(__VA_ARGS__)")
-            .def("FN",STR(__FUNCTION__))           // func name (characters)
-            .def("FNS", "\"" STR(__FUNCTION__) "\"") // quoted-string func name
-            .def("L(X)", STR(__FUNCTION__##X))
+            .def("CAT(X,Y)", "X##Y")
+            .def("FN",func)             // func name (characters)
+            .def("FNS", "\""+func+"\"") // quoted-string func name
+            .def("L(X)", "CAT("+func+"_,X)")
             .def("SI","%s0",            "input value")
             .def("ALG","%s1",           "alg modifier [rarely]")
             .def("BP","%s2",            "internal base pointer for const 'here' data")
             // prgiFoo tests have real outputs:
+#endif
             .def("OUT","%s3",           "output value")
+#if 0
             .def("OUT2","%s4",          "2nd output [sometimes]")
             .def("VOUT","%v0",          "vector outputs")
             .def("VOUT2","%v1",         " Ex. loop_init(ii,jj)-->vl + 2 vectors?")
@@ -702,40 +722,26 @@ std::string prgiLoadreg(uint64_t start)
             //.def("SE","%s2", "error output")
             //.def("SO","%s3", "other output (code path? secondary output?)")
             // all can use tmp scalar registers (that are in VECLOBBER list of wrpiFoo.cpp) 
+#endif
             .def("T0","%s40")
             .def("T1","%s41") // etc
+#if 0
             // and some vector registers (also in VECLOBBER?)
             .def("V1","%V1")  // etc
             // macros for relocatable branching
-            .def("REL(YOURLABEL)", "L(YOURLABEL) - L(BASE)(,BP)", "relocatable address of 'here' data")
-            .ins("sic   BP","%s1 is icbase, used as base ptr")
-            .lab("L(BASE)")     // this label is reserved
-            .ins("b REL(USELESS)","demonstrate a useless branch")
-            .lab("L(USELESS)")
-            .ins()
-            .com("YOUR CODE");
+            .def("REL(YOURLABEL)", "L(YOURLABEL)    -L(BASE)(,BP)", "relocatable address")
+#endif
+            .com("SNIPPET START");
         prog.ins(chosen);
             // add more core code to prog, %s0 is the input, output|error-->%s2,...
-        prog.ins()
-            .com("or OUT, 0,(0)1",      "prgIFoo output")
-            //.com("or " SE ",0,... veliFoo logic test error detected")
-            //
-            // and return to caller, "parm has been loaded in %s0"
-            //
+        prog.com("SNIPPET END")
             .ins("b.l (,%lr)",          "return (no epilogue)")
-            .lab("L(DATA)")
-            .lab("L(szstring)")
-            .ins(".byte L(strend) - L(strstart)", "asciz data length")
-            .lab("L(strstart)")
-            .ins(".ascii FNS")
-            .lab("L(strend)")
             .undef("FN").undef("FNS").undef("L")
-            //.ins(".align 3" "; " L(more) ":", "if you want more code")
             ;
         program = prog.flush();
     }
     if(1){ // verbose ?
-        cout<<__FUNCTION__<<" --> program:\n"
+        cout<<func<<" --> program:\n"
             <<program.substr(0,4096)<<endl;
     }
     return program;

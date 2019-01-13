@@ -75,9 +75,27 @@ unordered_set<uint64_t> init_tvals(){
     //     instruction type for the first "lea" (lo 32bit) load.
     return targ;
 }
-int main(int,char**)
+int main(int argc,char** argv)
 {
-    uint64_t parm;
+    int a=0, opt_a=0, opt_h=0;
+    if(argc > 1){
+        for( ; a+1<argc && argv[a+1][0]=='-'; ++a){
+            char *c = &argv[1][1];
+            for( ; *c != '\0'; ++c){
+                if(*c=='h'){
+                    cout<<" "<<argv[0]<<" [-h|a]"<<endl;
+                    cout<<" Purpose: test VE loadreg logic"<<endl;
+                    cout<<"          quick load of any known value into a scalar register"<<endl;
+                    cout<<"          loops over interesting cases (perhaps 20k tests)"<<endl;
+                    cout<<"  -a    also assembler"<<endl;
+                    cout<<"  -h    this help"<<endl;
+                    opt_h = 1;
+                }else if(*c=='a'){ opt_a=1; }
+            }
+        }
+    }
+    cout<<" args: opt_a = "<<opt_a<<endl;
+
     auto const tvals = init_tvals();
     for(auto t: tvals){
         VeliErr e = { 7, 7, 7 };
@@ -87,6 +105,10 @@ int main(int,char**)
             <<" error="<<e.error
             <<" other="<<e.other
             <<endl;
+        if(opt_a){
+            string code = prgiLoadreg(t);
+            cout<<t<<endl;
+        }
     }
     cout<<"\n All "<<tvals.size()<<" coverage tests PASSED";
     cout<<"\nGoodbye"<<endl;
