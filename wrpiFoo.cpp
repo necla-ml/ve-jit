@@ -61,6 +61,7 @@ VeliErr     wrpiLoadregBig(JitPage *page, uint64_t const testnum)
     // - BP[%s1]    clobbered base address register
     // - ERR[%s2]   error output
     // - OUT[%s3]   test output
+    // - OTHER[%s4] [opt] the absolute address of the test that was run.
     // - T0[%s40]   clobbered tmp register
     // It is implemented as a computed goto into a table of fixed-size
     // code chunks, each of which sets OUT and returns here.

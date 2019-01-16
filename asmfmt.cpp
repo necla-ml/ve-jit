@@ -73,7 +73,7 @@ ExecutablePage::~ExecutablePage(){
     }
 }
 
-char const* const    AsmFmtCols::ws =" \t\r\n";
+char const* const    AsmFmtCols::ws =" \t\r"; // NOT including '\n'
 char const* const    AsmFmtCols::indent = "    ";
 int const            AsmFmtCols::inwidth = 4;
 int const            AsmFmtCols::opwidth = 12;
@@ -126,6 +126,11 @@ std::stack<std::string>::size_type AsmFmtCols::pop_scope(){
     }
     return sz;
 }
+void AsmFmtCols::pop_scopes(){
+    while(stack_undefs.size()){
+        this->pop_scope();
+    }
+}
 std::string AsmFmtCols::flush(){
     // \pre a is not null
     string ret("// AsmFmtCols empty!");
@@ -150,7 +155,6 @@ std::string AsmFmtCols::flush(){
     }
     return ret;
 }
-
 void AsmFmtCols::write(){
     throw_if_written(this,__FUNCTION__);
     if( of ){
@@ -239,8 +243,9 @@ std::string reduce(const std::string& str,
     return result;
 }
 AsmFmtCols::AsmLine AsmFmtCols::parts(std::string const& instruction){
-    throw_if_written(this,__FUNCTION__);
-    int const v=0;
+    // made this a STATIC function
+    //throw_if_written(this,__FUNCTION__);
+    int const v=1;
     AsmLine ret;
     if(v)cout<<"parts.."<<instruction<<endl;
 #if 0
@@ -254,14 +259,19 @@ AsmFmtCols::AsmLine AsmFmtCols::parts(std::string const& instruction){
     }
 #else
     auto inst = reduce(trim(instruction)); // again?
-    auto opbeg = inst.find_first_not_of(ws,0);
+    auto opbeg = inst.find_first_not_of(" \t\r\n",0);
     if( opbeg == string::npos ){
         if(v)cout<<"DONE"<<endl;
         return ret;
     }
 #endif
     if(v)cout<<"     .."<<inst<<endl;
-    auto opend = inst.find_first_of(ws,opbeg);
+    //
+    // TODO: comment "//...\n"
+    auto opend = inst.find_first_of(" \t\r#\n;",opbeg); // white or comment or statement-end
+    auto opend2 = inst.find("//", opbeg); // another type of possible ending
+    opend = min(opend,opend2);
+
     if(v)cout<<" op"<<opbeg<<":"<<opend;
     if( opend == string::npos ){
         ret.op = inst.substr(opbeg);
@@ -282,7 +292,7 @@ AsmFmtCols::AsmLine AsmFmtCols::parts(std::string const& instruction){
             //  and after '#' (before ';' if any) --> comment
             // Suppose comments are not allowed to contain semicolons
             iargend = string::npos;
-            auto isemicolon = ret.args.find_first_of(";",0);
+            auto isemicolon = ret.args.find_first_of(";\n",0);
             if( isemicolon != string::npos ){
                 iargend = isemicolon;
                 auto iback = ret.args.find_last_not_of(ws);
@@ -290,9 +300,12 @@ AsmFmtCols::AsmLine AsmFmtCols::parts(std::string const& instruction){
                 if(v) cout<<" remain"<<isemicolon+1<<":"<<iback<<" "<<ret.remain<<endl;
             }
             auto icomment = ret.args.find_first_of("#",0);
+            auto icomment2 = ret.args.find("//",0); // length of comment mark is 2, not 1
+            icomment = min(icomment,icomment2);
             if( icomment != string::npos && icomment < isemicolon ){
+                // side effect is that we FORGET the comment type (we generate only '#' comments for now XXX)
                 iargend = icomment;
-                ret.comment = ret.args.substr( icomment+1, isemicolon-icomment-1 );
+                ret.comment = ret.args.substr( icomment+(icomment==icomment2? 2: 1), isemicolon-icomment-1 );
                 if(v) cout<<" comment"<<icomment+1<<":"<<isemicolon-1<<" "<<ret.comment<<endl;
             }
             // chop any comment or multi-line asm
@@ -327,10 +340,12 @@ AsmFmtCols& AsmFmtCols::ins(string const& instruction){
         }else{
             (*a) << left << indent;
             if(p.args.empty()){
-                if( p.comment.empty() )
+                if( p.comment.empty() ){
                     (*a) << p.op << endl;
-                else
-                    (*a) << setw(inwidth+opwidth+argwidth) << "";
+                }else{
+                    (*a) << setw(opwidth-1) << p.op << " "
+                        << setw(argwidth) << "";
+                }
             }else{
                 (*a) << setw(opwidth-1) << p.op << " ";
                 if( p.comment.empty() )
@@ -348,7 +363,7 @@ AsmFmtCols& AsmFmtCols::ins(string const& instruction){
 }
 AsmFmtCols& AsmFmtCols::ins(string const& instruction, string const& asmcomment){
     throw_if_written(this,__FUNCTION__);
-    if(asmcomment.find_first_of(ws) == string::npos){
+    if(asmcomment.empty() || asmcomment.find_first_not_of(ws) == string::npos){
         ins(instruction);
         return *this;
     }
@@ -422,30 +437,74 @@ AsmFmtCols& AsmFmtCols::ins(string const& instruction, string const& asmcomment)
 #endif
     return *this;
 }
-AsmFmtCols& AsmFmtCols::def(std::string const& symbol, std::string const& subst, std::string const& name){
-    (*a) << setw(inwidth) << "#" << "define " << setw(10) << symbol << ' ' << subst;
+string AsmFmtCols::fmt_def(std::string const& symbol, std::string const& subst, std::string const& name){
+    std::ostringstream define;
+    define << setw(inwidth) << "#" << "define " << setw(10) << symbol << ' ' << subst;
     if( name.size() == 0 ){
-        (*a) << "\n";
+        define << "\n";
     }else{
         auto const col = inwidth + 7 + std::max(symbol.size(),10UL) + 1 + subst.size();
         auto const wnt = inwidth + opwidth + argwidth;
         //cout<<"col="<<col<<" cf "<<wnt<<endl;
 
         if(col < wnt){
-            (*a) << setw(wnt - col) << "";
+            define << setw(wnt - col) << "";
         }
-        (*a) << "/* " << name << " */\n";
+        define << "/* " << name << " */\n";
+    }
+    return define.str();
+}
+AsmFmtCols& AsmFmtCols::def(std::string const& symbol, std::string const& subst, std::string const& name){
+    if( stack_undefs.empty() ){
+        (*a) << fmt_def(symbol, subst, name+" { BEG SCOPE");
+        stack_undefs.push(fmt_undef(symbol, name+" } END SCOPE"));
+    }else{
+        (*a) << fmt_def(symbol, subst, name);
+        stack_undefs.push(fmt_undef(symbol, name));
     }
     return *this;
 }
-AsmFmtCols& AsmFmtCols::undef(std::string const& symbol,std::string const& name){
+string AsmFmtCols::fmt_undef(std::string const& symbol,std::string const& name){
+    string macroname = trim(symbol);
+    auto end = macroname.find_first_of(" \n\t(");
+    macroname = macroname.substr(0,end);
+    ostringstream undef;
     if(name.empty()){
-        (*a) << "#undef  " << symbol << "\n";
+        undef << "#undef  " << macroname << "\n";
     }else{
         auto const wnt = inwidth + opwidth + argwidth - 9;
-        (*a) << "#undef  " << setw(wnt-8) << symbol << "/* " << name << " */\n";
+        undef << "#undef  " << left << setw(wnt-8) << macroname << "/* " << name << " */\n";
     }
+    return undef.str();
+}
+AsmFmtCols& AsmFmtCols::undef(std::string const& symbol,std::string const& name){
+    (*a) << fmt_undef(symbol, name);
     return *this;
+}
+
+
+std::string uncomment_asm( std::string asmcode )
+{
+    // for multiline, we need a bit more than just 'parts(instruction)'
+    std::string remain = asmcode;
+    //cout<<" remain = "<<remain<<endl;
+    std::ostringstream oss;
+    while( remain.size() ){
+        auto const p = AsmFmtCols::parts(remain);
+        if(p.op.size() == 0){
+            oss<<endl; /* reproduce blank lines*/
+        }else{
+            // ignore p.comment
+            if(p.args.empty()){
+                oss << p.op << endl;
+            }else{
+                oss << p.op << ' ' << p.args <<endl;
+            }
+        }
+        remain = p.remain;
+        //cout<<" iterate: remain = "<<remain<<endl;
+    }
+    return oss.str();
 }
 
 #ifdef _MAIN
@@ -464,6 +523,7 @@ int main(int,char**){
         a.def("xval","13");
         a.def("xreg","%s1");
         a.lab("set_x");
+        a.ins("nop", "     \t  \t\t");
         a.ins("lea xreg, xval");
         a.ins("addu.l      xreg, 1,   xreg        ", "increment xreg");
         //a.ins("addu.l      xreg, 1,   xreg        ", "increment xreg", "once more");
@@ -474,15 +534,24 @@ int main(int,char**){
         std::forward_list<std::pair<std::string,std::string>> block =
         {{"counter","%s1"},{"counter_beg","0"},{"to","5"}};
         a.scope(block,"opt_block_name");
-        a.ins("mpy %s0,%s1,%s2#FIRST;mpy %s0,%s1,%s2#AGAIN"); // multi-line asm
-        a.ins("add %s0,%s1,%s2;add %s0,%s1,%s2","add twice"); // multi-line asm
-        a.ins("sub %s0,%s1,%s2;sub %s0,%s1,%s2#DIFF","diff twice"); // multi-line asm
+        a.ins("mpy %s0,%s1,%s2#FIRST;mpy %s0,%s1,%s2#multiline"); // multi-line asm
+        a.ins("add %s0,%s1,%s2;add %s0,%s1,%s2","add twice");
+        a.ins("sub %s0,%s1,%s2;sub %s0,%s1,%s2#DIFF","diff twice");
         a.pop_scope();
+        a.ins("nop #1;nop#2","multiline nops A");
+        a.ins("frobnicate X; foo bar#huh\nfrobnicate B\nfoo2 bar2;xyz\nfoo3#X;foo4;#long multiline");
+        a.ins("nop\nnop#B","newline could also be used to separate asm statements");
+        a.ins("baz\nbaz#A\nbaz#B","newline could also be used to separate asm statements");
+        a.ins("cat\ndog//A\ncow//B","c++-style // comments");
         a.scope(block,"a second block (not explicitly popped)");
         a.lcom("For really long comments you can use 'lcom', which also"
                 ,"can accept a list of long-line strings as arguments");
         a.ins("fence","this has no args and a comment");
         a.ins("fence","this is a useless","second copy of fence","with multiple comments");
+        //a.scope(block,"opt_block_name");
+        a.write();
+        cout<<"pop_scopes..."<<endl;
+        a.pop_scopes();
         a.write();
     }
     cout<<"\nGoodbye"<<endl;

@@ -17,7 +17,9 @@ std::ostream& operator<<(std::ostream& os, VeliErr const& e){
     return os<<oss.str();
 }
 
-/** \return fixed length debug string for numeric values */
+/** Print NAME = ... integers to debug VE constant values.
+ * \return a fixed length debug string, noting if the value is
+ * representable as an I-VALUE in [-64,63] or an M-VALUE {m}{0|1}. */
 template<typename Name> inline std::string
 HexDec64( Name const name, uint64_t value ){
     using namespace std;
@@ -46,7 +48,7 @@ using namespace std;
 #if 1 // empty examples
 std::string prgiFoo(uint64_t start)
 {
-    int kase = 0; // for simple stuff, don't need execution path machinery.
+    //int kase = 0; // for simple stuff, don't need execution path machinery.
     string program;
     AsmFmtCols prog("");
     prog.lcom(STR(__FUNCTION__) " (i="+jithex(start)+" = "+jitdec(start));
@@ -117,11 +119,8 @@ std::string prgiFoo(uint64_t start)
     return program;
 }
 VeliErr     veliFoo(uint64_t start, uint64_t count){
-    uint64_t end = start + count; // ok if wraps
-    for(uint64_t in=start; in!=end; ++in){
-        // same logic as prgiFoo, but NO 'prog' operations
-        // i.e. the **logic** of YOUR CODE
-    }
+    VeliErr ret={0,0,0,0};
+    return ret;
 }
 #endif // empty sample templates
 
@@ -224,7 +223,7 @@ VeliErr     veliLoadreg(uint64_t start, uint64_t count/*=1U*/)
     // or  1... 1...  1xxxxxx  1 isI   // or I,(0)1 sext7<0 && ((parm&~0x3f)==~0x3f)
     //also 0... 0...  0xxxxxx
     if(isI){
-        KASE(4,"or OUT,"+jitdec(sext7)+",(0)1", parm==sext7 && isIval(parm));
+        KASE(4,"or OUT,"+jitdec(sext7)+",(0)1", (int64_t)parm==sext7 && isIval(parm));
         //log="or "+reg+","+jitdec(sext7)+",(0)1 # load: small I";
     }
     if(isM){
@@ -571,7 +570,7 @@ std::vector<Load64> kase_Loadreg(uint64_t const parm){
     uint32_t const lo = (uint32_t)parm;              // 32 lsbs (trunc)
     { // lea logic
         bool is31bit = ( (parm&(uint64_t)0x000000007fffFFFF) == parm );
-        bool is32bit = ( (parm&(int64_t)0x00000000ffffFFFF) == parm );
+        //bool is32bit = ( (parm&(int64_t)0x00000000ffffFFFF) == parm );
         bool hiOnes  = ( (int)hi == -1 );
         if(is31bit){                        ret.push_back(LEA_31BIT);
         }else if((int)lo < 0 && hiOnes){    ret.push_back(LEA_HIONES);
@@ -628,6 +627,7 @@ std::vector<Load64> kase_Loadreg(uint64_t const parm){
                 ari=1; break; }
         }
     }
+    return ret;
 }
 
 /** \return AsmFmtCols instruction string[s] to load a 64-bit scalar VE register.
@@ -643,7 +643,7 @@ OpLoadregStrings opLoadregStrings( uint64_t const parm )
 
     { // lea logic
         bool is31bit = ( (parm&(uint64_t)0x000000007fffFFFF) == parm );
-        bool is32bit = ( (parm&(int64_t) 0x00000000ffffFFFF) == parm );
+        //bool is32bit = ( (parm&(int64_t) 0x00000000ffffFFFF) == parm );
         bool hiOnes  = ( (int)hi == -1 );
         if(is31bit){
             //KASE(1,"lea 31-bit",parm == (parm&0x3fffFFFF));
@@ -652,7 +652,7 @@ OpLoadregStrings opLoadregStrings( uint64_t const parm )
         }else if((int)lo < 0 && hiOnes){
             assert( (int64_t)parm < 0 ); assert((int)lo < 0);
             //KASE(2,"lea 32-bit -ve",parm == (uint64_t)(int64_t)(int32_t)lo);
-            ret.lea="lea OUT, "+(parm >= -100000? jitdec((int32_t)lo): jithex(lo))
+            ret.lea="lea OUT, "+((int64_t)parm >= -100000? jitdec((int32_t)lo): jithex(lo))
                 +"# load: sext(32-bit)";
         }else if(lo==0){
             //KASE(3,"lea.sl hi only",lo == 0);
@@ -694,7 +694,7 @@ OpLoadregStrings opLoadregStrings( uint64_t const parm )
             ret.log="xor OUT, "+jithex(ival)+","+jitimm(mval)+"# load: xor(I,M)";
         }else if(isMval(parm^sext7) ){ // xor rules don't depend on sign of lo7
             // if A = B^C, then B = A^C and C = B^A (Generally true)
-            int64_t const ival = sext7;
+            //int64_t const ival = sext7;
             uint64_t const mval = parm^sext7;
             //KASE(9,"xor OUT, "+jithex(ival)+","+jitimm(mval),
             //        parm == (ival ^ mval) && isIval(ival) && isMval(mval));
@@ -766,12 +766,28 @@ OpLoadregStrings opLoadregStrings( uint64_t const parm )
     return ret;
 }
 
-/** suggested VE code string, ready to compile into an ABI=jit \ref JitPage */
+std::string choose(OpLoadregStrings const& ops, void* /*context=nullptr*/)
+{
+    enum Optype { SHL, LEA, LOG, ARI, LEA2 };
+    static std::array<Optype, 5> const pref = {SHL, LEA, LOG, ARI, LEA2};
+    string code
+    for(auto const optype: pref){
+        string code = (optype==LEA? ops.lea
+                :optype==LOG? ops.log
+                :optype==SHL? ops.shl
+                :optype==ARI? ops.ari
+                ops.lea2);
+        if( !code.empty() ){
+            break;
+        }
+    }
+    return code;
+}
 std::string prgiLoadreg(uint64_t start)
 {
     std::string func("LoadS"); // basename for labels, etc.
     uint64_t const parm = start;
-    int kase = 0; // for simple stuff, don't need execution path machinery.
+    //int kase = 0; // for simple stuff, don't need execution path machinery.
     string program;
     AsmFmtCols prog("");
     prog.lcom(func+"( i = "+jithex(start)+" = "+jitdec(start)+" )");
@@ -793,8 +809,6 @@ std::string prgiLoadreg(uint64_t start)
             : !ops.shl.empty()? ops.shl
             : !ops.ari.empty()? ops.ari
             : ops.lea2 );
-#endif
-
 
     if(1){
         prog
@@ -834,7 +848,7 @@ std::string prgiLoadreg(uint64_t start)
             // add more core code to prog, %s0 is the input, output|error-->%s2,...
         prog.com("SNIPPET END")
             .ins("b.l (,%lr)",          "return (no epilogue)")
-            .undef("FN").undef("FNS").undef("L")
+            //.undef("FN").undef("FNS").undef("L")
             ;
         program = prog.flush();
     }

@@ -24,6 +24,12 @@ struct ExecutablePage {
     static const int verbosity=0; 
 };
 
+/** remove asm comments (after '#'),
+ * accepting ';'- or newline-separated multiline \c asmcode.
+ * The returned string may be uglified, so you might need to
+ * pass it through an \c AsmFmtCols::ins again. */
+std::string uncomment_asm( std::string asmcode );
+
 /** assemble a .S file to a .bin file and load it into an ExecutablePage */
 ExecutablePage asm2page( std::string const& fname_S );
 
@@ -59,8 +65,11 @@ class AsmFmtCols {
       void write();
       std::string str() const;                ///< return copy of internal ostringstream
       /** Silent pre-destructor \c write(), possibly with file output,
-       * that returns the text as a std::string. Kills this formatter. */
+       * that returns the text as a std::string. */
       std::string flush();
+      /** Flush any code, and also output the \c stack_undefs */
+      std::string flush_all() { pop_scopes(); return flush(); }
+      //std::string flush_undefs(); // old name
       /** output #define text for these string pairs, and push a corresponding
        * string of #undef onto a scope-stack.
        * \return number of #defines in this scope (which could be zero)
@@ -74,6 +83,9 @@ class AsmFmtCols {
       /** emit last set of #undefs. \return number of remaining stack-scopes
        * never errs (no-op if scope-stack is empty) */
       std::stack<std::string>::size_type pop_scope();
+      /** pop all scopes (emit all active undefs) */
+      void pop_scopes();
+
       /// \group simple formatting
       ///{
       typedef struct {
@@ -83,7 +95,7 @@ class AsmFmtCols {
           std::string comment;
           std::string remain; ///< allow multi-statement, ';' as separator
       } AsmLine;
-      AsmLine parts(std::string const& instruction);        ///< split into op and args (only?)
+      static AsmLine parts(std::string const& instruction);        ///< split into op and args (only?)
 
       AsmFmtCols& def(std::string const& symbol, std::string const& subst, std::string const& name=""); ///< #define symbol subst
       AsmFmtCols& undef(std::string const& symbol, std::string const& name="");    ///< might \em uncover a previous definition
@@ -130,10 +142,13 @@ class AsmFmtCols {
               return *this;
           }
       ///}
+  protected:
+      std::string fmt_def(std::string const& symbol, std::string const& subst, std::string const& name="");
+      std::string fmt_undef(std::string const& symbol, std::string const& name);
   private:
       friend void throw_if_written( AsmFmtCols const* asmfmt, std::string const& cannot );
       std::ostringstream *a;          ///< [cpp +] assembler code
-      static char const* const ws;    ///< =" \t\r\n";
+      static char const* const ws;    ///< =" \t\r" within-statement whitespace (newline separates statement)
       static char const* const indent; ///< = "    ";
       static int const inwidth;       ///< indent width, 4
       static int const opwidth;       ///< = 12-1;
@@ -141,7 +156,7 @@ class AsmFmtCols {
       static int const argwidth;
       bool written;                   ///< track if user forced an early \c write();
       std::ofstream *of;              ///< optional file output (instread of cout)
-      /** push with \c scope, pop with \c pop_scope. XXX Only a single scope per object. */
+      /** push with \c scope, pop with \c pop_scopes or pop_scope. */
       std::stack<std::string> stack_undefs;
 };
 

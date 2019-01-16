@@ -20,10 +20,10 @@ std::size_t AsmFmtCols::scope( PAIRCONTAINER const& pairs, std::string block_nam
         auto       iter = pairs.begin();
         for( ; iter != iend; ++iter ){
             if( !name_out ){
-                this->def(iter->first, iter->second, comment);
+                (*a) << this->fmt_def(iter->first, iter->second, comment);
                 name_out = true;
             }else{
-                this->def(iter->first, iter->second);
+                (*a) << this->fmt_def(iter->first, iter->second);
             }
             un.push_back(iter->first);
         }

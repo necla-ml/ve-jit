@@ -112,7 +112,7 @@ void test_loadreg(char const* const cmd, unsigned long const parm, int const opt
             bool isI = (int64_t)parm >= -64 && (int64_t)parm <= 63; // I : 7-bit immediate
             //             so if(isI), then sext7 is the integer "I" value
             bool isM = isMval(parm); // M : (m)B 0<=m<=63 B=0|1 "m high B's followed by not-B's"
-            bool is31bit = ( (parm&0x8fffFFFF) == parm );
+            bool is31bit = ( (parm&0x7fffFFFF) == parm );
             bool is32bit = ( (parm&0xffffFFFF) == parm );
             bool isSext32 = (hi==0xffffFFFFF);
             assert( isI == ((int64_t)parm == sext7) ); // equiv condition
@@ -188,7 +188,7 @@ void test_loadreg(char const* const cmd, unsigned long const parm, int const opt
                 // M   1... 0... |0000000|
                 // I   0... 0...  0xx10xx      I = sext7 > 0
                 // or  1... 0...  0xx10xx  A** M = (~0x3f & or) ***
-                if(log.empty() && lo7>=0 && isMval(parm&~0x3f)){
+                if(log.empty() && isMval(parm&~0x3f)){
                     kase+=30;
                     uint64_t const ival = parm&0x3f;
                     uint64_t const mval = parm&~0x3f;
@@ -217,7 +217,7 @@ void test_loadreg(char const* const cmd, unsigned long const parm, int const opt
                 // I   0... 0...  0xx10xx
                 // xor 0... 1...  1yy01yy  imm M = 0x3f | (~0x3f | xor) vs xor sext7<0
                 //  B**   isMval(parm&03f)
-                if(lo7>=0 && isMval(parm|0x3f)){
+                if(isMval(parm|0x3f)){
                     // equiv kase 60, but small I > 0
                     assert(isMval(parm^sext7) );
                     kase+=50;
@@ -374,7 +374,7 @@ void test_loadreg(char const* const cmd, unsigned long const parm, int const opt
                     uint64_t tmplo = (int64_t)(int32_t)lo; // lo bits ok, hi bits all-0 or all-1
                     // -----> lea.sl TMPLO, lo
                     // #2) lea.sl OUT, <hi or hi+1>>(,tmplo)
-                    uint64_t dd = (lo>=0? hi: hi+1); // hi+1 to counteract the all-1
+                    uint64_t dd = ((int32_t)lo>=0? hi: hi+1); // hi+1 to counteract the all-1
                     uint64_t tmp2 = dd << 32;    // tmp2 = (sext(tmphi,64)<<32)
                     uint64_t out = tmp2 + tmplo;
                     // -----> lea.sl OUT, DD(,TMPLO);
@@ -446,7 +446,7 @@ void test_loadreg(char const* const cmd, unsigned long const parm, int const opt
 
     // load the blob into an executable code page
     char const* basename = &kernel_name[0];
-    Jitpage page = bin2jitpage( basename );
+    JitPage page = bin2jitpage( basename );
 
     int nerr=0;
     if(page.addr==NULL){

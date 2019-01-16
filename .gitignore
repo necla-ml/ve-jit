@@ -48,3 +48,4 @@ veli_loadreg
 veli_loadreg-8x6
 veli_loadreg.log
 vl-*.log
+asmfmt-x86

@@ -73,9 +73,9 @@ Set init_tvals(){
     Set targ; // target for various Mval,Ival PairS
     Set mvals = init_mvals(0);
     cout<<"\n Using "<<mvals.size()<<" mvals for binary-op targets"<<endl;
-    uint64_t const one=1U;
-    uint64_t mval;
-    uint64_t ival;
+    //uint64_t const one=1U;
+    //uint64_t mval;
+    //uint64_t ival;
     // generate a set of target around exact formula values
     for(int64_t ival = -64; ival<=63; ++ival){
         uint64_t const i = (uint64_t)ival;
@@ -151,11 +151,13 @@ std::string getBigTest(SET const& tvals){
         .com("SNIPPET START");
     prog.def("INP", "%s0", "input: 0 <= test case number < tvals.size()")
         // unused .def("MAXIN", "%s1")
-        .def("ERR", "%s2")
+        .def("ERR", "%s2",          "output 0 if input in range")
         .def("OUT","%s3",           "output value")
         .def("OTHER","%s4",         "other output")
-        .def("T0","%s40");
+        .def("T0","%s40",           "tmp reg");
+#ifndef WORKING
 #define WORKING 6 // OK, after ? incremental steps I think the bugs were fixed :(
+#endif
 #if WORKING==0
     // debug: return ERR=OUT=666 always
     prog.ins("lea ERR,666");
@@ -184,7 +186,7 @@ std::string getBigTest(SET const& tvals){
     prog.ins("bge.l INP, REL(OK1)", "jump ABSOLUTE")
         .ins("lea ERR,-1")
         .ins("lea OUT,-1")
-        .ins("b.l (,%lr)", "unconditional return")
+        .ins("b.l (,%lr)", "return unconditional, error -1")
         .lab("L(OK1)")
         .ins();
     ops = opLoadregStrings( tvals.size() ); // all these set value of OUT, maybe use T0
@@ -195,19 +197,19 @@ std::string getBigTest(SET const& tvals){
         .ins("brlt.l.t INP,OUT, L(OK2)","test and jump RELATIVE")
         .ins("lea ERR,+1")
         .ins("lea OUT,+1")
-        .ins("b.l (,%lr)", "error 2, INP test case too high")
+        .ins("b.l (,%lr)", "error +1, INP test case too high")
         .lab("L(OK2)")
         .ins();
     prog.ins("lea ERR,0")
         .ins("lea OUT,0")
-        .ins("b.l (,%lr)", "error 2, INP test case too high")
+        .ins("b.l (,%lr)", "error 0, INP in range")
         .ins();
 #else // WORKING>=4
     // defines, comments done...
     prog.ins("bge.l INP, REL(OK1)")
         .ins("lea ERR,-1")
         .ins("lea OUT,0")
-        .ins("b.l (,%lr)", "unconditional return")
+        .ins("b.l (,%lr)", "unconditional return, error=-1")
         .lab("L(OK1)")
         .ins();
     ops = opLoadregStrings( tvals.size() ); // all these set value of OUT, maybe use T0
@@ -216,7 +218,7 @@ std::string getBigTest(SET const& tvals){
         .ins("brlt.l.t INP,OUT, L(OK2)","test case < tvals.size()?")
         .ins("lea ERR,+1")
         .ins("lea OUT,0")
-        .ins("b.l (,%lr)", "error 2, INP test case too high")
+        .ins("b.l (,%lr)", "error 2, INP test case too high, error=+1")
         .lab("L(OK2)")
         .ins();
     // INP was in open range [ 0, tvals.size() )
@@ -230,14 +232,14 @@ std::string getBigTest(SET const& tvals){
     //     if( jit code was a single-instruction ) NOP
     //
     //  so jump addr is CASE0 + INP * 24
-    prog.lcom("JUMP TABLE for FIXED-SIZE code entries")
+    prog.lcom("JUMP TABLE for FIXED-SIZE code entries (3 ops ~ 24 bytes)")
         .ins("lea T0,24")
         .ins("mulu.l T0, INP,T0", "byte offset of IN'th test");
         // branch can only accept <disp>(,<reg>)  "AS" format, so
         // we first calculate the absolute address into T0 (ASX format ok for LEA)
         // and then branch to that absolute address
 #if WORKING==4 // return the absolute address only (do not branch into the table)
-    prog..ins("lea OTHER, L(CASE_0)-L(BASE)(,BP)", "calc absolute address of 0'th test")
+    prog.ins("lea OTHER, L(CASE_0)-L(BASE)(,BP)", "calc absolute address of 0'th test")
         .ins("addu.l OTHER,OTHER,T0", "absolute address of test code")
         // oh. nas says can't use index AND displacement ??
         .ins("b.l (,%lr)", "unconditional return")
@@ -249,21 +251,29 @@ std::string getBigTest(SET const& tvals){
     // WORKING >= 5 will attempt the "switch" via computed-goto ...
     // actually full ASX format IS allowed for bsic !!!
     //
-    prog
-        .ins("lea OTHER, L(CASE_0)-L(BASE)(,BP)", "calc absolute address of 0'th test")
-        .rcom("OTHER=addr of CASE_0")
-        .ins("addu.l OTHER,OTHER,T0", "absolute address of test code")
+#if 1 // OK
+    // and returns OTHER = absolute address of code for INP'th test
+    prog.lcom("If not returning test addr in OTHER, could execute the branch as just")
+        .lcom("      bsic T0, L(CASE_0)-L(BASE)(T0,BP)  #Sx=IC+8; IC=Sy+Sz+sext(D)");
+    prog.ins("lea OTHER, L(CASE_0)-L(BASE)(,BP)", "abs_address of 0'th test")
+        .ins("addu.l OTHER,OTHER,T0", "abs_addr of INP'th test")
         .rcom("OTHER=addr of INP'th test case")
-        // oh. nas says can't use index AND displacement ??
-        //.ins("bsic.l OTHER, 8(T0,OTHER)", "branch to absolute address,")
-        .ins()
         .ins("b.l (,OTHER)", "branch to absolute address,")
-        .ins("nop") // check the generated asm code...
-        .ins(" nop")
-        .ins(" b.l (,%lr)", "test op field with leading space")
-        // note that if you remember the OTHER return value, you can
-        // branch directly to that case again.
-        .lab("L(CASE_0)");
+        .ins();
+#elif 0
+    prog.ins("lea OTHER, L(CASE_0)-L(BASE)(,BP)", "calc absolute address of 0'th test")
+        .rcom("OTHER=addr of CASE_0")
+        .ins("bsic T0, 0(T0,OTHER)", "bsic accepts ASX address D(Sy,Sz)")
+        .ins();
+#else
+    prog.ins("bsic T0, L(CASE_0)-L(BASE)(T0,BP)", "Sx=IC+8; IC=Sy+Sz+sext(D)");
+
+#endif
+    // oh. nas says can't use index AND displacement ??
+    //.ins("bsic.l OTHER, 8(T0,OTHER)", "branch to absolute address,")
+    // note that if you remember the OTHER return value, you can
+    // branch directly to that case again.
+    prog.lab("L(CASE_0)");
     //
     // Now populate tvals.size() test cases to load OUT with some value.
     //
@@ -336,10 +346,10 @@ std::string getBigTest(SET const& tvals){
         .ins(".ascii FNS")
         .lab("L(strend)")
         .ins(".ascii \""+jitdec(WORKING)+"\"", "WORKING")
-        .undef("FN").undef("FNS").undef("L")
+        //.undef("FN").undef("FNS").undef("L")
         //.ins(".align 3" "; " L(more) ":", "if you want more code")
         ;
-    std::string program = prog.flush();
+    std::string program = prog.flush_all(); // program, + accumulated #undef s
     if(1){ // verbose ?
         cout<<__FUNCTION__<<" --> program:\n"
             <<program<<endl;
