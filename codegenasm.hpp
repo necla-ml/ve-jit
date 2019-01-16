@@ -140,6 +140,11 @@ std::string jithex(T const t){
     oss << "0x" << std::hex << t << std::dec;
     return oss.str();
 }
+inline std::string hexdec(int64_t const i){
+    return (i>-1000000 && i<1000000
+            ? jitdec(i)
+            : jithex(i));
+}
 
 /** string for VE 'M' representation of a 64-bit value.
  * 'M' representation is (M)B,

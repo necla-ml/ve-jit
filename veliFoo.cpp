@@ -6,8 +6,16 @@
 #include <iostream>
 #include <iomanip>
 #include <sstream>
+#include <vector>
 #define STR0(...) #__VA_ARGS__
 #define STR(...) STR0(__VA_ARGS__)
+
+std::ostream& operator<<(std::ostream& os, VeliErr const& e){
+    std::ostringstream oss;
+    oss<<"VeliErr{i="<<hexdec(e.i)<<",error="<<hexdec(e.error)
+        <<",output="<<hexdec(e.output)<<",other="<<hexdec(e.other);
+    return os<<oss.str();
+}
 
 /** \return fixed length debug string for numeric values */
 template<typename Name> inline std::string
@@ -137,7 +145,7 @@ VeliErr     veliLoadreg(uint64_t start, uint64_t count/*=1U*/)
     uint32_t const hi = ((parm >> 32) & 0xffffFFFF); // unsigned shift-right
     uint32_t const lo = (uint32_t)parm;              // 32 lsbs (trunc)
     uint64_t const lo7 = (parm & 0x7f);              // 7 lsbs (trunc)
-    int64_t  const sext7 = (int64_t)(lo7<<57) >> 57; // 7 lsbs (trunc, sign-extend)
+    int64_t  const sext7 = (int64_t)(parm<<57) >> 57;// 7 lsbs (trunc, sign-extend)
     // OLD int64_t const sext7 = ((lo7&0x40)==0x40? lo7|~0x7f: lo7);
     //     assert( sext7 == (int64_t)(lo7<<57) >> 57 );
     //
@@ -147,7 +155,6 @@ VeliErr     veliLoadreg(uint64_t start, uint64_t count/*=1U*/)
     //             so if(isI), then sext7 is the integer "I" value
     bool isM = isMval(parm); // M : (m)B 0<=m<=63 B=0|1 "m high B's followed by not-B's"
     assert( isI == ((int64_t)parm == sext7) ); // equiv condition
-    assert( lo7 >= 0 );
     //assert( isM == (popcount(parm) == nTrailOnes(parm)) || popcount(parm) == nLeadingOnes(parm) );
     //
     //
@@ -181,14 +188,14 @@ VeliErr     veliLoadreg(uint64_t start, uint64_t count/*=1U*/)
         cout<<endl; \
     } while(0)
     { // lea logic
-        bool is31bit = ( (parm&0x8fffFFFF) == parm );
-        bool is32bit = ( (parm&0xffffFFFF) == parm );
+        bool is31bit = ( (parm&(uint64_t)0x000000007fffFFFF) == parm );
+        bool is32bit = ( (parm&(int64_t)0x00000000ffffFFFF) == parm );
         bool hiOnes  = ( (int)hi == -1 );
         if(v){ HD(hi); HD(lo);
             cout<<" is31bit="<<is31bit<<" is32bit="<<is32bit<<" hiOnes="<<hiOnes<<endl;
         }
         if(is31bit){
-            KASE(1,"lea 31-bit",parm == (parm&0x3fffFFFF));
+            KASE(1,"lea 31-bit",parm == (parm&0x7fffFFFF));
             //lea="lea "+reg+","+jithex(lo)+"# load: 31-bit";
         }else if((int)lo < 0 && hiOnes){
             assert( (int64_t)parm < 0 ); assert((int)lo < 0);
@@ -215,7 +222,7 @@ VeliErr     veliLoadreg(uint64_t start, uint64_t count/*=1U*/)
     // M   1... 0... |0000000|
     // I   1... 1...  1xxxxxx          I = sext7 < 0
     // or  1... 1...  1xxxxxx  1 isI   // or I,(0)1 sext7<0 && ((parm&~0x3f)==~0x3f)
-    //also 0... 0...  0??????
+    //also 0... 0...  0xxxxxx
     if(isI){
         KASE(4,"or OUT,"+jitdec(sext7)+",(0)1", parm==sext7 && isIval(parm));
         //log="or "+reg+","+jitdec(sext7)+",(0)1 # load: small I";
@@ -269,7 +276,7 @@ VeliErr     veliLoadreg(uint64_t start, uint64_t count/*=1U*/)
         if(isMval(parm&~0x3f)){
             //assert(sext7 > 0); holds if 'isI' and 'isM' tests preclude getting here
             // test for lo7 is convenient, but print I-value is sext7
-            // (all higher bits are ???)
+            // (all higher bits are don't-care)
             uint64_t const ival = sext7;        // parm&0x3f (trunc)
             uint64_t const mval = parm&~0x3f;
             if(v){HD(ival); HD(mval);}
@@ -545,75 +552,157 @@ VeliErr     veliLoadreg(uint64_t start, uint64_t count/*=1U*/)
     return ret;
 }
 
-/** suggested VE code string, ready to compile into an ABI=jit \ref JitPage */
-std::string prgiLoadreg(uint64_t start)
+/** The Loadreg enum value can be used to select which JitPage should be called
+ * for any particular input case.  */
+enum Load64 : uint32_t { ABSENT=0, LEA_31BIT, LEA_HIONES, LEA_LOZERO,
+    LOG_I, LOG_M, LOG_XOR_M7SET, LOG_XOR,
+    /* next enums represent ranges FOO, FOO+1, ... FOO+64 */
+    ARI_ADD_IPOS=100, ARI_ADD_INEG=200, ARI_SUB_IPOS=300, ARI_SUB_INEG=400,
+    /* next enums represent ranges SHL, FOO+1, ... FOO+64 */
+    SHL=500 };
+
+/** Single-operation 64-bit register load optimization cases.
+ * \return up to 4 Load64 values, using different instruction types:
+ * lea, logical, shift, arithmetic.   Does not check 2-op possibilities */
+std::vector<Load64> kase_Loadreg(uint64_t const parm){
+    std::vector<Load64> ret;
+    ret.reserve(4); // max is 1 lea, 1 logical, 1 shift, 1 ari, 
+    uint32_t const hi = ((parm >> 32) & 0xffffFFFF); // unsigned shift-right
+    uint32_t const lo = (uint32_t)parm;              // 32 lsbs (trunc)
+    { // lea logic
+        bool is31bit = ( (parm&(uint64_t)0x000000007fffFFFF) == parm );
+        bool is32bit = ( (parm&(int64_t)0x00000000ffffFFFF) == parm );
+        bool hiOnes  = ( (int)hi == -1 );
+        if(is31bit){                        ret.push_back(LEA_31BIT);
+        }else if((int)lo < 0 && hiOnes){    ret.push_back(LEA_HIONES);
+        }else if(lo==0){                    ret.push_back(LEA_LOZERO);
+        }
+    }
+    { // bit ops logic
+        bool const isI = (int64_t)parm >= -64 && (int64_t)parm <= 63; // I : 7-bit immediate
+        bool const isM = isMval(parm); // M : (m)B 0<=m<=63 B=0|1 "m high B's followed by not-B's"
+        int64_t const sext7 = (int64_t)(parm<<57) >> 57; // 7 lsbs (trunc, sign-extend)
+        if(isI){                            ret.push_back(LOG_I);
+        }else if(isM){                      ret.push_back(LOG_M);
+        }else if(isMval(parm|0x3f)){        ret.push_back(LOG_XOR_M7SET);
+        }else if(isMval(parm^sext7) ){      ret.push_back(LOG_XOR);
+        }
+    }
+    // return base+ival, throwing if ival is not in [0,64]
+    auto asEnum = [](Load64 const base, int64_t const ival) {
+        if( ival < 0 || ival > 64 ) THROW("Load64 conversion base="<<base<<" ival="<<ival<<" not in range [0,64]");
+        return static_cast<Load64>( static_cast<uint32_t>(base + (uint32_t)ival) );
+    };
+
+    { // shift: search for an unsigned right-shift that can regenerate parm
+        int oksr=0;
+        for(int sr=1; sr<64; ++sr){
+            if( parm == (parm>>sr<<sr) && isMval(parm>>sr) ){
+                oksr=sr; // use smallest shift
+                break;
+            }
+        }
+        if(oksr)                            ret.push_back(asEnum(SHL,oksr));
+    }
+    { // arithmetic ops (+,-)
+        int ari=0;
+        for( int64_t ival = 0; !ari && ival<=63; ++ival ){
+            // P = I + M <===> M == P - I
+            uint64_t const mval = parm - (uint64_t)ival;
+            if( isMval(mval) ){             ret.push_back(asEnum(ARI_ADD_IPOS, ival));
+                ari=1; break; }
+        }
+        for( int64_t ival = 0; !ari && ival<=63; ++ival ){
+            // P = I - M <==> M = I - P
+            uint64_t const mval = (uint64_t)ival - (uint64_t)parm;
+            if( isMval(mval) ){             ret.push_back(asEnum(ARI_SUB_IPOS, ival));
+                ari=1; break; }
+        }
+        for( int64_t ival = -1; !ari && ival>=-64; --ival ){
+            uint64_t const mval = parm - (uint64_t)ival;
+            if( isMval(mval) ){             ret.push_back(asEnum(ARI_ADD_INEG, -ival));
+                ari=1; break; } }
+        for( int64_t ival = -1; !ari && ival>=-64; --ival ){
+            uint64_t const mval = (uint64_t)ival - (uint64_t)parm;
+            if( isMval(mval) ){             ret.push_back(asEnum(ARI_SUB_INEG, -ival));
+                ari=1; break; }
+        }
+    }
+}
+
+/** \return AsmFmtCols instruction string[s] to load a 64-bit scalar VE register.
+ * Within the returned strings, \c OUT is the output register, and
+ * (only for ret.lea2) \c T0 is a temporary register. */
+OpLoadregStrings opLoadregStrings( uint64_t const parm )
 {
-    std::string func("LoadS"); // basename for labels, etc.
-    uint64_t const parm = start;
-    int kase = 0; // for simple stuff, don't need execution path machinery.
-    string program;
-    AsmFmtCols prog("");
-    prog.lcom(func+"( i = "+jithex(start)+" = "+jitdec(start)+" )");
+    OpLoadregStrings ret;
     uint32_t const hi = ((parm >> 32) & 0xffffFFFF); // unsigned shift-right
     uint32_t const lo = (uint32_t)parm;              // 32 lsbs (trunc)
     uint64_t const lo7 = (parm & 0x7f);              // 7 lsbs (trunc)
     int64_t  const sext7 = (int64_t)(lo7<<57) >> 57; // 7 lsbs (trunc, sign-extend)
-    bool isI = (int64_t)parm >= -64 && (int64_t)parm <= 63; // I : 7-bit immediate
-    bool isM = isMval(parm); // M : (m)B 0<=m<=63 B=0|1 "m high B's followed by not-B's"
 
-    string lea;
     { // lea logic
-        bool is31bit = ( (parm&0x8fffFFFF) == parm );
-        bool is32bit = ( (parm&0xffffFFFF) == parm );
+        bool is31bit = ( (parm&(uint64_t)0x000000007fffFFFF) == parm );
+        bool is32bit = ( (parm&(int64_t) 0x00000000ffffFFFF) == parm );
         bool hiOnes  = ( (int)hi == -1 );
         if(is31bit){
             //KASE(1,"lea 31-bit",parm == (parm&0x3fffFFFF));
-            lea="lea OUT, "+(lo<=1000000? jitdec(lo): jithex(lo))
+            ret.lea="lea OUT, "+(lo<=1000000? jitdec(lo): jithex(lo))
                 +"# load: 31-bit";
         }else if((int)lo < 0 && hiOnes){
             assert( (int64_t)parm < 0 ); assert((int)lo < 0);
             //KASE(2,"lea 32-bit -ve",parm == (uint64_t)(int64_t)(int32_t)lo);
-            lea="lea OUT, "+(parm >= -100000? jitdec((int32_t)lo): jithex(lo))
+            ret.lea="lea OUT, "+(parm >= -100000? jitdec((int32_t)lo): jithex(lo))
                 +"# load: sext(32-bit)";
         }else if(lo==0){
             //KASE(3,"lea.sl hi only",lo == 0);
-            lea="lea.sl OUT, "+jithex(hi)+"# load: hi-only";
+            ret.lea="lea.sl OUT, "+jithex(hi)+"# load: hi-only";
         }
-        // (more lea kases below, in 2-op section)
-        //if(!lea.empty()) lea.append("->"+jithex(parm)+" = "+jitdec(parm));
+        //
+        // 2-instruction lea is always possible (TODO mixed instruction types)
+        //
+        //uint64_t tmplo = (int64_t)(int32_t)lo;
+        // lea.sl OUT, <hi or hi+1> (,TMP)
+        //        -ve lo will fill hi with ones i.e. -1
+        //        so we add hi+1 to MSBs to restore desired sums
+        uint64_t dd = ((int32_t)lo>=0? hi: hi+1);
+        //uint64_t tmp2 = tmphi << 32;    // (sext(D,64)<<32)
+        //uint64_t out = tmp2 + tmplo;     // lea.sl lea_out, tmphi(,lea_out);
+        //assert( parm == out );
+        ret.lea2="lea T0, "+jithex(lo)+"# lo sign-extends"
+            + " ; lea.sl OUT, "+jithex(dd)+"(,T0) # 2-op load";
     }
-    string log;
     { // bit ops logic
         // simple cases: I or M zero
-        if(log.empty() && isI){
+        bool isI = (int64_t)parm >= -64 && (int64_t)parm <= 63; // I : 7-bit immediate
+        bool isM = isMval(parm); // M : (m)B 0<=m<=63 B=0|1 "m high B's followed by not-B's"
+        if(isI){
             //KASE(4,"or OUT,"+jitdec(sext7)+",(0)1", parm==sext7);
-            log="or OUT, "+jitdec(sext7)+",(0)1 # load: small I";
-        }
-        if(log.empty() && isM){
+            ret.log="or OUT, "+jitdec(sext7)+",(0)1 # load: small I";
+        }else if(isM){
             //KASE(5,"or OUT,0,"+jitimm(parm), isMval(parm));
-            log="or OUT, 0,"+jitimm(parm)+"# load: (M){0|1}";
+            ret.log="or OUT, 0,"+jitimm(parm)+"# load: (M){0|1}";
         }
         //if(isMval(parm&~0x3f)){...}
         // KASE 6 subsumed by KASE 9 (equivalent I, M)
-        if(log.empty() && isMval(parm|0x3f)){
+        else if(isMval(parm|0x3f)){
             assert( isMval(parm^sext7) ); // more general, but this is more readable
             uint64_t const ival = (~parm &0x3f);
             uint64_t const mval = parm|0x3f;
             //KASE(7,"xor OUT, ~parm&0x3f "+jithex(ival)+", parm|0x3f "+jitimm(mval),
             //        parm == (ival ^ mval) && isIval(ival) && isMval(mval));
-            log="xor OUT, "+jithex(ival)+","+jitimm(mval)+"# load: xor(I,M)";
-        }
-        if(log.empty() && isMval(parm^sext7) ){ // xor rules don't depend on sign of lo7
+            ret.log="xor OUT, "+jithex(ival)+","+jitimm(mval)+"# load: xor(I,M)";
+        }else if(isMval(parm^sext7) ){ // xor rules don't depend on sign of lo7
             // if A = B^C, then B = A^C and C = B^A (Generally true)
             int64_t const ival = sext7;
             uint64_t const mval = parm^sext7;
             //KASE(9,"xor OUT, "+jithex(ival)+","+jitimm(mval),
             //        parm == (ival ^ mval) && isIval(ival) && isMval(mval));
-            log="xor OUT, "+jitdec(sext7)+","+jitimm(mval)+"# load: xor(I,M)";
+            ret.log="xor OUT, "+jitdec(sext7)+","+jitimm(mval)+"# load: xor(I,M)";
         }
+        if(!ret.log.empty()) ret.log.append(" --> "+jithex(parm));
     }
-    string shl; // shift left
-    {
+    { // shift left
         // search for an unsigned right-shift that can regenerate parm
         int oksr=0;
         for(int sr=1; sr<64; ++sr){
@@ -626,78 +715,86 @@ std::string prgiLoadreg(uint64_t start)
             uint64_t mval = parm >> oksr;
             //KASE(19,"sll OUT,"+jitimm(mval)+","<<jitdec(oksr),
             //        parm == (mval << oksr) && isMval(mval));
-            shl="sll OUT, "+jitimm(mval)+","+jitdec(oksr);
+            ret.shl="sll OUT, "+jitimm(mval)+","+jitdec(oksr);
         }
     }
-    string ari; // arithmetic ops (+,-)
-    {
-        if(ari.empty()) for( int64_t ival = 0; ari.empty() && ival<=63; ++ival ){
+    { // arithmetic ops (+,-)
+        if(ret.ari.empty()) for( int64_t ival = 0; ret.ari.empty() && ival<=63; ++ival ){
             // P = I + M <===> M == P - I
             uint64_t const mval = parm - (uint64_t)ival;
             if( isMval(mval) ){
                 //KASE(20,"addu.l OUT,"+jitdec(ival)+", "+jitimm(mval),
                 //        parm == ival + mval && isIval(ival) && isMval(mval));
-                ari="addu.l OUT, "+jitdec(ival)+","+jitimm(parm-ival)+"# load: add(I,M)";
+                ret.ari="addu.l OUT, "+jitdec(ival)+","+jitimm(parm-ival)+"# load: add(I,M)";
                 break;
             }
         }
-        if(ari.empty()) for( int64_t ival = -1; ari.empty() && ival>=-64; --ival ){
+        if(ret.ari.empty()) for( int64_t ival = -1; ret.ari.empty() && ival>=-64; --ival ){
             uint64_t const mval = parm - (uint64_t)ival;
             if( isMval(mval) ){
                 //KASE(21,"addu.l OUT,"+jitdec(ival)+","+jitimm(mval),
                 //        parm == ival + mval && isIval(ival) && isMval(mval));
-                ari="addu.l OUT, "+jitdec(ival)+","+jitimm(parm-ival)+"# load: add(I,M)";
+                ret.ari="addu.l OUT, "+jitdec(ival)+","+jitimm(parm-ival)+"# load: add(I,M)";
                 break;
             }
         }
         // Q; Is it correct that SUB (unsigned subtract) still
         //    sign-extends the 7-bit Immediate in "Sy" field?
-        if(ari.empty()) for( int64_t ival = 0; ari.empty() && ival<=63; ++ival ){
+        if(ret.ari.empty()) for( int64_t ival = 0; ret.ari.empty() && ival<=63; ++ival ){
             // P = I - M <==> M = I - P
             uint64_t const mval = (uint64_t)ival - (uint64_t)parm;
             if( isMval(mval) ){
                 //uint64_t out = (uint64_t)ival - (uint64_t)mval;
                 //KASE(22,"subu.l OUT,"+jitdec(ival)+","+jitimm(mval),
                 //        parm == out  && isIval(ival) && isMval(mval));
-                ari="subu.l OUT, "+jitdec(ival)+","+jitimm(mval)+"# load: subu(I,M)";
+                ret.ari="subu.l OUT, "+jitdec(ival)+","+jitimm(mval)+"# load: subu(I,M)";
                 break;
             }
         }
-        if(ari.empty()) for( int64_t ival = -1; ari.empty() && ival>=-64; --ival ){
+        if(ret.ari.empty()) for( int64_t ival = -1; ret.ari.empty() && ival>=-64; --ival ){
             uint64_t const mval = (uint64_t)ival - (uint64_t)parm;
             if( isMval(mval) ){
                 //uint64_t out = (uint64_t)ival - (uint64_t)mval;
                 //KASE(23,"subu.l OUT, "+jitdec(ival)+","+jitimm(mval),
                 //        parm == out  && isIval(ival) && isMval(mval));
-                ari="subu.l OUT, "+jitdec(ival)+","+jitimm(mval)+"# load: subu(I,M)";
+                ret.ari="subu.l OUT, "+jitdec(ival)+","+jitimm(mval)+"# load: subu(I,M)";
                 break;
             }
         }
+        if(!ret.ari.empty()) ret.ari.append(" --> "+jithex(parm));
     }
-    //
-    // eventually you might want to reprioritize execution units
-    // base on previous or ensuing instruction types
-    //
-    string chosen = (
-            !lea.empty()? lea
-            : !log.empty()? log
-            : !shl.empty()? shl
-            : !ari.empty()? ari : string("")
-            );
-    if(chosen.empty()){ // 2-op load
-        //uint64_t tmplo = (int64_t)(int32_t)lo;
-        // lea.sl OUT, <hi or hi+1> (,TMP)
-        //        -ve lo will fill hi with ones i.e. -1
-        //        so we add hi+1 to MSBs to restore desired sums
-        uint64_t dd = ((int32_t)lo>=0? hi: hi+1);
-        //uint64_t tmp2 = tmphi << 32;    // (sext(D,64)<<32)
-        //uint64_t out = tmp2 + tmplo;     // lea.sl lea_out, tmphi(,lea_out);
-        //assert( parm == out );
-        lea="lea T0, "+jithex(lo)+"# lo sign-extends"
-            + ";lea.sl OUT, "+jithex(dd)+"(,T0) # 2-op load";
-        chosen = lea;
+    return ret;
+}
+
+/** suggested VE code string, ready to compile into an ABI=jit \ref JitPage */
+std::string prgiLoadreg(uint64_t start)
+{
+    std::string func("LoadS"); // basename for labels, etc.
+    uint64_t const parm = start;
+    int kase = 0; // for simple stuff, don't need execution path machinery.
+    string program;
+    AsmFmtCols prog("");
+    prog.lcom(func+"( i = "+jithex(start)+" = "+jitdec(start)+" )");
+
+    string chosen; // which impl?
+
+    OpLoadregStrings ops = opLoadregStrings(parm);
+    cout<<" Options:\n";
+    if(!ops.lea.empty())    cout<<"\tloadreg lea  "<<ops.lea<<endl;
+    if(!ops.log.empty())    cout<<"\tloadreg log  "<<ops.log<<endl;
+    if(!ops.shl.empty())    cout<<"\tloadreg shl  "<<ops.shl<<endl;
+    if(!ops.ari.empty())    cout<<"\tloadreg ari  "<<ops.ari<<endl;
+    if(!ops.lea2.empty()){
+        cout<<"\tloadreg lea2 "<<ops.lea2<<endl;
     }
-    assert( !chosen.empty() );
+    chosen = (
+            !ops.lea.empty()?   ops.lea
+            : !ops.log.empty()? ops.log
+            : !ops.shl.empty()? ops.shl
+            : !ops.ari.empty()? ops.ari
+            : ops.lea2 );
+#endif
+
 
     if(1){
         prog
@@ -723,11 +820,12 @@ std::string prgiLoadreg(uint64_t start)
             //.def("SO","%s3", "other output (code path? secondary output?)")
             // all can use tmp scalar registers (that are in VECLOBBER list of wrpiFoo.cpp) 
 #endif
+            //if(chosen.find("T0")!=string::npos) // actually, only lea2 case uses a tmp register
             .def("T0","%s40")
-            .def("T1","%s41") // etc
 #if 0
+            .def("T1","%s41") // etc
             // and some vector registers (also in VECLOBBER?)
-            .def("V1","%V1")  // etc
+            .def("V0","%V0")  // etc
             // macros for relocatable branching
             .def("REL(YOURLABEL)", "L(YOURLABEL)    -L(BASE)(,BP)", "relocatable address")
 #endif

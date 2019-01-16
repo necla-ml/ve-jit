@@ -428,7 +428,8 @@ void test_loadreg(char const* const cmd, unsigned long const parm, int const opt
     //
     // uniquely name the kernel, in case we wanted several variants
     //                           and to later inspect each kernel
-#if 0
+#if defined(__ve)
+    // model after test_vejitpage_sh.cpp ...
     char kernel_name[80];
     if( parm < 1000000 )
         snprintf(kernel_name,80,"tmp_kernel_addsub_%lu_opt%d\0",parm,opt_level);

@@ -10,13 +10,14 @@ extern "C" {
 
     /** Error return for integer tests. */
     struct VeliErr {
-        uint64_t i;         ///< input value
+        uint64_t i;         ///< input or expected value
         uint64_t error;     ///< zero if no error
-        uint64_t other;     ///< other (code path? secondary output?)
+        uint64_t output;    ///< output value
+        uint64_t other;     ///< other (code path? output value?)
     };
 
 
-    /** \group VE code for integer tests, ABI=raw wrappers */
+    /** \group VE code for integer \b tests, ABI=raw wrappers */
     /** Wrappers do <em>for(start..start+count) execute page</em>.
      * - require ncc to compile and run only on VE.
      * - expect a JIT test to run only a single case.
@@ -50,10 +51,16 @@ extern "C" {
      * This last approach may fail for algs involving loops, because of too
      * many cases for alg vs special loop sizes vs unrolling options
      * vs vector length strategy vs ... ...
+     *
+     * \parm in0	optional u64 input #0
+     * \parm in1	optional u64 input #2
     */
     //@{
 #if defined(__ve) || defined(DOXYGEN)
-    VeliErr     wrpiLoadreg(JitPage* page, uint64_t start, uint64_t count=1U);
+    /** run \c prgiLoadreg JitPage (load %s3 with a constant)*/
+    VeliErr     wrpiLoadreg(JitPage* page);
+    /** wrap a particular set of load-register test cases. */
+    VeliErr     wrpiLoadregBig(JitPage* page, uint64_t const testnum);
 #endif
     //@}
 } // extern "C"
@@ -81,6 +88,19 @@ VeliErr     veliLoadreg(uint64_t start, uint64_t count=1U);
 /** suggested VE code string, ready to compile into an ABI=jit \ref JitPage */
 std::string prgiLoadreg(uint64_t start);
 
+//@}
+
+/** \group helpers */
+//@{
+struct OpLoadregStrings{
+    std::string lea;
+    std::string log;
+    std::string shl;
+    std::string ari;
+    std::string lea2; ///< 2-op lea
+};
+
+OpLoadregStrings opLoadregStrings( uint64_t const parm );
 //@}
 #endif // VELOGIC_HPP
 

@@ -243,22 +243,33 @@ AsmFmtCols::AsmLine AsmFmtCols::parts(std::string const& instruction){
     int const v=0;
     AsmLine ret;
     if(v)cout<<"parts.."<<instruction<<endl;
+#if 0
     auto inst = instruction;
+    assert( string(" nop").find_first_not_of(ws,0) == 1 );
+    assert( string("nop").find_first_not_of(ws,0) == 0 );
     auto opbeg = inst.find_first_not_of(ws,0);
     if( opbeg == string::npos ){
         if(v)cout<<"DONE"<<endl;
         return ret;
     }
-    inst = reduce(trim(instruction));
+#else
+    auto inst = reduce(trim(instruction)); // again?
+    auto opbeg = inst.find_first_not_of(ws,0);
+    if( opbeg == string::npos ){
+        if(v)cout<<"DONE"<<endl;
+        return ret;
+    }
+#endif
     if(v)cout<<"     .."<<inst<<endl;
     auto opend = inst.find_first_of(ws,opbeg);
     if(v)cout<<" op"<<opbeg<<":"<<opend;
     if( opend == string::npos ){
         ret.op = inst.substr(opbeg);
-        if(v)cout<<"op="<<ret.op<<" DONE"<<endl;
+        if(v)cout<<" inst="<<inst<<" ["<<opbeg<<",npos] ret.op="<<ret.op<<" DONE"<<endl;
     }else{
         ret.op = inst.substr(opbeg, opend-opbeg);
-        if(v)cout<<" op<"<<ret.op<<">";
+        //if(v)cout<<" op<"<<ret.op<<">";
+        if(v)cout<<" inst="<<inst<<" ["<<opbeg<<",opend) ret.op="<<ret.op<<" DONE"<<endl;
         auto iargbeg = inst.find_first_not_of(ws,opend);
         if (iargbeg != string::npos){
             auto iargend = inst.find_last_not_of(ws);
@@ -295,13 +306,13 @@ AsmFmtCols::AsmLine AsmFmtCols::parts(std::string const& instruction){
                 }
             }
         }
-        if(v) cout<<" final ret.label   "<<ret.label<<endl;
-        if(v) cout<<" final ret.op      "<<ret.op<<endl;
-        if(v) cout<<" final ret.args    "<<ret.args<<endl;
-        if(v) cout<<" final ret.comment "<<ret.comment<<endl;
-        if(v) cout<<" final ret.remain  "<<ret.remain<<endl;
-        if(v)cout<<" DONE"<<endl;
     }
+    if(v) cout<<" final ret.label   <"<<ret.label<<">"<<endl;
+    if(v) cout<<" final ret.op      <"<<ret.op<<">"<<endl;
+    if(v) cout<<" final ret.args    <"<<ret.args<<">"<<endl;
+    if(v) cout<<" final ret.comment <"<<ret.comment<<">"<<endl;
+    if(v) cout<<" final ret.remain  <"<<ret.remain<<">"<<endl;
+    if(v)cout<<" DONE"<<endl;
     return ret;
 }
 AsmFmtCols& AsmFmtCols::ins(string const& instruction){
@@ -368,7 +379,8 @@ AsmFmtCols& AsmFmtCols::ins(string const& instruction, string const& asmcomment)
             // if final instruction comes with a comment, then
             // push asmcomment to a separate line (as an rcom)
         }
-        if(p.op.size() == 0){
+        if(p.op.empty()){
+            assert( p.args.empty() );
             if( p.comment.empty() )
                 ins(); // blank line
             else
@@ -379,7 +391,7 @@ AsmFmtCols& AsmFmtCols::ins(string const& instruction, string const& asmcomment)
                 if( comment.empty() )
                     (*a) << p.op << endl;
                 else
-                    (*a) << setw(inwidth+opwidth+argwidth) << "";
+                    (*a) << setw(opwidth+argwidth-1) << p.op << " ";
             }else{
                 (*a) << setw(opwidth-1) << p.op << " ";
                 if( comment.empty() )

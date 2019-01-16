@@ -32,7 +32,8 @@ extern "C" {
 #endif
 
     /** Read basename.bin file into an executable code page.
-     * \return code page (or NULL) in \c jitpage->addr.
+     * \note basename should NOT have the .bin suffix.
+     * \return code page (or NULL) as in \c jitpage->addr.
      * Use jitpage_free(JitPage) to unmap the executable page.
      * The page comes with PROT_WRITE|PROT_READ|PROT_EXEC
      * Sets \c jitpage->verbosity, which persists for later jitpage funcs.

@@ -33,6 +33,7 @@ char* bin2jitpage(char const* basename, struct JitPage *jitpage, int const v){
     char file_bin[50];
     FILE* f_bin = NULL;
     if(ok){
+        if(v>=2){ printf(" bin file VE machine code: %s.bin\n", basename); fflush(stdout); }
         snprintf(&file_bin[0],50,"%s.bin",basename); file_bin[50-1]='\0'/*paranoia*/;
         if(v>=2){ printf("opening %s\n",file_bin); fflush(stdout); }
         f_bin = fopen(file_bin,"rb");
@@ -44,14 +45,29 @@ char* bin2jitpage(char const* basename, struct JitPage *jitpage, int const v){
     if(ok){
         fseek(f_bin,0,SEEK_END);
         long const fsize = ftell(f_bin);
-        if(v>=2){ printf(" %s has %ld bytes\n",file_bin,fsize); }
+        if(v>=2){ printf(" %s has %ld bytes\n",file_bin,fsize); fflush(stdout); }
         if( fsize==0 ){
             if(v>=0){ printf(" bin2page(\"%s\",page): %s bad file size %ld\n",basename,file_bin,fsize); }
             ok = 0;
         }else{
+            // VE note: page_size seems to be 64M (cf. 4k typical of x86),
+            //          so there is a big penalty to having lots of jit pages
+            //          around without supporting jitpage merging.
+            // TODO: support JitPage merging:
+            //  - 1 JitPage stores multiple blobs, each with start addr, len,
+            //  - and 'head' and 'next' JitPage* (forming a fwd list).
+            //  - and 'state' state.
+            //  - 'head' and 'next' entries modified ONLY by bin2jitpage
+            //  - free just marks as freed, checks if all blobs are free before dealloc.
+            //  - readexec works on all contained blobs
+            //    - oh well, don't have mixed code/data jit blobs?
+            //  - bin2jitpage tries "merge-after-existing" first, and if no space creates a
+            //    new mmap region (with a new 'head' entry);
             ssize_t const page_size = sysconf(_SC_PAGE_SIZE);
             size_t const min_bytes = (fsize<page_size? page_size: fsize);
             page_len = (min_bytes + page_size-1)/page_size*page_size;
+            if(v>=2){ printf(" blob fits into %lu bytes (page_size %ld)\n",
+                    (unsigned long)page_len, (signed long)page_size); fflush(stdout); }
             page = (char*)mmap(
                     NULL,             // address
                     page_len,         // size
@@ -80,6 +96,11 @@ char* bin2jitpage(char const* basename, struct JitPage *jitpage, int const v){
     jitpage->len = page_len;
     //jitpage->pos = 0;
     jitpage->verbosity = v;
+    if(v>=2){
+        printf(" Return JitPage{mem=%lX, len=%ld, verbosity=%d)\n",
+                (long unsigned)jitpage->mem, (long signed)jitpage->len, jitpage->verbosity);
+        fflush(stdout);
+    }
     return (char*)(jitpage->mem);
 }
 

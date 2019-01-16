@@ -12,7 +12,8 @@ OBJCOPY:=objcopy
 SHELL:=/bin/bash
 CFLAGS:=-O2 -g2
 CXXFLAGS:=$(CFLAGS) -std=c++11
-LIBVELI_TARGETS:=libveli.a
+LIBVELI_TARGETS:=libveli-x86.a
+LIBJIT1_TARGETS:=libjit1-x86.a
 else
 #
 # we may want to generate jit code on host OR ve
@@ -37,9 +38,11 @@ TARGETS=asmkern0.asm libjit1.a libjit1-x86.a \
 	asmkern.bin asmkern1.bin msk \
 	syscall_hello \
 	jitve0 jitve_hello test_strMconst jitve_math \
-	jitpp_hello test_naspipe test_vejitpage_sh \
-	jitpp_loadreg
-LIBVELI_TARGETS:=libveli-x86.a
+	jitpp_hello test_naspipe-x86 test_vejitpage_sh-x86 \
+	jitpp_loadreg \
+	veli_loadreg-x86
+# slow!
+#TARGETS+=test_naspipe test_vejitpage_sh
 CC?=ncc-1.5.1
 CXX?=nc++-1.5.1
 CC:=ncc-1.5.1
@@ -56,14 +59,22 @@ CXXFLAGS:=$(CFLAGS) -std=c++11
 VE_EXEC:=ve_exec
 OBJDUMP:=nobjdump
 OBJCOPY:=nobjcopy
+LIBVELI_TARGETS:=libveli.a libveli-x86.a
+LIBJIT1_TARGETS:=libjit1.a libjit1-x86.a
 endif
-TARGETS+=$(LIBVELI_TARGETS)
-all: $(TARGETS) libjit1.a
+TARGETS+=$(LIBJIT1_TARGETS) $(LIBVELI_TARGETS)
 
-.PHONY: force
-force: # force libjit1.a to be recompiled
-	rm -f libjit1.a asmfmt.o jitpage.o jit_data.o
-	$(MAKE) libjit1.a
+all: $(TARGETS) liblist
+SHELL:=LC_ALL=C /bin/bash
+.PHONY: liblist force
+liblist:
+	@ls -l lib*.a
+force: # force libs to be recompiled
+	rm -f libjit1*.a asmfmt*.o jitpage*.o jit_data*.o
+	rm -f libveli*.a prgiFoo.o wrpiFoo.o
+	rm -f $(patsubst %.cpp,%*.o,$(LIBVELI_SRC)) $(LIBVELI_TARGETS)
+	$(MAKE) $(LIBJIT1_TARGETS)
+	$(MAKE) $(LIBVELI_TARGETS)
 
 vejit.tar.gz: asmfmt.hpp asmfmt_fwd.hpp jitpage.h libjit1.a
 	rm -rf vejit
@@ -73,8 +84,10 @@ vejit.tar.gz: asmfmt.hpp asmfmt_fwd.hpp jitpage.h libjit1.a
 	cp -av asmfmt*.hpp jitpage.h vejit/include/
 	cp -av libjit1.a vejit/bin/
 	tar czf $@ vejit
-#veli_loadreg: veli_loadreg.cpp veliFoo.o wrpiFoo.o libjit1.a
-#	$(CXX) $(CXXFLAGS) -g -O2 $(filter-out %.cpp,$^) -o $@
+veli_loadreg: veli_loadreg.cpp libveli.a libjit1.a
+	$(CXX) $(CXXFLAGS) -g -O2 -o $@ $^
+	@echo "veli_loadreg runs VE Logic for Instructions tests on VE"
+	@echo "(veli_loadreg-x86 will do same VE logic tests on x86)"
 veli_loadreg-x86: veli_loadreg.cpp libveli-x86.a libjit1-x86.a
 	g++ $(CXXFLAGS) -g -O2 -o $@ $^
 #
@@ -120,12 +133,22 @@ asmkern0.asm: asmkern0.c
 # (More interesting is to use vejitpage.sh and capture the binary blob
 #  output into a std::string that can be used to define a jit code page)
 #
+# This can run on VE or [much faster] on host
 test_naspipe: test_naspipe.cpp naspipe.sh
 	$(CXX) -O2 $< -o $@
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
+test_naspipe-x86: test_naspipe.cpp naspipe.sh
+	g++ -O2 $< -o $@
+	./$@ 2>&1 | tee $@.log
+# this also can run on host, in seconds rather than minutes,
+# because we do not execute the jit page
+# [we create the jit page string, and then hexdump and disassemble it]
 test_vejitpage_sh: test_vejitpage_sh.cpp vejitpage.sh
 	$(CXX) -O2 $< -o $@
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
+test_vejitpage_sh-x86: test_vejitpage_sh.cpp vejitpage.sh
+	g++ -std=c++11 -O2 $< -o $@
+	./$@ 2>&1 | tee $@.log
 #
 # low-level C-api, using jitve_util.h
 #
@@ -155,7 +178,7 @@ jitve_math: jitve_math.c jitve_util.o
 #
 .PRECIOUS: asmfmt.o jit_data.o jitpage.o
 libjit1.a: asmfmt.o jitpage.o jit_data.o
-	$(AR) cq $@ $^
+	$(AR) cqsv $@ $^
 asmfmt.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
 	$(CXX) ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
 jit_data.o: jit_data.c jit_data.h
@@ -173,14 +196,15 @@ jitpage-x86.o: jitpage.c jitpage.h
 
 LIBVELI_SRC:=veliFoo.cpp wrpiFoo.cpp
 libveli.a:     $(patsubst %.cpp,%.o,    $(LIBVELI_SRC))
+	#$(AR) cq $@ $^
+	rm -f $@; $(AR) cqsv $@ $^
 libveli-x86.a: $(patsubst %.cpp,%-x86.o,$(LIBVELI_SRC))
 	$(AR) cq $@ $^
-#$(patsubst $(LIBVELI_SRC),%.cpp,%.o):    %.o:     %.cpp
-#	$(CXX) ${CXXFLAGS} -O2 -c $< -o $@
 $(patsubst $(LIBVELI_SRC),%.cpp,%-x86.o) %-x86.o: %.cpp
 	g++ ${CXXFLAGS} -O2 -c $< -o $@
 $(patsubst $(LIBVELI_SRC),%.cpp,%.o) %.o: %.cpp
-	g++ ${CXXFLAGS} -O2 -c $< -o $@
+	@# inline asm is incompatible with nc++ -std=c++11
+	$(CXX) -O2 -c $< -o $@
 
 #asmfmt.cpp has a standalone demo program with -D_MAIN compiler	
 asmfmt: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp jitpage.o

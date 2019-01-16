@@ -40,3 +40,11 @@ test_vejitpage_sh
 test_vejitpage_sh.log
 jitpp_loadreg
 veli_loadreg-x86
+test_naspipe-x86
+test_naspipe-x86.log
+test_vejitpage_sh-x86
+test_vejitpage_sh-x86.log
+veli_loadreg
+veli_loadreg-8x6
+veli_loadreg.log
+vl-*.log
