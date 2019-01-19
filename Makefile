@@ -40,7 +40,7 @@ TARGETS=asmkern0.asm libjit1.a libjit1-x86.a asmfmt-ve\
 	jitve0 jitve_hello test_strMconst jitve_math \
 	jitpp_hello test_naspipe-x86 test_vejitpage_sh-x86 \
 	jitpp_loadreg \
-	veli_loadreg-x86
+	asmfmt-x86 veli_loadreg-x86 veli_loadreg
 # slow!
 #TARGETS+=test_naspipe test_vejitpage_sh
 CC?=ncc-1.5.1
@@ -84,6 +84,11 @@ vejit.tar.gz: asmfmt.hpp asmfmt_fwd.hpp jitpage.h libjit1.a libjit1-x86.a libvel
 	cp -av asmfmt*.hpp jitpage.h vejit/include/
 	cp -av libjit1.a vejit/bin/
 	tar czf $@ vejit
+#
+# see vl-run.sh for running veli_loadreg tests
+# many tests only need veli_loadreg-x86
+# only veli_loadreg -R needs VE (because it runs several
+# thousand optimized VE assembler test cases).
 WORKING?=6
 veli_loadreg: veli_loadreg.cpp libveli.a libjit1.a
 	$(CXX) $(CXXFLAGS) -DWORKING=${WORKING} -g -O2 -o $@ $^

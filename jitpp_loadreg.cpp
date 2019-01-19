@@ -428,17 +428,20 @@ void test_loadreg(char const* const cmd, unsigned long const parm, int const opt
     //
     // uniquely name the kernel, in case we wanted several variants
     //                           and to later inspect each kernel
-#if defined(__ve)
-    // model after test_vejitpage_sh.cpp ...
+#if 0 && defined(__ve)
+    // TODO: model after test_vejitpage_sh.cpp and JITpipe, now that
+    // I am only using AsmFmtCols to get a std::string (not write a .S file)
+    //    but... a full-blown serious test is in 
     char kernel_name[80];
     if( parm < 1000000 )
         snprintf(kernel_name,80,"tmp_kernel_addsub_%lu_opt%d\0",parm,opt_level);
     else
         snprintf(kernel_name,80,"tmp_kernel_addsub_0x%lx_opt%d\0",parm,opt_level);
-    printf(" test_kernel_math(%lx) --> JIT code %s.S:\n%s",parm,kernel_name,kernel_math); fflush(stdout);
+    printf(" test_kernel_math(%lx) --> JIT code s.S:\n%s",parm,kernel_name,prog);
+    fflush(stdout);
 
     // create .bin file
-    asm2bin(kernel_name, kernel_math);  // creates .S and .bin file
+    asm2bin(kernel_name, 2/*verbose*/);  // creates .S and .bin file
     // show it
     char line[80];
     snprintf(line,80,"nobjdump -b binary -mve -D %s.bin\0", kernel_name);

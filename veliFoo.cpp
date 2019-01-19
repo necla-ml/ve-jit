@@ -770,13 +770,13 @@ std::string choose(OpLoadregStrings const& ops, void* /*context=nullptr*/)
 {
     enum Optype { SHL, LEA, LOG, ARI, LEA2 };
     static std::array<Optype, 5> const pref = {SHL, LEA, LOG, ARI, LEA2};
-    string code
+    string code;
     for(auto const optype: pref){
-        string code = (optype==LEA? ops.lea
+        code = (optype==LEA? ops.lea
                 :optype==LOG? ops.log
                 :optype==SHL? ops.shl
                 :optype==ARI? ops.ari
-                ops.lea2);
+                : ops.lea2);
         if( !code.empty() ){
             break;
         }
