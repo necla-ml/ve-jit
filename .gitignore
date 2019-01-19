@@ -49,3 +49,11 @@ veli_loadreg-8x6
 veli_loadreg.log
 vl-*.log
 asmfmt-x86
+dltest0
+dltest1
+dltest1-x86
+dltest1-clang
+dltest1-nclang
+dltest0-x86
+dltest0.log
+dltest1.log

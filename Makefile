@@ -174,7 +174,7 @@ jitve_math: jitve_math.c jitve_util.o
 #
 # newer api uses jitpage.h (instead of jitve_util.h)
 # and supports C++         (asmfmt_fwd.hpp)
-# 
+#
 # Note that libjit1.a could be running x86 code or VE code
 #
 .PRECIOUS: asmfmt.o jit_data.o jitpage.o
@@ -264,6 +264,50 @@ syscall_hello: syscall_hello.c
 	$(MAKE) syscall_hello.asm
 	$(CC) $(CFLAGS) $< -o $@ && $(VE_EXEC) $@
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
+dltest0: dltest0.c
+	$(CC) $(CFLAGS) -o $@ -Wall -Werror $< -ldl
+dltest0-x86: dltest0.c	
+	g++ $(CFLAGS) -o $@ -Wall -Werror $< -ldl
+# next test show how to dynamically *compile* and load a dll given
+# a std::string containing 'C' code.
+.PHONY: dltest1.log
+dltest1.log:
+	# recreate and run dltest1 versions x86+gcc and VE+ncc
+	rm -f dltest1 dltest1-x86 tmp_*.c lib*_lucky.so
+	@# '13' has been hard-wired to produce incorrect std::string ccode
+	-{ $(MAKE) VERBOSE=1 dltest1-x86 \
+		&& /usr/bin/time ./dltest1-x86 13 \
+		&& echo YAY; } >& $@
+ifeq ($(CC),ncc)
+	@# '7' should return the correct value from the JIT function.
+	-{ echo ""; echo ""; \
+		$(MAKE) VERBOSE=1 dltest1 \
+		&& /usr/bin/time ve_exec ./dltest1 7 \
+		&& echo YAY; } &>> $@
+endif
+	# Attempting JIT-via-clang (compile and cross-compile),
+	# even though you might not have them installed...
+	-{ $(MAKE) VERBOSE=1       dltest1-clang \
+		&& /usr/bin/time ./dltest1-clang 123 \
+		&& echo YAY; } &>> $@
+	-{ $(MAKE) VERBOSE=1       dltest1-nclang \
+		&& /usr/bin/time ./dltest1-nclang -1 \
+		&& echo YAY; } &>> $@
+	-ls -l tmp_*.c lib*lucky*.so
+	-ls -l tmp_*.c lib*lucky*.so &>> $@
+
+#libgcc_lucky.so     this code and jit code runs on host
+#libncc_lucky.so     this code and jit code runs on VE
+#libclang_lucky.so   this code(can be gcc) and jit code from clang run on host
+#libnclang_lucky.so  this code(can be ncc) and jist code from clang -target ve-linux on VE
+dltest1: dltest1.cpp jitpipe.hpp Makefile
+	$(CXX) $(CXXFLAGS) -o $@ -Wall -Werror $< 
+dltest1-x86: dltest1.cpp jitpipe.hpp Makefile
+	g++ $(CXXFLAGS) -o $@ -Wall -Werror $< -ldl
+dltest1-clang: dltest1.cpp jitpipe.hpp Makefile
+	g++ $(CXXFLAGS) -DJIT_CLANG -o $@ -Wall -Werror $< -ldl
+dltest1-nclang: dltest1.cpp jitpipe.hpp Makefile
+	nc++ $(CXXFLAGS) -DJIT_NCLANG -o $@ -Wall -Werror $< 
 clean:
 	rm -f *.o *.i *.ii *.out
 	rm -f msk*.i msk*.S msk*.dis msk*.out

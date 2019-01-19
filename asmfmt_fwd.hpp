@@ -27,7 +27,8 @@ struct ExecutablePage {
 /** remove asm comments (after '#'),
  * accepting ';'- or newline-separated multiline \c asmcode.
  * The returned string may be uglified, so you might need to
- * pass it through an \c AsmFmtCols::ins again. */
+ * pass it through an \c AsmFmtCols::ins again.
+ * Could be a static member fn? */
 std::string uncomment_asm( std::string asmcode );
 
 /** assemble a .S file to a .bin file and load it into an ExecutablePage */
