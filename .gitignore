@@ -57,3 +57,5 @@ dltest1-nclang
 dltest0-x86
 dltest0.log
 dltest1.log
+asmfmt-ve
+asmfmt-ve.log
