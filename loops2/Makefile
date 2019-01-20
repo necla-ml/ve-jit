@@ -9,6 +9,6 @@ fuse2: fuse2.cpp
 	g++ -DMAIN -std=c++11 -x c++ $*.hpp -o $@ && ./a.out; 
 clean:
 	rm -f *.i *.o fuse2 fuse2lin repro rep4 \
-		*.log *.vg
+		*.log *.vg *.vch
 realclean: clean	
 #	

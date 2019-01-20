@@ -90,7 +90,9 @@ inline std::string DllPipe::getCompiler( CC compiler ){
     }
     return ret;
 }
-inline constexpr char const* DllPipe::pathSep(); {
+#endif // historical/modern code for getCompiler
+
+inline constexpr char const* DllPipe::pathSep() {
 #ifdef _WIN32
     return "\\";
 #else
@@ -125,6 +127,10 @@ void DllPipe::mkTmpfile(std::string code){
     // Write, then set this->ccode_tmpfile
     {
         //std::string tmpfile(std::tmpnam(nullptr));
+        // 
+        // warning: the use of `tempnam' is dangerous, better use `mkstemp'
+        //  ... but not sure about portability of mkstemp ...
+        //
         std::string tmpfile(tempnam(outDir.c_str(),"tmp")+std::string("_")+base+suffix);
         std::cout<<" DllPipe writing code to "<<tmpfile<<" ..."<<std::endl;
         try{
@@ -139,7 +145,7 @@ void DllPipe::mkTmpfile(std::string code){
 }
 
 inline DllPipe::DllPipe(std::string basename, std::string ccode,
-        std::string compiler_string, int const v=2)
+        std::string compiler_string, int const v/*=2*/ )
 	//: outDir("."), // OK, but full path might be need for correctness sometimes
 	: outDir(getPath()),
 	basename(basename), libname(""), ccode_tmpfile(""), cc(compiler_string)
@@ -212,33 +218,34 @@ inline DllPipe::DllPipe(std::string basename, std::string ccode,
 	}
 	if(v>=2){if( doit.out.size() ) std::cout<<">>> stdout:\n"<<doit.out<<std::endl;}
 	if(v>=2){if( doit.err.size() ) std::cout<<">>> stderr:\n"<<doit.err<<std::endl;}
-	system(("ls -l "+libname+" "+ccode_tmpfile).c_str());
-	if( doit.status == 0 ){
+	auto ok = system(("ls -l "+libname+" "+ccode_tmpfile).c_str());
+	if( doit.status == 0 && ok == 0 ){
 		if(v>=2)std::cout<<" (removing the tmp file)"<<std::endl;
 		//system(("rm -f "+ccode_tmpfile).c_str());
 		if( remove(ccode_tmpfile.c_str()) != 0 ){ // posix 'rm' function call.
 			THROW(strerror(errno));
 		}
 	}else{
-		// create compilation error log file, appending to the '.c' file
-		try{
-			std::ofstream ofs(ccode_tmpfile, std::fstream::out | std::fstream::app);
-			ofs<<"#if 0 // COMPILATION ERROR LOG\n"
-				<<"\nDllPipe tried to run a PstreamPipe with command:\n"
-				<<"\n\t"<<cmd<<"\n\n"
-				<<" The 'run' call returned status="<<doit.status
-				<<"-------- STDOUT --------\n"
-				<<doit.out<<"\n"
-				<<"-------- STDERR --------\n"
-				<<doit.err<<"\n"
-				<<"#endif"<<std::endl;
-			ofs.close();
-		}catch(...){
-			std::cout<<"Problem writing compilation information to "<<ccode_tmpfile<<std::endl;
-			throw;
-		}
-		if(v>=-1)std::cout<<" compilation info appended to "<<ccode_tmpfile<<std::endl;
-	}
+            // create compilation error log file, appending to the '.c' file
+            try{
+                std::ofstream ofs(ccode_tmpfile, std::fstream::out | std::fstream::app);
+                ofs<<"#if 0 // COMPILATION ERROR LOG\n"
+                    <<"\nDllPipe tried to run a PstreamPipe with command:\n"
+                    <<"\n\t"<<cmd<<"\n\n"
+                    <<" The 'run' call returned status="<<doit.status
+                    <<"-------- STDOUT --------\n"
+                    <<doit.out<<"\n"
+                    <<"-------- STDERR --------\n"
+                    <<doit.err<<"\n"
+                    <<"#endif"<<std::endl;
+                ofs.close();
+            }catch(...){
+                std::cout<<"Problem writing compilation information to "<<ccode_tmpfile<<std::endl;
+                throw;
+            }
+            if(v>=-1)std::cout<<" compilation info appended to "<<ccode_tmpfile<<std::endl;
+            assert( ok == doit.status );
+        }
 	// check 'libname' exists and throw if not
 }
 

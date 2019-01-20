@@ -28,6 +28,22 @@ struct JITpipe;         // run std::string through cpp and nas (VE assembler) --
 struct HEXDUMPpipe;     // run std::string through hexdump -C
 struct BLOBDISpipe;     // run std::string through binary-blob disassembly
 
+/** non-overlapping global \c needle --> \c replace in \c haystack */
+inline std::string multiReplace(
+        const std::string needle,
+        const std::string replace,
+        std::string haystack)
+{
+    size_t const nlen = needle.length();
+    size_t const rlen = replace.length();
+    size_t nLoc = 0;;
+    while ((nLoc = haystack.find(needle, nLoc)) != std::string::npos) {
+        haystack.replace(nLoc, nlen, replace);
+        nLoc += rlen;
+    }
+    return haystack;
+}
+
 struct PstreamPipe {
     /** shell script that runs cpp, then nas,
      * then nobjcopy to convert the ELF object file into a binary blob
@@ -116,18 +132,6 @@ struct HEXDUMPpipe : public PstreamPipe {
     //HEXDUMPpipe() : PstreamPipe("bash -c 'cat - > foo; hexdump -C foo'") {}
 };
 
-inline std::string multiReplace(
-        const std::string search,
-        const std::string replace,
-        std::string subject)
-{
-    size_t pos = 0;
-    while ((pos = subject.find(search, pos)) != std::string::npos) {
-        subject.replace(pos, search.length(), replace);
-        pos += replace.length();
-    }
-    return subject;
-}
 /** invoke a 'binary blob disassemble' pipe.
  * Interesting because it shows how several bash commands can be used,
  * as well as mktemp to avoid tmp file name clashes. */

@@ -11,9 +11,11 @@ more: all tf2-1.log tf2-2.log tf2-3.log tf2-4.log tf2-0.log tf2-5.log tf2-m.log 
 force: force-lib
 	rm -f tf2-1.log tf2-2.log tf2-3.log tf2-4.log tf2-0.log tf2-5.log tf2-m.log
 	$(MAKE) 2>&1 | tee tf2-force.log
+.PHONY: ../libjit1-x86.a
 ../libjit1-x86.a:
 	#$(MAKE) -C .. $(patsubst ../%,%,$@)
-	cd .. && $(MAKE) force
+	rm -f $@ ../*-x86.o
+	$(MAKE) -C .. $(patsubst ../%,%,$@)
 force-lib:
 	rm -f ../*-x86.a ../*-x86.o
 	$(MAKE) -C .. libjit1-x86.a
@@ -704,11 +706,13 @@ tf2-0.log: fuse2 Makefile tf2-3.log
 		&& ./fuse2 -t 64 40 12 \
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
+cfuse: cfuse.cpp
+	g++ -Wall -std=c++11 -I.. -O3 $< -o $@ -ldl
 %: %.cpp
-	g++ -Wall -std=c++11 -O3 -E $< -o $@.i
-	g++ -Wall -std=c++11 -O3 $< -o $@
+	g++ -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
+	g++ -Wall -std=c++11 -I.. -O3 $< -o $@
 clean:
-	rm -f *.i *.o fuse2 fuse2lin repro
+	rm -f *.i *.o fuse2 fuse2lin repro a.out *.gch
 realclean: clean	
 	rm -f *.log
 #	

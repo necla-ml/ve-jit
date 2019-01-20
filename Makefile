@@ -314,7 +314,7 @@ dltest1-clang: dltest1.cpp jitpipe.hpp Makefile
 dltest1-nclang: dltest1.cpp jitpipe.hpp Makefile
 	nc++ $(CXXFLAGS) -DJIT_NCLANG -o $@ -Wall -Werror $< 
 clean:
-	rm -f *.o *.i *.ii *.out
+	rm -f *.o *.i *.ii *.out *.gch
 	rm -f msk*.i msk*.S msk*.dis msk*.out
 	rm -f syscall_hello.o syscall_hello.asm syscall_hello.dis
 	rm -f asmkern0.asm asmkern0.dis

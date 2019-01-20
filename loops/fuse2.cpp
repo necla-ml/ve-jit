@@ -1545,7 +1545,7 @@ enum Unroll unroll_suggest( int const vl, int const ii, int const jj, int const 
         ret = UNR_CYC;
         cout<<" H.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop
             <<", b_period="<<b_period<<b_period_pow2
-            <<" suggest partial precalc unroll(b_period="<<b_period<<"\n"
+            <<" suggest partial precalc unroll(b_period="<<b_period<<")\n"
             <<"   b[] and a[]-INCREMENT cycle through precalc values\n"
             <<"     Then a[]-b[] induction is 2 ops total, mov/add from precalc regs to working"
             <<endl;
@@ -1716,7 +1716,7 @@ enum Unroll unroll_suggest( int const vl, int const ii, int const jj, int const 
                      cout<<"  -t    just test correctness"<<endl;
                      cout<<"  -a    alt test correctness"<<endl;
                      cout<<"  -l    [default] pseudo-asm-code for loops (+correctness)"<<endl;
-                     cout<<"  -u    pseudo-asm-code for unrolled loops (+correctness)"<<endl;
+                     cout<<"  -u    [WIP] pseudo-asm-code for unrolled loops (+correctness)"<<endl;
                      cout<<"  -m    try for extended-range (a/d) ~ a*M>>N forms"<<endl;
                      cout<<"  -h    this help"<<endl;
                      cout<<"   VLEN = vector length"<<endl;
