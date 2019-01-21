@@ -20,9 +20,49 @@
 #include <unistd.h>     // getcwd, POSIX
 //#include <filesystem> // join paths (c++17)
 
+/** An optimizations has several predefined \b a-f segments to which
+ * optimization code can be streamed. */
+struct Cblock;
+
+enum Cseg { A, B, MID, MID2, E, F };
+
+/** A program is built from multiple Cblocks, with a path between
+ * segments indicating final output order. */
+struct CblockRef {
+    // initializer list constructor {"loop123",E}
+    std::string id;
+    Cseg seg;
+}
+
+struct Cprog {
+    Cblock unit;                                ///< a C compilation unit
+    std::vector<CblockRef> path;                ///< output path
+    std::map<std::string, Cblock> blks;         ///< all known Cblocks
+    std::map<std::string, CblockRef> sub;       ///< named CblockRef
+    /** create a new segment, appended to path from \c cblock_parent
+     * segment \c seg.
+     * ret segment mapping:
+     *   ret.a  append to parent.a
+     *   ret.b  append to parent.mid
+     *   ret.c  after ret.b
+     *   ret.d  after ret.c
+     *   ret.e  after ret.d
+     *   ret.f  after parent.f
+     *
+     * will \b not be correct in many cases, so use \c link to
+     * fix things.
+     */
+    Cblock& mkCblock(std::string id,
+            std::string cblock_parent=std::string("unit"),
+            Cseg seg = MID,
+            );
+    /** adjust output order linkage */
+    void link(CblockRef, CblockRef, bool append=true);
+};
 
 struct Cblock {
   public:
+      std::string _id;
       // in rough order of output
       std::ostringstream a;       ///< (global?) resource alloc
       std::ostringstream b;       ///< beginning
@@ -31,7 +71,13 @@ struct Cblock {
       std::ostringstream e;       ///< end
       std::ostringstream f;       ///< (global?) resource free
       int _ind;                   ///< default indent (typ for middle, m)
-      Cblock(int const ind=0) : a(), b(), c(), d(), e(), f(), _ind(indent) {}
+      Cblock(std::string const id, int const ind=0)
+          : _id(id), a(), b(), c(), d(), e(), f(), _ind(indent)
+      {}
+      // default wiring:
+      //   CblockRef p ~ parent
+      //   Cseg s
+      //   p:s <--> p:s.next
 
       std::string oa(int const ind_adjust=0) const { return indent(a.str(),mod(_ind)); }
       std::string ob(int const ind_adjust=0) const { return indent(b.str(),mod(_ind)); }
