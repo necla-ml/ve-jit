@@ -92,6 +92,7 @@ void test_cblock_path(){
     assert( extern_c.find("./open//") != nullptr );
     assert( root.find("*/open") != nullptr );
     assert( root.find("**/open") != nullptr );
+    assert( root.find("extern_C/open") != nullptr );
     pr["extern_C"]["close"] // or as multiple strings
         <<"\n#ifdef __cplusplus\n"
         <<"}//extern \"C\"\n"
