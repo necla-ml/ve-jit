@@ -188,9 +188,66 @@ void test_cblock_path(){
     pr.write(cout);
     cout<<string(80,'-')<<endl;
 }
+void test_cblock_short(){
+    Cunit pr("program");
+    pr.v = 0;
+    // Very important to use 'auto&' instead of plain 'auto'
+    pr["includes"]<<"#include <iostream>";
+    pr["macros"]<<"#define MSG \"hello\"";
+    //mk_extern_c(pr,"extern_C").after(pr["macros"]);
+    //  new function: after can accept an absolute path
+    mk_extern_c(pr,"extern_C").after("/macros");
+
+    // creates "functions", appends foo/decl foo/body foo/end
+    auto& foo_body = mk_func(pr,"foo","int foo()").after(pr["functions"])["body"];
+    // for complex items, foo_body will itself get subdivided!
+#if 0
+    foo_body<<"return 7;";
+#else
+    // append(string) to _code is really only useful for simple stuff.
+    // complex cases should name all sections/blocks ...
+    foo_body["entry"]<<"int ret=-1;";   // foo/body/entry (anchored)
+
+#if 1
+    // OK, this seems a reasonable idiom ..
+    auto& if00 = mk_scope(pr,"if00","if(!defined(__cplusplus))").after(foo_body)["body"]; {
+        if00<<"ret = 1;";
+    }
+    // for simple scopes (terminate with just "}", and with a "body" sub-block...
+    // - if AFTER is a cblock, we could just use AFTER.getRoot()
+    // - general case is a bit more flexible, but this is a decent start.
+//#define CBLOCK_SCOPE(CBLK_VAR,BEG,CUNIT,AFTER) auto& CBLK_VAR = mk_scope((CUNIT),#CBLK_VAR,(BEG)).after(AFTER)["body"];
+    CBLOCK_SCOPE(else00,"else",pr,foo_body) {
+        else00<<"ret = 2;";
+    }
+    CBLOCK_SCOPE(for00,"for(int i=0;i<10;++i)",pr,foo_body) {
+        for00<<"ret = (ret^0x12345678); //just to demo\n"
+            <<"ret += i;\t// how to 'randomize' ret a bit";
+        // oh, write should split at newlines and set the indent!
+    }
+#endif
+    foo_body["exit"]<<"return ret;";
+#endif
+
+    // short functions can be ... very short
+    //mk_func(pr,"bar","int bar()").after(pr["functions"])["body"]<<"return 7";
+#if 1-1
+    // can we do Pre(Indent(-2)) for _pre.push_front(...) ?
+    // or Pre-Manip, Pre+Manip for _pre.push_front/back <----
+#endif
+    // output order can be adjusted with after:
+    pr["functions"].after("/**/extern_C/body"); // The "/**" is just for show
+    pr["end"]<<"// vim: ts=4 sw=4 et cindent cino=^=l0,\\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\\:,0#,!^F,o,O,e,0=break";
+    //main.after("extern_C/open");
+    pr.v = 0;
+    cout<<string(80,'-')<<endl;
+    pr.write(cout);
+    cout<<string(80,'-')<<endl;
+}
 int main(int,char**){
     test_cblock_basic();
     test_cblock_path();
+    test_cblock_short();
     cout<<"\nGoodbye"<<endl;
     return 0;
 }

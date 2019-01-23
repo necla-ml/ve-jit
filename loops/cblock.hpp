@@ -29,7 +29,18 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <deque>
 #include <cassert>
+
+#ifdef NDEBUG
+#define CBLOCK_DBG(V,N) do{}while(0)
+#else
+#define CBLOCK_DBG(V,N,...) do { \
+    if((V)>=(N)){ \
+        std::cout<<__VA_ARGS__; \
+    } \
+}while(0)
+#endif
 
 namespace cprog {
 
@@ -81,23 +92,53 @@ struct Cblock {
     //                     _nwrites(s._nwrites), _maxwrites(s._maxwrites)
     //{}
 
-    /// Find \c p in \c sub -Cblocks, or append an empty Cblocks named \c p
+    /** Find \c p in \c sub -Cblocks, or append an empty Cblocks named \c p.
+     * Above is behaviour for single-component strings \c p.  \c fullpath()
+     * style paths, with /-separators, ., .., *, and ** specials cause matching
+     * to a first-found \em existing block, and never create a new block. */
     Cblock& operator[](std::string p);
     Cblock& operator<<(std::string codeline) { return append(codeline); }
+    /** \c codeline append to \c _code (\c Cblock appends to \c _sub) */
     Cblock& append(std::string codeline){ _code.append(codeline); return *this;}
+    /** \c codeline append to \c _code (\c Cblock appends to \c _sub) */
     Cblock& append(Cblock &cb){
-        std::cout<<" this@"<<_parent->_name<<"/"<<_name<<" append"; std::cout.flush();
-        std::cout<<"(cb@"<<cb._name<<")"<<std::endl; std::cout.flush();
-        assert( cb._parent == nullptr );
+        int const v=0;
+        CBLOCK_DBG(v,3," append! "<<std::endl);
+        assert(_parent != nullptr );
+        CBLOCK_DBG(v,10," this@"<<_parent->_name<<"/"<<_name<<" append");
+        CBLOCK_DBG(v,10," (cb@"<<cb._name<<")\n");
         cb._parent = this;
         _sub.push_back(&cb);
-        std::cout<<" this@"<<_parent->_name<<"/"<<_name<<"{";
+        CBLOCK_DBG(v,10," this@"<<_parent->_name<<"/"<<_name<<"{");
         for(auto s: _sub) std::cout<<" "<<s->_name;
-        std::cout<<"}"<<std::endl;
+        CBLOCK_DBG(v,10,"}"<<std::endl);
         return *this;
     }
-    /// unlink \c this and append it to some \c prev
-    Cblock& after(Cblock& prev) { prev.append(unlink()); return *this; }
+    // shorten append usage...
+    Cblock& operator<<=(Cblock &cb) {return this->append(cb); }
+    //Cblock& operator<<(std::initializer_list il);
+    //Cblock& append(std::string name, std::initializer_list<std::string>
+    // Hmmm maybe provide canned procedures that define an unlinked block, that
+    // gets immediately \c .after()'ed to hook it to some location.
+    /// unlink \c this and append it to some \c prev Cblock.
+    /// I guess this could be called "under".
+    Cblock& after(Cblock& prev) {
+        std::cout<<" Cblock@"<<_name; std::cout.flush();
+        //std::cout<<" Cblock@"<<fullpath(); std::cout.flush(); // XXX fullpath error if Cblock unlinked?
+        std::cout<<" after("<<prev.fullpath()<<" unlink..."; std::cout.flush();
+        Cblock& tmp = unlink();
+        std::cout<<" append..."; std::cout.flush();
+        prev.append(tmp);
+        std::cout<<" done"<<std::endl; std::cout.flush();
+        return *this;
+    }
+    /// place after absolute path (can be wildcarded) \c abspath.
+    /// \throw if \c abspath cannot be found.
+    Cblock& after(std::string abspath) { 
+        //std::cout<<" after(abspath="<<abspath<<")"; std::cout.flush();
+        assert( abspath[0] == '/' );
+        return after(at(abspath));
+    }
 
     int nWrites() const {return _nwrites;}
     bool canWrite() { return _nwrites>=0 && _nwrites<_maxwrites; }
@@ -105,32 +146,14 @@ struct Cblock {
 
     Cblock& setType(std::string type) {_type=type; return *this;}
     Cblock& setName(std::string type); // {this->type=type; return *this;} and update root!
-    std::string const& getName() const {return _name;}
+    std::string const& getName() const;
+    Cunit& getRoot() const;
     //Cblock& append(std::string code) {this->code += code; return *this;} // maybe inefficient
     //Cblock* next();
     //Cblock* prev()
     ~Cblock(){ clear(); }
     bool isRoot() const { return _parent == this; }
-    std::string fullpath() const {
-        std::string out;
-        out.reserve(256);
-        int ncomp=0; // number of path components
-        for(Cblock const * cb=this; cb!=nullptr; cb  = cb->_parent){
-            //std::cout<<" fp:"<<cb->_name<<" parent:"<<cb->_parent->_name<<std::endl;
-            //std::string component = (cb->isRoot()? std::string(): cb->_name);
-            if( cb->isRoot() ){
-                out.insert(0,"/");
-                break;
-            }else{
-                size_t const cbsz = cb->_name.size();
-                out.insert(0,cb->_name.c_str(),cbsz+1); // include terminal null
-                out.replace(cbsz,1,1,'/');
-            }
-            ++ncomp;
-        }
-        if(ncomp>0) out.resize(out.size()-1U);
-        return out;
-    }
+    std::string fullpath() const;
     /** find path.  TODO ".*" for "close-find" ~ subfind+upward_subfind ? */
     Cblock *find(std::string path) const; // Search upward to root, then down through whole tree
     /** \c find but throw if not found */
@@ -149,22 +172,11 @@ struct Cblock {
   private:
     friend struct Cunit;
     void clear(){ for(auto s: _sub) delete(s); _sub.clear(); }
-    Cblock& unlink() { // remove this form _parent._sub[]
-        int const v=1;
-        assert( _parent );
-        if(v>=1) std::cout<<" unlink cblock "<<fullpath()<<std::endl;
-        for(auto s=_parent->_sub.begin(); s!=_parent->_sub.end(); ++s){
-            if(v>=2) std::cout<<" unlink psub "<<(*s)->_name<<"? "; std::cout.flush();
-            if(*s == this){
-                if(v>=2) std::cout<<" YES!"; std::cout.flush();
-                _parent->_sub.erase(s); // all _sub iters (including s) INVALID
-                _parent = nullptr;
-                if(v>=2) std::cout<<" _name unlinked"<<std::endl; std::cout.flush();
-                break;
-            }
-        }
-        return *this;
-    }
+    /** Remove \c this from \c _parent.sub[] .
+     * \throw if attempting to unlink the root
+     * \post \c _parent==nullptr
+     */
+    Cblock& unlink();
   private:
     friend class CbmanipBase;
     struct Cunit * const _root;
@@ -234,6 +246,60 @@ struct PreIndent : IndentSpec {
     PreIndent(int const indent_adjust, char const fill=' ')
         : IndentSpec(indent_adjust,fill) {}
 };
+
+inline std::string const& Cblock::getName() const {return _name;}
+
+inline Cunit& Cblock::getRoot() const {return *_root;}
+
+inline std::string Cblock::fullpath() const {
+    int const v=0;
+    CBLOCK_DBG(v,1," fullpath!"<<std::endl;);
+    std::string out;
+    out.reserve(256);
+    int ncomp=0; // number of path components
+    for(Cblock const * cb=this; cb!=nullptr; cb  = cb->_parent){
+        CBLOCK_DBG(v,1," fp:"<<cb->_name<<" parent:"<<(cb->_parent? cb->_parent->_name: "NULL"));
+        if( cb->isRoot() ){
+            CBLOCK_DBG(v,1," isRoot");
+            out.insert(0,"/");
+            break;
+        }else{
+            CBLOCK_DBG(v,1," notRoot");
+            CBLOCK_DBG(v,1," _name["<<_name<<"]"<<std::endl);
+            size_t const cbsz = cb->_name.size();
+            out.insert(0,cb->_name.c_str(),cbsz+1); // include terminal null
+            out.replace(cbsz,1,1,'/');
+            CBLOCK_DBG(v,1," _name["<<cbsz<<"] --> out="<<out);
+        }
+        CBLOCK_DBG(v,1,std::endl);
+        ++ncomp;
+    }
+    CBLOCK_DBG(v,1," fullpath DONE, out="<<out<<" ncomp = "<<ncomp<<std::endl);
+    if(ncomp>0) out.resize(out.size()-1U);
+    CBLOCK_DBG(v,1," fullpath DONE, out="<<out<<std::endl);
+    return out;
+}
+inline Cblock& Cblock::unlink() {
+    int const v=0;
+    if(this == &(_root->root))
+        THROW("unlink of "<<fullpath()<<" failed, is it root?");
+    if(_parent != this && _parent != nullptr){
+        //CBLOCK_DBG(v,1," unlink cblock "<<(void*)this<<" _parent "<<(void*)_parent<<std::endl);
+        CBLOCK_DBG(v,1," unlink cblock "<<fullpath()<<std::endl);
+        for(auto s=_parent->_sub.begin(); s!=_parent->_sub.end(); ++s){
+            CBLOCK_DBG(v,2," unlink psub "<<(*s)->_name<<"? ");
+            if(*s == this){
+                CBLOCK_DBG(v,2," YES!");
+                _parent->_sub.erase(s); // all _sub iters (including s) INVALID
+                _parent = nullptr;
+                CBLOCK_DBG(v,2," _name unlinked"<<std::endl);
+                break;
+            }
+        }
+    }
+    return *this;
+}
+
 inline Cblock& operator<<(Cblock& cb, PostIndent const& postIndent){
     std::cout<<"+PostIndent";
     cb._postmanip = new Cbin(cb, postIndent);
@@ -294,6 +360,78 @@ inline Cblock * Cblock::find_recurse_parent(std::string p) const {
     return nullptr;
 }
 
+/// \group Cblock helpers
+//@{ helpers
+/** provide an \c unlink'ed extern "C" block.
+ * - You \b should \c .after(abspath) this to the desired location.
+ *   - If you don't, it ends up at \c after("/"), perhaps \em not where you want it.
+ * - User is expected to \c append or \c operator&lt;&lt; to \em \/\*\*\/name/body
+ *   to get expected behaviour.
+ * \return Cblk [name] with \c _sub blocks name/beg, name/body, name_end.
+ */
+inline Cblock& mk_extern_c(Cunit& cunit, std::string name){
+    Cblock& block = *(new Cblock(&cunit,name));
+    block["beg"]<<"\n"
+        "#ifdef __cplusplus\n"
+        "extern \"C\" {\n"
+        "#endif //C++\n";
+    block["body"]; // empty
+    block["end"]<<"\n"
+        "#ifdef __cplusplus\n"
+        "}//extern \"C\"\n"
+        "endif //C++\n";
+    return block;
+}
+/** [beg]:"\#if cond" + [body] + [end]:"\#endif // cond".
+ * This has a "body" sub-block, like a scope, but no extra indenting.
+ * No support for \em removing the indent so '#' lines end up in col 1.
+ * (Could special-case this within "write" of the _code lines, I guess)
+ */
+inline Cblock& mk_cpp_if(Cunit& cunit, std::string name, std::string cond){
+    Cblock& block = *(new Cblock(&cunit,name));
+    block["beg"]<<"\n#if "<<cond;
+    block["body"]; // empty
+    block["end"]<<"#endif // "<<cond;
+    return block;
+}
+/** create a "beg{..}" block with subblock named "body" properly indented */
+inline Cblock& mk_scope(Cunit& cunit, std::string name, std::string beg, std::string end="}"){
+    Cblock& block = *(new Cblock(&cunit,name));
+    block["beg"]<<beg<<" { // "<<name<<PostIndent(+2);
+    block["body"]; // empty
+    block["end"]<<"}"<<PreIndent(-2);
+    return block;
+}
+#if 0 // this is just an instance of mk_scope
+/** \c name is for Cblock lookup, \c decl is 'int foo()' [no { or ;]. */
+inline Cblock& mk_func(Cunit& cunit, std::string name, std::string decl){
+    Cblock& block = *(new Cblock(&cunit,name));
+    block["decl"]<<"\n"<<decl<<" {"<<PostIndent(+2); // name path code always gets a newline
+    block["body"]; // empty
+    block["end"]<<"}"<<PreIndent(-2);
+    // because the tmp Cblock _parent is itself, its fullpath is just "/".
+    // It is NOT a member of Cunit::root.
+    //int const v=1;
+    //CBLOCK_DBG(v,1," mk_func-->Cblock["<<block.getName()<<"] "<<block.fullpath()<<" @ "<<(void*)&block);
+
+    // It would not hurt to force to be, I suppose,
+    // It would be safer, and never leak.
+    // But would be more ops if standard usage is to root it elsewhere via .after(locn)
+    //cunit.root.append(block); // <-- OPTIONAL, undecided
+    return block;
+}
+#else
+inline Cblock& mk_func(Cunit& cunit, std::string name, std::string decl){
+    return mk_scope(cunit, name, decl);
+}
+#endif
+/** for simple scopes (terminate with just "}", and with a "body" sub-block...
+ * - if AFTER is a cblock, we could just use AFTER.getRoot() and save an argument
+ * - general case is a bit more flexible, but macro is fairly readable if combined with indenting
+ */
+#define CBLOCK_SCOPE(CBLK_VAR,BEG,CUNIT,AFTER) auto& CBLK_VAR = mk_scope((CUNIT),#CBLK_VAR,(BEG)).after(AFTER)["body"];
+//@} helpers
+
 /** relative find of \em first Cblock matching 'p'.
  * - Suppose STAR = "*", DOUBLESTAR = "**"
  * 0. \c p with .. to mean "parent-of"
@@ -310,23 +448,14 @@ inline Cblock * Cblock::find_recurse_parent(std::string p) const {
 inline Cblock* Cblock::find(std::string p) const {
     assert(_root != nullptr);
     int const v = _root->v;
-#ifdef NDEBUG
-#define DEBUG(v,N) do{}while(0)
-#else
-#define DEBUG(V,N,...) do { \
-    if((V)>=(N)){ \
-        std::cout<<__VA_ARGS__; \
-    } \
-}while(0)
-#endif
-    DEBUG(v,3,std::string(8,'=')<<" Cblock "<<fullpath()<<" find(\""<<p<<"\")");
+    CBLOCK_DBG(v,3,std::string(8,'=')<<" Cblock "<<fullpath()<<" find(\""<<p<<"\")");
     if(p.empty()){
-        DEBUG(v,3," empty => not found\n");
+        CBLOCK_DBG(v,3," empty => not found\n");
         return nullptr;
     }
     auto const firstslash = p.find("/");
     if(firstslash == std::string::npos){
-        DEBUG(v,3," no firstslash => find_immediate_sub\n");
+        CBLOCK_DBG(v,3," no firstslash => find_immediate_sub\n");
         if(p==_name || p==".") return const_cast<Cblock*>(this);
         if(p==".."){
             if(_parent) return _parent;
@@ -340,48 +469,48 @@ inline Cblock* Cblock::find(std::string p) const {
         remain = p.substr(nextnonslash);
     }
     if(firstslash == 0){ // shunt the search immediately to root.
-        DEBUG(v,3," starts-with-slash");
+        CBLOCK_DBG(v,3," starts-with-slash");
         // all "/<remain>" cases
         Cblock const& root = _root->root;
         if( remain.empty() ){
-            DEBUG(v,3," remain.empty(), return root");
+            CBLOCK_DBG(v,3," remain.empty(), return root");
             return &_root->root;
         }
         if( root._name == p ){
-            DEBUG(v,3," matches root name\n");
+            CBLOCK_DBG(v,3," matches root name\n");
             return &_root->root;
         }
-        DEBUG(v,3," root.find(\""<<remain<<"\")\n");
+        CBLOCK_DBG(v,3," root.find(\""<<remain<<"\")\n");
         return root.find(remain);
     }
     auto comp1 = p.substr(0,firstslash);
     if(remain.empty()){ // terminal [/]\+ not significant
         return this->find(comp1);
     }
-    DEBUG(v,3,"find@<"<<comp1<<">/<"<<remain<<">");
+    CBLOCK_DBG(v,3,"find@<"<<comp1<<">/<"<<remain<<">");
     if( comp1 == "." ){                               // "./remain"
-        DEBUG(v,3," ./<remain>\n");
+        CBLOCK_DBG(v,3," ./<remain>\n");
         return this->find(remain);
     }else if( comp1 == ".." ){                        // "../remain"
         if(_parent /*&& _parent != this*/){ // "/.." is same as root (like FS)
-            DEBUG(v,3," ../<remain>\n");
+            CBLOCK_DBG(v,3," ../<remain>\n");
             return _parent->find(remain);
         }else{
-            DEBUG(v,3," .. no parent\n");
+            CBLOCK_DBG(v,3," .. no parent\n");
             return nullptr;
         }
     }else if(comp1 == "*" || comp1 == "**"){          // "*/remain"
         for(Cblock const* s: _sub){
             Cblock* subfind = s->find(remain);
             if(subfind){                // found 'remain' in s
-                DEBUG(v,3," * subfind \n");
+                CBLOCK_DBG(v,3," * subfind \n");
                 return subfind;
             }
             if(comp1 == "**"){
-                DEBUG(v,3,"\n** subfind ");
+                CBLOCK_DBG(v,3,"\n** subfind ");
                 Cblock* deeper = s->find(p); // repeat "**/remain" search, depthwise
                 if(deeper){
-                    DEBUG(v,3," ** deeper match\n");
+                    CBLOCK_DBG(v,3," ** deeper match\n");
                     return deeper;
                 }
             }
@@ -390,11 +519,11 @@ inline Cblock* Cblock::find(std::string p) const {
     }else{                                            // "comp1/remain"
         for(Cblock const* s: _sub){
             if(s->_name == comp1){
-                DEBUG(v,3," sub");
+                CBLOCK_DBG(v,3," sub");
                 return s->find(remain);
             }
         }
-        DEBUG(v,3," no match for comp1=<"<<comp1<<">\n");
+        CBLOCK_DBG(v,3," no match for comp1=<"<<comp1<<">\n");
         return nullptr;
 #if 0
         Cblock const* sub = find_immediate_sub(comp1);
@@ -406,11 +535,37 @@ inline Cblock* Cblock::find(std::string p) const {
         return subfind;                     // return subfind Cblock
 #endif
     }
-    DEBUG(v,3,"TBD: unknown case\n");
+    CBLOCK_DBG(v,3,"TBD: unknown case\n");
     assert("unseen case?"==nullptr);
     return nullptr;
 }
 
+/** add \prefix indent to all non-whitespace lines, \c sep is a set of line separators. */
+inline std::ostream& prefix_lines(std::ostream& os, std::string code,
+        std::string prefix, std::string sep=std::string("\n")){
+    if( prefix.empty() ){
+        os << code;
+    }else if( !code.empty()){
+        size_t nLoc = 0, nLocEnd;
+        while ((nLocEnd = code.find_first_of(sep, nLoc)) != std::string::npos) {
+            //std::cout<<" line["<<nLoc<<"..."<<nLocEnd<<"] = <"<<code.substr(nLoc,nLocEnd)<<">\n";
+            // line is nLoc..nLocEnd, including the last sep char
+            if( code.find_first_not_of(" \r\n\t",nLoc) < nLocEnd ){ // if not a blank line
+                os << prefix << code.substr(nLoc,nLocEnd-nLoc) << "\n";
+            }
+            nLoc = nLocEnd+1;
+        }
+        //std::cout<<" nLoc="<<nLoc<<" code.size()="<<code.size();
+        if(nLoc < code.size()){
+            //std::cout<<" line["<<nLoc<<"...end] = <"<<code.substr(nLoc)<<">\n";
+            // line is nLoc..nLocEnd, including the last sep char
+            if( code.find_first_not_of(" \r\n\t",nLoc) < code.size() ){ // if not a blank line
+                os << prefix << code.substr(nLoc); // << "\n";
+            }
+        }
+    }
+    return os;
+}
 inline std::ostream& Cblock::write(std::ostream& os)
 {
     std::string& in = _root->indent;
@@ -424,7 +579,10 @@ inline std::ostream& Cblock::write(std::ostream& os)
             }
         }
         if(_premanip) os << *_premanip;
-        if(!_code.empty()) os << in << _code << "\n";
+        if(!_code.empty()){
+            //std::cout<<" prefix_lines with code=<"<<_code<<">\n";
+            prefix_lines(os,_code,in) << "\n";
+        }
         if(_root->v >= 3 ) os<<"// _sub.size() = "<<_sub.size()<<"\n";
         for(auto s: _sub){
             if(_root->v >= 3 ) os<<in<<"// ........ sub "<<_parent->_name<<"/"<<_name<<"/"<<s->_name<<std::endl;
