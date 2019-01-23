@@ -1,5 +1,6 @@
 #ifndef CBLOCK_HPP
 #define CBLOCK_HPP
+#include "../regs/throw.hpp"
 /** \file
  * Arange statements (std::string) into blocks.
  *
@@ -113,17 +114,31 @@ struct Cblock {
     std::string fullpath() const {
         std::string out;
         out.reserve(256);
+        int ncomp=0; // number of path components
         for(Cblock const * cb=this; cb!=nullptr; cb  = cb->_parent){
             //std::cout<<" fp:"<<cb->_name<<" parent:"<<cb->_parent->_name<<std::endl;
-            size_t const cbsz = cb->_name.size();
-            out.insert(0,cb->_name.c_str(),cbsz+1); // include terminal null
-            out.replace(cbsz,1,1,'/');
-            if( cb->isRoot() ) // root has this property
+            //std::string component = (cb->isRoot()? std::string(): cb->_name);
+            if( cb->isRoot() ){
+                out.insert(0,"/");
                 break;
+            }else{
+                size_t const cbsz = cb->_name.size();
+                out.insert(0,cb->_name.c_str(),cbsz+1); // include terminal null
+                out.replace(cbsz,1,1,'/');
+            }
+            ++ncomp;
         }
+        if(ncomp>0) out.resize(out.size()-1U);
         return out;
     }
+    /** find path.  TODO ".*" for "close-find" ~ subfind+upward_subfind ? */
     Cblock *find(std::string path) const; // Search upward to root, then down through whole tree
+    /** \c find but throw if not found */
+    Cblock& at(std::string path) const {
+        Cblock *ret = find(path);
+        if( ret == nullptr ) THROW(" Cblock["<<fullpath()<<"].at("<<path<<") not found");
+        return *ret;
+    }
     //Cblock& find(std::string p) const;
   private:
     /** find first \b single-component path \c p for simple search strategy.
@@ -230,9 +245,17 @@ inline Cblock& operator<<(Cblock& cb, PreIndent const& preIndent){
     return cb;
 }
 
-/** \return subblock with name \c p (create subblock if nec), or \c *this if not found. */
+/** find/create subblock.
+ * If p is a component (not a path), then
+ *   \return subblock with name \c p (create subblock if nec, no throw)
+ * Otherwise throw if \c p.empty() or use \c at(p) fails to find a path.
+ * */
 inline Cblock& Cblock::operator[](std::string p){
-    if(p.empty()) return *this;
+    if(p.empty()) THROW("Cblock[""] oops");
+    if(p.find("/") != std::string::npos
+            || p == "." || p == ".."){
+        return this->at(p); // throw if bad
+    }
     for(auto s: _sub) if(s && s->_name==p) return *s;
     if(_root->v >= 2) std::cout<<"// new sub-block "<<_name<<"/"<<p<<" "<<_name<<".sub.size()="<<_sub.size()<<std::endl;
     _sub.push_back(new Cblock(this,p));
@@ -285,15 +308,25 @@ inline Cblock * Cblock::find_recurse_parent(std::string p) const {
  * find NEVER creates a block.
  */
 inline Cblock* Cblock::find(std::string p) const {
-    std::cout<<std::string(8,'=')<<" Cblock "<<fullpath()<<" find(\""<<p<<"\")"; std::cout.flush();
+    assert(_root != nullptr);
+    int const v = _root->v;
+#ifdef NDEBUG
+#define DEBUG(v,N) do{}while(0)
+#else
+#define DEBUG(V,N,...) do { \
+    if((V)>=(N)){ \
+        std::cout<<__VA_ARGS__; \
+    } \
+}while(0)
+#endif
+    DEBUG(v,3,std::string(8,'=')<<" Cblock "<<fullpath()<<" find(\""<<p<<"\")");
     if(p.empty()){
-        std::cout<<" empty => not found"<<std::endl;
+        DEBUG(v,3," empty => not found\n");
         return nullptr;
     }
-    assert(_root != nullptr);
     auto const firstslash = p.find("/");
     if(firstslash == std::string::npos){
-        std::cout<<" no firstslash => find_immediate_sub"<<std::endl; std::cout.flush();
+        DEBUG(v,3," no firstslash => find_immediate_sub\n");
         if(p==_name || p==".") return const_cast<Cblock*>(this);
         if(p==".."){
             if(_parent) return _parent;
@@ -307,55 +340,62 @@ inline Cblock* Cblock::find(std::string p) const {
         remain = p.substr(nextnonslash);
     }
     if(firstslash == 0){ // shunt the search immediately to root.
-        std::cout<<" starts-with-slash"; std::cout.flush();
+        DEBUG(v,3," starts-with-slash");
         // all "/<remain>" cases
         Cblock const& root = _root->root;
         if( remain.empty() ){
-            std::cout<<" remain.empty(), return root"<<std::endl; std::cout.flush();
+            DEBUG(v,3," remain.empty(), return root");
             return &_root->root;
         }
         if( root._name == p ){
-            std::cout<<" matches root name"<<std::endl; std::cout.flush();
+            DEBUG(v,3," matches root name\n");
             return &_root->root;
         }
-        std::cout<<" root.find(\""<<remain<<"\")"<<std::endl; std::cout.flush();
+        DEBUG(v,3," root.find(\""<<remain<<"\")\n");
         return root.find(remain);
     }
     auto comp1 = p.substr(0,firstslash);
     if(remain.empty()){ // terminal [/]\+ not significant
         return this->find(comp1);
     }
-    std::cout<<"find@<"<<comp1<<">/<"<<remain<<">"<<std::endl; std::cout.flush();
+    DEBUG(v,3,"find@<"<<comp1<<">/<"<<remain<<">");
     if( comp1 == "." ){                               // "./remain"
-        std::cout<<" ./<remain>"<<std::endl; std::cout.flush();
+        DEBUG(v,3," ./<remain>\n");
         return this->find(remain);
     }else if( comp1 == ".." ){                        // "../remain"
         if(_parent /*&& _parent != this*/){ // "/.." is same as root (like FS)
-            std::cout<<" ../<remain>"<<std::endl; std::cout.flush();
+            DEBUG(v,3," ../<remain>\n");
             return _parent->find(remain);
         }else{
-            std::cout<<" .. no parent"<<std::endl; std::cout.flush();
+            DEBUG(v,3," .. no parent\n");
             return nullptr;
         }
     }else if(comp1 == "*" || comp1 == "**"){          // "*/remain"
-        std::cout<<"TBD: single-star"<<std::endl; std::cout.flush();
         for(Cblock const* s: _sub){
-            std::cout<<"subfind "; std::cout.flush();
             Cblock* subfind = s->find(remain);
             if(subfind){                // found 'remain' in s
+                DEBUG(v,3," * subfind \n");
                 return subfind;
             }
             if(comp1 == "**"){
+                DEBUG(v,3,"\n** subfind ");
                 Cblock* deeper = s->find(p); // repeat "**/remain" search, depthwise
                 if(deeper){
-                    std::cout<<" ** deeper match "<<std::endl; std::cout.flush();
+                    DEBUG(v,3," ** deeper match\n");
                     return deeper;
                 }
             }
         }
         return nullptr; // */remain not found
     }else{                                            // "comp1/remain"
-        std::cout<<"TBD: multi-path"<<std::endl; std::cout.flush();
+        for(Cblock const* s: _sub){
+            if(s->_name == comp1){
+                DEBUG(v,3," sub");
+                return s->find(remain);
+            }
+        }
+        DEBUG(v,3," no match for comp1=<"<<comp1<<">\n");
+        return nullptr;
 #if 0
         Cblock const* sub = find_immediate_sub(comp1);
         if(sub == this) return this; // comp1 not matched
@@ -366,7 +406,8 @@ inline Cblock* Cblock::find(std::string p) const {
         return subfind;                     // return subfind Cblock
 #endif
     }
-    std::cout<<"TBD: unknown case"<<std::endl; std::cout.flush();
+    DEBUG(v,3,"TBD: unknown case\n");
+    assert("unseen case?"==nullptr);
     return nullptr;
 }
 

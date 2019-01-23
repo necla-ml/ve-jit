@@ -4,6 +4,20 @@
 using namespace cprog;
 using namespace std;
 
+#define MUST_THROW(CODE) do{ \
+    int threw = 0; \
+    try{ \
+        CODE; \
+    }catch(...){ \
+        threw = 1; \
+    } \
+    if( threw == 0 ){ \
+        std::cout<<"Error: following code should have thrown:\n" \
+        << #CODE << std::endl; \
+        THROW("Stopping now"); \
+    } \
+}while(0)
+
 /** This uses simple paths only, and demonstrates how output
  * order can be controlled.
  * - Simple Pre/Post-Indent "manipulator" demo.
@@ -114,6 +128,59 @@ void test_cblock_path(){
     functions["foo"].after(functions["bar"]);
     assert( root.find("*/foo") == nullptr );
     assert( root.find("**/foo") != nullptr );
+    assert( root.find("/extern_C/open/functions/bar/foo/mid/") != nullptr );
+    assert( root.find("extern_C/open/functions/bar/foo/mid/") != nullptr ); 
+    assert( root.find("program/extern_C/open/functions/bar/foo/mid/") == nullptr ); 
+
+    // Cblock::operator[p] was extended.
+    // ORIGINAL behaviour for non-path p [no /] is to create the component
+    // if it is not an immediate subblock.
+    // NEW behaviour allows p to be a path,
+    // and throws if p.empty() or p is a nonexistent path.
+    try{
+        std::cout<<"\n\n Cblock::at(p) tests"<<std::endl;
+        assert( root.at(".").getName() == "program" );
+        assert( root.at("..").getName() == "program" );
+        assert( root.at("/macros").getName() == "macros" );
+        assert( root.at("./macros").getName() == "macros" );
+        assert( root.at("macros").getName() == "macros" );
+        assert( root.at("*/open").getName() == "open" );
+        assert( root.at("**/foo").getName() == "foo" );
+        assert( root.at("*/../macros").getName() == "macros" );
+    }catch(...){
+        cout<<" Caught something\n";
+        throw;
+    }
+    std::cout<<"\n\n Cblock::at(p) THROW tests"<<std::endl;
+    MUST_THROW(root.at("asdfqewrasdf"));
+    MUST_THROW(root.at("macrossss"));
+    MUST_THROW(root.at("*/foo"));
+    MUST_THROW(root.at("**/asdlkfj"));
+    MUST_THROW(root.at("/extern_c/open")); // should be capital C
+    MUST_THROW(root.at("never_seen_path"));
+
+    try{
+        std::cout<<"\n\n Cblock::operator[](p) tests"<<std::endl;
+        assert( root["."].getName() == "program" );
+        assert( root[".."].getName() == "program" );
+        assert( root["/macros"].getName() == "macros" );
+        assert( root["./macros"].getName() == "macros" );
+        assert( root["macros"].getName() == "macros" );
+        assert( root["*/../macros"].getName() == "macros" );
+        assert( root["*/open"].getName() == "open" );
+        assert( root["*/open"].fullpath() == "/extern_C/open" );
+        assert( root["**/open"].getName() == "open" );
+        // 1-component ==> create if never seen ...
+        assert( root["never_seen_path"].getName() == "never_seen_path" );
+    }catch(...){
+        cout<<" Caught something\n";
+        throw;
+    }
+    std::cout<<"\n\n Cblock::operator[](p) THROW tests"<<std::endl;
+    MUST_THROW(root["./newsub"]); // cf. root["newsub"] which never fails
+    MUST_THROW(root["*/foo"]);
+    MUST_THROW(root["**/asdlkfj"]);
+    MUST_THROW(root["/extern_c/open"]); // should be capital C
 
     //main.after("extern_C/open");
     pr.v = 2;
