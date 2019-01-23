@@ -131,6 +131,9 @@ void test_cblock_path(){
     assert( root.find("/extern_C/open/functions/bar/foo/mid/") != nullptr );
     assert( root.find("extern_C/open/functions/bar/foo/mid/") != nullptr ); 
     assert( root.find("program/extern_C/open/functions/bar/foo/mid/") == nullptr ); 
+    assert( functions.find("..*/open") != nullptr );
+    cout<<"\n\n"<<endl; cout.flush();
+    assert( foo.find("..*/bar/") != nullptr ); // find in recursive "parent/sibling tree"
 
     // Cblock::operator[p] was extended.
     // ORIGINAL behaviour for non-path p [no /] is to create the component
@@ -152,6 +155,13 @@ void test_cblock_path(){
         throw;
     }
     std::cout<<"\n\n Cblock::at(p) THROW tests"<<std::endl;
+    MUST_THROW(root["*"]); // Paranoia about bugs wrt wildcards
+    MUST_THROW(root[".illegal"]);
+    MUST_THROW(root[".illegal"]);
+    MUST_THROW(root.at("*"));
+    MUST_THROW(root.at("*illegal"));
+    MUST_THROW(root.at(".illegal"));
+
     MUST_THROW(root.at("asdfqewrasdf"));
     MUST_THROW(root.at("macrossss"));
     MUST_THROW(root.at("*/foo"));
@@ -192,8 +202,8 @@ void test_cblock_short(){
     Cunit pr("program");
     pr.v = 0;
     // Very important to use 'auto&' instead of plain 'auto'
-    pr["includes"]<<"#include <iostream>";
-    pr["macros"]<<"#define MSG \"hello\"";
+    pr["includes"]<<"\n#include <iostream>";
+    pr["macros"]<<"\n#define MSG \"hello\"";
     //mk_extern_c(pr,"extern_C").after(pr["macros"]);
     //  new function: after can accept an absolute path
     mk_extern_c(pr,"extern_C").after("/macros");
@@ -201,33 +211,29 @@ void test_cblock_short(){
     // creates "functions", appends foo/decl foo/body foo/end
     auto& foo_body = mk_func(pr,"foo","int foo()").after(pr["functions"])["body"];
     // for complex items, foo_body will itself get subdivided!
-#if 0
-    foo_body<<"return 7;";
-#else
+
     // append(string) to _code is really only useful for simple stuff.
     // complex cases should name all sections/blocks ...
     foo_body["entry"]<<"int ret=-1;";   // foo/body/entry (anchored)
 
-#if 1
-    // OK, this seems a reasonable idiom ..
+    // OK, this seems a reasonable idiom .. if00 --> path "/**/foo/body/if00/body"
     auto& if00 = mk_scope(pr,"if00","if(!defined(__cplusplus))").after(foo_body)["body"]; {
         if00<<"ret = 1;";
     }
-    // for simple scopes (terminate with just "}", and with a "body" sub-block...
-    // - if AFTER is a cblock, we could just use AFTER.getRoot()
-    // - general case is a bit more flexible, but this is a decent start.
-//#define CBLOCK_SCOPE(CBLK_VAR,BEG,CUNIT,AFTER) auto& CBLK_VAR = mk_scope((CUNIT),#CBLK_VAR,(BEG)).after(AFTER)["body"];
+    // with macros, a bit more readable, else00 --> Cblock path "/**/foo/body/else00/body"
     CBLOCK_SCOPE(else00,"else",pr,foo_body) {
         else00<<"ret = 2;";
     }
     CBLOCK_SCOPE(for00,"for(int i=0;i<10;++i)",pr,foo_body) {
-        for00<<"ret = (ret^0x12345678); //just to demo\n"
-            <<"ret += i;\t// how to 'randomize' ret a bit";
-        // oh, write should split at newlines and set the indent!
+        for00<<"ret = (ret^magic); //just to demo"
+            <<"\nret += i*magic2;\t// how to 'randomize' ret a bit";
+        // oh, I wanted a magic const to be hoisted up into "entry" code...
+        foo_body["entry"]<<"\nint const magic=0x12345678;";
+        // or do an 'upward search' for a previously created code block (or stub)
+        //for00.up["entry"]<<"\nint const magic2=0x23456789;";
+        for00["..*/entry"]<<"\nint const magic2=0x23456789;";
     }
-#endif
     foo_body["exit"]<<"return ret;";
-#endif
 
     // short functions can be ... very short
     //mk_func(pr,"bar","int bar()").after(pr["functions"])["body"]<<"return 7";
@@ -248,6 +254,7 @@ int main(int,char**){
     test_cblock_basic();
     test_cblock_path();
     test_cblock_short();
+    //test_cblock_forlin();
     cout<<"\nGoodbye"<<endl;
     return 0;
 }

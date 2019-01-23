@@ -92,14 +92,19 @@ struct Cblock {
     //                     _nwrites(s._nwrites), _maxwrites(s._maxwrites)
     //{}
 
-    /** Find \c p in \c sub -Cblocks, or append an empty Cblocks named \c p.
-     * Above is behaviour for single-component strings \c p.  \c fullpath()
-     * style paths, with /-separators, ., .., *, and ** specials cause matching
-     * to a first-found \em existing block, and never create a new block. */
+    /** Find \c p in \c sub -Cblocks, or appending a new Cblock to \c _sub
+     * when \c p is a single <em>path component</em> \c p;
+     * O/w if \c p is \b not a <em>path component</em> (i.e. something with '/')
+     * then we execute \c at(p), which matches a \em first-found existing
+     * block, or throws (\c at never creates a new block).
+     * \throw if \c p is a path-string with '/' and \c p is not found.
+     * see \c find(path) for a description of how path searches are done.*/
     Cblock& operator[](std::string p);
     Cblock& operator<<(std::string codeline) { return append(codeline); }
-    /** \c codeline append to \c _code (\c Cblock appends to \c _sub) */
-    Cblock& append(std::string codeline){ _code.append(codeline); return *this;}
+    /** \c codeline append to \c _code (\c Cblock appends to \c _sub).
+     * Mostly append as-is, \em except if last line of code has a ';' in it,
+     * we add a newline (tweak for C-code readability). */
+    Cblock& append(std::string codeline);
     /** \c codeline append to \c _code (\c Cblock appends to \c _sub) */
     Cblock& append(Cblock &cb){
         int const v=0;
@@ -153,9 +158,25 @@ struct Cblock {
     //Cblock* prev()
     ~Cblock(){ clear(); }
     bool isRoot() const { return _parent == this; }
+    /// \group path functions
+    //@{
     std::string fullpath() const;
-    /** find path.  TODO ".*" for "close-find" ~ subfind+upward_subfind ? */
-    Cblock *find(std::string path) const; // Search upward to root, then down through whole tree
+    /** find first Cblock matching \c path, with wildcard extensions.
+     * - '/' begin at root
+     * - '.' find under \c this Cblock.
+     * - '..' find under \c _parent Cblock.
+     * - '*' match any one subdir (i.e. sub-Cblock)
+     * - '**' match zero or more subdirs
+     * - '..*' \em strange recursive upward parent+subtree search excluding sub-tree of \c this
+     *   - also called \c up since this is not a common path convention.
+     */
+    Cblock *find(std::string path) const;
+    /** utility for dot-dot-star wildcard, <em>find-in-upwards-subtrees</em>,
+     * a Cblock match \em close to \c this, but \b not underneath \c this.
+     * Note: could have taken ..* to mean "match anywhere on path to root" to root,
+     *       but "..\*\/\*\*\/path" doesn't quite exclude the subtree of \c this
+     */
+    Cblock *up(std::string path) const { return this->find("..*/"+path); }
     /** \c find but throw if not found */
     Cblock& at(std::string path) const {
         Cblock *ret = find(path);
@@ -169,6 +190,7 @@ struct Cblock {
     Cblock * find_immediate_sub(std::string p) const;
     Cblock * find_recurse_sub(std::string p) const;
     Cblock * find_recurse_parent(std::string p) const;
+    //@}
   private:
     friend struct Cunit;
     void clear(){ for(auto s: _sub) delete(s); _sub.clear(); }
@@ -251,6 +273,22 @@ inline std::string const& Cblock::getName() const {return _name;}
 
 inline Cunit& Cblock::getRoot() const {return *_root;}
 
+Cblock& Cblock::append(std::string codeline){
+    if( !codeline.empty() ){
+#if 0 // trial...
+        // to technically allow building up a single statement, we only
+        // stick in new line if the last line of _code contains a ';'
+        if( !_code.empty() ){
+            size_t lastline=_code.find_last_of('\n');
+            if( lastline == std::string::npos ) lastline=0; else ++lastline;
+            if(_code.find_first_of(";",lastline) != std::string::npos)
+                _code.append("\n");
+        }
+#endif
+        _code.append(codeline);
+    }
+    return *this;
+}
 inline std::string Cblock::fullpath() const {
     int const v=0;
     CBLOCK_DBG(v,1," fullpath!"<<std::endl;);
@@ -318,12 +356,23 @@ inline Cblock& operator<<(Cblock& cb, PreIndent const& preIndent){
  * */
 inline Cblock& Cblock::operator[](std::string p){
     if(p.empty()) THROW("Cblock[""] oops");
-    if(p.find("/") != std::string::npos
-            || p == "." || p == ".."){
-        return this->at(p); // throw if bad
+    // Be careful to not create sub-block with names containing wildcard strings
+    if(p.find("/") != std::string::npos){       // PATH! revert to full-path search
+        return this->at(p);                     //       throw if not found
     }
-    for(auto s: _sub) if(s && s->_name==p) return *s;
-    if(_root->v >= 2) std::cout<<"// new sub-block "<<_name<<"/"<<p<<" "<<_name<<".sub.size()="<<_sub.size()<<std::endl;
+    //                                          Possible single-component path!
+    if( p.substr(0,1) == "."){ // . and .. might actual be OK paths
+        if( p == "." || p == "..")
+            return this->at(p); //usually such blocks already exist, so we can return them
+        else
+            THROW("Avoid sub-block names like "<<p<<" beginning with '.'");
+    }
+    if( p.substr(0,1) == "*" ) // '*' should never begin a single component name
+        THROW("'*' wildcard needs a '/'?  Avoid sub-blocks names like "<<p<<" beginning with '*'");
+    // single-component path, possible valid name,
+    for(auto s: _sub) if(s && s->_name==p) return *s;   // found ?
+    //                                                  CREATE if not found in _sub[]
+    CBLOCK_DBG(_root->v,2,"// new sub-block "<<_name<<"/"<<p<<" "<<_name<<".sub.size()="<<_sub.size()<<"\n");
     _sub.push_back(new Cblock(this,p));
     return *_sub.back();
 }
@@ -379,7 +428,7 @@ inline Cblock& mk_extern_c(Cunit& cunit, std::string name){
     block["end"]<<"\n"
         "#ifdef __cplusplus\n"
         "}//extern \"C\"\n"
-        "endif //C++\n";
+        "#endif //C++\n";
     return block;
 }
 /** [beg]:"\#if cond" + [body] + [end]:"\#endif // cond".
@@ -487,7 +536,7 @@ inline Cblock* Cblock::find(std::string p) const {
     if(remain.empty()){ // terminal [/]\+ not significant
         return this->find(comp1);
     }
-    CBLOCK_DBG(v,3,"find@<"<<comp1<<">/<"<<remain<<">");
+    CBLOCK_DBG(v,3,"find@<"<<comp1<<">/<"<<remain<<">\n");
     if( comp1 == "." ){                               // "./remain"
         CBLOCK_DBG(v,3," ./<remain>\n");
         return this->find(remain);
@@ -500,6 +549,13 @@ inline Cblock* Cblock::find(std::string p) const {
             return nullptr;
         }
     }else if(comp1 == "*" || comp1 == "**"){          // "*/remain"
+        if( comp1 == "**" ){ // ** is allowed to match with this (no subdirs)
+            Cblock * thismatch = this->find(remain);
+            if( thismatch ){
+                CBLOCK_DBG(v,3," ** no-subdir match\n");
+                return thismatch;
+            }
+        }
         for(Cblock const* s: _sub){
             Cblock* subfind = s->find(remain);
             if(subfind){                // found 'remain' in s
@@ -516,6 +572,34 @@ inline Cblock* Cblock::find(std::string p) const {
             }
         }
         return nullptr; // */remain not found
+    }else if(comp1 == "..*"){
+        // This is recursive _parent search, never looking underneath this
+        if( !_parent || _parent==this || isRoot() ){
+            CBLOCK_DBG(v,1," no parent for Cblock "<<_name<<"\n");
+            THROW("Not possible to continue upward parent search");
+        }
+        if( _parent->_name == remain ){
+            CBLOCK_DBG(v,1," FOUND exact match of parent "<<_parent->_name<<" with remain\n");
+            return _parent;
+        }
+        Cblock * parentfind = _parent->find(remain);
+        if(parentfind){
+            CBLOCK_DBG(v,1," FOUND match of parent "<<_parent->_name<<" with remain at "<<parentfind->fullpath()<<"\n");
+            return parentfind;
+        }
+        CBLOCK_DBG(v,1," search parent subtree\n");
+        for(Cblock const* s: _parent->_sub){
+            if( s == this ) continue; // search parent sub-tree EXCEPT for this
+            CBLOCK_DBG(v,1,"\nssss sibling-find **/"<<remain<<" under sibling "<<s->fullpath()<<"\n");
+            Cblock* sibfind = s->find("**/"+remain);   // force sub-tree search
+            if(sibfind){
+                CBLOCK_DBG(v,1,"\nssss found "<<remain<<" at "<<sibfind->fullpath()<<"\n");
+                return sibfind;
+            }
+            CBLOCK_DBG(v,1,"\nssss did not find "<<remain<<"\n");
+        }
+        // repeat the SAME p="**/remain" search skipping the parent's sub-tree.
+        return _parent->find(p);
     }else{                                            // "comp1/remain"
         for(Cblock const* s: _sub){
             if(s->_name == comp1){
@@ -560,7 +644,7 @@ inline std::ostream& prefix_lines(std::ostream& os, std::string code,
             //std::cout<<" line["<<nLoc<<"...end] = <"<<code.substr(nLoc)<<">\n";
             // line is nLoc..nLocEnd, including the last sep char
             if( code.find_first_not_of(" \r\n\t",nLoc) < code.size() ){ // if not a blank line
-                os << prefix << code.substr(nLoc); // << "\n";
+                os << prefix << code.substr(nLoc); //<< "\n";
             }
         }
     }
