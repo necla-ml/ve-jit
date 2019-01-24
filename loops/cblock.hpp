@@ -42,6 +42,12 @@
 }while(0)
 #endif
 
+/** \c STR(...) eases raw text-->C-string (escaping embedded " or \\) */
+#ifndef CSTR
+#define CSTRING0(...) #__VA_ARGS__
+#define CSTR(...) CSTRING0(__VA_ARGS__)
+#endif
+
 namespace cprog {
 
 struct Cunit;
@@ -52,8 +58,20 @@ struct IndentSpec;
 struct PostIndent;
 struct PreIndent;
 
+/// \group Cblock I/O helpers
+//@{
+/** stateless Cblock output manipulators for operator<< */
+template<class T> inline T& operator<<(T& t, T& (*manip)(T&) ){ return manip(t); }
+
+/** \c Endl to avoid confusion with \c std::endl that applies only to ostream& */
+template<class T> inline T& Endl(T& t){ return t<<"\n"; }
+
 /** Base Cblock/Cunit manipulator class.
- * Cunit may store "context", like current indent for \c write operations. */
+ * Cunit may store "context", like current indent for \c write operations,
+ * so allow access to "/".
+ * Possible overkill (maybe Cblock::getRoot() is all that's needed?)
+ * OTOH, maybe this way eases 'friend' decls.
+ */
 struct CbmanipBase {
     Cblock* cb;
     virtual std::ostream& write(std::ostream& os) {
@@ -72,7 +90,9 @@ struct CbmanipBase {
 inline std::ostream& operator<<(std::ostream& os, CbmanipBase & cbmanip){
     return cbmanip.write(os);
 }
+//@}
 
+//template<class T> struct endl {;}; // Nope. confusion with std::endl
 struct Cblock {
     /// Empty Cblock constructor (placeholder)
     Cblock(Cunit *root, std::string name="root")
@@ -117,26 +137,24 @@ struct Cblock {
         CBLOCK_DBG(v,10," this@"<<_parent->_name<<"/"<<_name<<"{");
         for(auto s: _sub) std::cout<<" "<<s->_name;
         CBLOCK_DBG(v,10,"}"<<std::endl);
+#if 0
         return *this;
+#else
+        return cb; // new behaviour
+#endif
     }
     // shorten append usage...
-    Cblock& operator<<=(Cblock &cb) {return this->append(cb); }
+    //Cblock& operator<<=(Cblock &cb) {return this->append(cb); }
     //Cblock& operator<<(std::initializer_list il);
     //Cblock& append(std::string name, std::initializer_list<std::string>
     // Hmmm maybe provide canned procedures that define an unlinked block, that
     // gets immediately \c .after()'ed to hook it to some location.
-    /// unlink \c this and append it to some \c prev Cblock.
-    /// I guess this could be called "under".
-    Cblock& after(Cblock& prev) {
-        std::cout<<" Cblock@"<<_name; std::cout.flush();
-        //std::cout<<" Cblock@"<<fullpath(); std::cout.flush(); // XXX fullpath error if Cblock unlinked?
-        std::cout<<" after("<<prev.fullpath()<<" unlink..."; std::cout.flush();
-        Cblock& tmp = unlink();
-        std::cout<<" append..."; std::cout.flush();
-        prev.append(tmp);
-        std::cout<<" done"<<std::endl; std::cout.flush();
-        return *this;
-    }
+    /** unlink \c this and append it to some \c prev Cblock.
+     * equiv prev.append(unlink())
+     * I guess this could be called "under".
+     * \return \c *this
+     */
+    Cblock& after(Cblock& prev);
     /// place after absolute path (can be wildcarded) \c abspath.
     /// \throw if \c abspath cannot be found.
     Cblock& after(std::string abspath) { 
@@ -148,6 +166,8 @@ struct Cblock {
     int nWrites() const {return _nwrites;}
     bool canWrite() { return _nwrites>=0 && _nwrites<_maxwrites; }
     std::ostream& write(std::ostream& os);
+    /** depth-first tree dump */
+    std::ostream& dump(std::ostream& os, int const ind=0);
 
     Cblock& setType(std::string type) {_type=type; return *this;}
     Cblock& setName(std::string type); // {this->type=type; return *this;} and update root!
@@ -216,7 +236,13 @@ struct Cblock {
     int _maxwrites; // limit for _nwrites
     friend Cblock& operator<<(Cblock& cb, PostIndent const& postIndent);
     friend Cblock& operator<<(Cblock& cb, PreIndent const& preIndent);
+    //friend Cblock& operator<<(Cblock& cb, Endl<Cblock> const&);
+    template<class T> friend T& Endl(T& t);
 };
+template<> Cblock& Endl<Cblock>(Cblock& cblock){
+    cblock._code.append("\n"); // since frequent, cut out some intermediate functions
+    return cblock;
+}
 
 struct Cunit {
     std::string name;
@@ -272,6 +298,23 @@ struct PreIndent : IndentSpec {
 inline std::string const& Cblock::getName() const {return _name;}
 
 inline Cunit& Cblock::getRoot() const {return *_root;}
+
+inline Cblock& Cblock::after(Cblock& prev) {
+#if 0 // original
+    std::cout<<" Cblock@"<<_name; std::cout.flush();
+    //std::cout<<" Cblock@"<<fullpath(); std::cout.flush(); // XXX fullpath error if Cblock unlinked?
+    std::cout<<" after("<<prev.fullpath()<<" unlink..."; std::cout.flush();
+    Cblock& tmp = unlink();
+    std::cout<<" append..."; std::cout.flush();
+    assert( &tmp == this );
+    prev.append(tmp);
+    std::cout<<" done"<<std::endl; std::cout.flush();
+    return *this;
+#else // streamlined, with 'append' that returns the argument, instead of 'prev'
+    CBLOCK_DBG(_root->v,2," Cblock["<<fullpath()<<"].after("<<prev.fullpath()<<")\n");
+    return prev.append(unlink());
+#endif
+}
 
 Cblock& Cblock::append(std::string codeline){
     if( !codeline.empty() ){
@@ -348,7 +391,6 @@ inline Cblock& operator<<(Cblock& cb, PreIndent const& preIndent){
     cb._premanip = new Cbin(cb, preIndent);
     return cb;
 }
-
 /** find/create subblock.
  * If p is a component (not a path), then
  *   \return subblock with name \c p (create subblock if nec, no throw)
@@ -419,6 +461,7 @@ inline Cblock * Cblock::find_recurse_parent(std::string p) const {
  * \return Cblk [name] with \c _sub blocks name/beg, name/body, name_end.
  */
 inline Cblock& mk_extern_c(Cunit& cunit, std::string name){
+#if 0
     Cblock& block = *(new Cblock(&cunit,name));
     block["beg"]<<"\n"
         "#ifdef __cplusplus\n"
@@ -429,7 +472,30 @@ inline Cblock& mk_extern_c(Cunit& cunit, std::string name){
         "#ifdef __cplusplus\n"
         "}//extern \"C\"\n"
         "#endif //C++\n";
+    // Signal that we are not accessible within the DAG of cunit yet.
+    // We need an 'after' to postion us within an existing 'root'.
+    // We want to signal attempts to use unrooted Cblocks in questionable manner.
+    //return block.unrooted();
+    //
+    // OR, explicitly root it at top-level
+    cunit.root.append(block);
     return block;
+#else // OK, let's just root it right away
+    // want to append a new root block (even if name is dup)
+    // This is not so bad, because client can take ref to "this one",
+    // or can immediately '.after' it to another tree position.
+    Cblock& block = cunit.root.append(*(new Cblock(&cunit,name)));
+    block["beg"]<<"\n"
+        "#ifdef __cplusplus\n"
+        "extern \"C\" {\n"
+        "#endif //C++\n";
+    block["body"]; // empty
+    block["end"]<<"\n"
+        "#ifdef __cplusplus\n"
+        "}//extern \"C\"\n"
+        "#endif //C++\n";
+    return block;
+#endif
 }
 /** [beg]:"\#if cond" + [body] + [end]:"\#endif // cond".
  * This has a "body" sub-block, like a scope, but no extra indenting.
@@ -648,6 +714,23 @@ inline std::ostream& prefix_lines(std::ostream& os, std::string code,
             }
         }
     }
+    return os;
+}
+/** debug printout: see the DAG, not the actual code snippets */
+inline std::ostream& Cblock::dump(std::ostream& os, int const ind/*=0*/)
+{
+    if(ind > 2000){
+        THROW("Cblock dump depth really huge.  Maybe it is not a DAG.");
+    }
+    //int const v = _root->v+2;
+    std::string in("\n&&& "+std::string(ind,' '));
+    os<<in<<fullpath()
+        <<(_premanip? " premanip": "")
+        <<" code["<<_code.size()<<"]"
+        <<" sub["<<_sub.size()<<"]"
+        <<(_postmanip? "postmanip": "")
+        ;
+    for(auto s: _sub) s->dump(os,ind+2);
     return os;
 }
 inline std::ostream& Cblock::write(std::ostream& os)
