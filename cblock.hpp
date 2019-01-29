@@ -256,10 +256,18 @@ struct Cunit {
     Cblock *find(std::string path);                 ///< absolute \c path down from \c root
     Cblock *find(std::string path, Cblock* from);   ///< search up \c from, then down from \c root
     void dump(std::ostream& os);                    ///< dump the tree
+    std::string str();
     Cblock & operator[](std::string name) { return root[name]; }
 
 };
-
+inline void Cunit::dump(std::ostream& os){
+    root.dump(os);
+}
+inline std::string Cunit::str(){
+    std::ostringstream oss;
+    root.dump(oss);
+    return oss.str();
+}
 inline Cunit* CbmanipBase::getRoot() const {return cb->_root;}
 
 struct IndentSpec {
