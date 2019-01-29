@@ -1,11 +1,12 @@
-VEJIT_ROOT:=.
+VEJIT_ROOT:=../..
 ifneq ($(CC),ncc)
 .PRECIOUS: jitpp_loadreg
 #
 # only a few things can compile for x86...
 #
-TARGETS:=test_strMconst asmfmt-x86 jitpp_loadreg veliFoo.o
-TARGETS+=veliFoo.o veli_loadreg-x86
+#TARGETS:=test_strMconst asmfmt-x86 jitpp_loadreg veliFoo.o
+#TARGETS+=veliFoo.o veli_loadreg-x86
+TARGETS:=veli_loadReg
 VE_EXEC:=time
 OBJDUMP:=objdump
 OBJDUMP:=objdump
@@ -35,13 +36,13 @@ else
 # all temporary files.  Unfortunately 'ncc' and 'nas' and tools run on host only,
 # and some steps require real files on the host filesystem :(
 #
-TARGETS=asmkern0.asm libjit1.a libjit1-x86.a asmfmt-ve\
-	asmkern.bin asmkern1.bin msk \
-	syscall_hello \
-	jitve0 jitve_hello test_strMconst jitve_math \
-	jitpp_hello test_naspipe-x86 test_vejitpage_sh-x86 \
-	jitpp_loadreg \
-	asmfmt-x86 veli_loadreg-x86 veli_loadreg
+#TARGETS=asmkern0.asm libjit1.a libjit1-x86.a asmfmt-ve\
+#	asmkern.bin asmkern1.bin msk \
+#	syscall_hello \
+#	jitve0 jitve_hello test_strMconst jitve_math \
+#	jitpp_hello test_naspipe-x86 test_vejitpage_sh-x86 \
+#	jitpp_loadreg \
+#	asmfmt-x86 veli_loadreg-x86 veli_loadreg
 # slow!
 #TARGETS+=test_naspipe test_vejitpage_sh
 CC?=ncc-1.5.1
@@ -63,13 +64,82 @@ OBJCOPY:=nobjcopy
 LIBVELI_TARGETS:=libveli.a libveli-x86.a
 LIBJIT1_TARGETS:=libjit1.a libjit1-x86.a
 endif
-TARGETS+=$(LIBJIT1_TARGETS) $(LIBVELI_TARGETS)
+#TARGETS+=$(LIBJIT1_TARGETS) $(LIBVELI_TARGETS)
+TARGETS+=cblock dltest1.log veli_loadreg-x86
+CFLAGS+=-I$(VEJIT_ROOT)/include
+CXXFLAGS+=-I$(VEJIT_ROOT)/include
+LDFLAGS+=-L$(VEJIT_ROOT)/lib -Wl,-rpath=$(VEJIT_ROOT)/lib
 
 all: $(TARGETS) liblist
 SHELL:=LC_ALL=C /bin/bash
+cblock: cblock.cpp
+	g++ $(CXXFLAGS) -DMAIN_CBLOCK -E $< -o cblock.i
+	g++ $(CXXFLAGS) -DMAIN_CBLOCK -c $< -o cblock.o
+	g++ $(CXXFLAGS) cblock.o -o $@
+#
+# see vl-run.sh for running veli_loadreg tests
+# many tests only need veli_loadreg-x86
+# only veli_loadreg -R needs VE (because it runs several
+# thousand optimized VE assembler test cases).
+WORKING?=6
+veli_loadreg: veli_loadreg.cpp
+	$(CXX) $(CXXFLAGS) -DWORKING=${WORKING} -o $@ $^ $(LDFLAGS) $(VEJIT_ROOT)/lib/libveli.a $(VEJIT_ROOT)/lib/libjit1.a
+	@echo "veli_loadreg runs VE Logic for Instructions tests on VE"
+veli_loadreg-x86: veli_loadreg.cpp
+	g++ $(CXXFLAGS) -Wall -DWORKING=${WORKING} $(LDFLAGS) -g -O2 -o $@ $^ -lveli-x86 -ljit1-x86
+	@echo "veli_loadreg-x86 will do VE logic tests on x86"
+.PHONY: dltest1.log
+dltest1.log:
+	# recreate and run dltest1 versions x86+gcc and VE+ncc
+	rm -f dltest1 dltest1-x86 tmp_*.c lib*_lucky.so
+	@# '13' has been hard-wired to produce incorrect std::string ccode
+	-{ $(MAKE) VERBOSE=1 dltest1-x86 \
+		&& /usr/bin/time ./dltest1-x86 13 \
+		&& echo YAY; } >& $@
+ifeq ($(CC),ncc)
+	@# '7' should return the correct value from the JIT function.
+	-{ echo ""; echo ""; \
+		$(MAKE) VERBOSE=1 dltest1 \
+		&& /usr/bin/time ve_exec ./dltest1 7 \
+		&& echo YAY; } &>> $@
+endif
+	# Attempting JIT-via-clang (compile and cross-compile),
+	# even though you might not have them installed...
+	-{ $(MAKE) VERBOSE=1       dltest1-clang \
+		&& /usr/bin/time ./dltest1-clang 123 \
+		&& echo YAY; } &>> $@
+	-{ $(MAKE) VERBOSE=1       dltest1-nclang \
+		&& /usr/bin/time ./dltest1-nclang -1 \
+		&& echo YAY; } &>> $@
+	-ls -l tmp_*.c lib*lucky.so
+	-ls -l tmp_*.c lib*lucky.so &>> $@
+
+#libgcc_lucky.so     this code and jit code runs on host
+#libncc_lucky.so     this code and jit code runs on VE
+#libclang_lucky.so   this code(can be gcc) and jit code from clang run on host
+#libnclang_lucky.so  this code(can be ncc) and jist code from clang -target ve-linux on VE
+dltest1: dltest1.cpp Makefile
+	$(CXX) $(CXXFLAGS) -o $@ -Wall -Werror $< 
+dltest1-x86: dltest1.cpp Makefile
+	g++ $(CXXFLAGS) -o $@ -Wall -Werror $< -ldl
+dltest1-clang: dltest1.cpp Makefile
+	g++ $(CXXFLAGS) -DJIT_CLANG -o $@ -Wall -Werror $< -ldl
+dltest1-nclang: dltest1.cpp Makefile
+	nc++ $(CXXFLAGS) -DJIT_NCLANG -o $@ -Wall -Werror $< 
 .PHONY: liblist force
 liblist:
-	@ls -l lib*.a
+	-@ls -l lib*.a lib*.so
+
+
+
+
+
+
+
+
+
+
+
 force: # force libs to be recompiled
 	rm -f libjit1*.a asmfmt*.o jitpage*.o jit_data*.o
 	rm -f libveli*.a prgiFoo.o wrpiFoo.o
@@ -80,7 +150,7 @@ force: # force libs to be recompiled
 VEJIT_SHARE:=cblock.cpp dltest1.cpp veli_loadreg.cpp
 vejit.tar.gz: jitpage.h jit_data.h \
 		throw.hpp asmfmt_fwd.hpp asmfmt.hpp codegenasm.hpp velogic.hpp \
-		jitpage.hpp jitpipe_fwd.hpp jitpipe.hpp cblock.hpp pstreams-1.0.1 \
+		jitpipe_fwd.hpp jitpipe.hpp cblock.hpp pstreams-1.0.1 \
 		libjit1.a libjit1-x86.a libveli.a libveli-x86.a \
 		${VEJIT_SHARE}
 	rm -rf vejit
@@ -95,18 +165,6 @@ vejit.tar.gz: jitpage.h jit_data.h \
 	cp -av ${VEJIT_SHARE} vejit/share/vejit/
 	cp -av Makefile.share vejit/share/vejit/Makefile
 	tar czf $@ vejit
-#
-# see vl-run.sh for running veli_loadreg tests
-# many tests only need veli_loadreg-x86
-# only veli_loadreg -R needs VE (because it runs several
-# thousand optimized VE assembler test cases).
-WORKING?=6
-veli_loadreg: veli_loadreg.cpp libveli.a libjit1.a
-	$(CXX) $(CXXFLAGS) -DWORKING=${WORKING} -g -O2 -o $@ $^
-	@echo "veli_loadreg runs VE Logic for Instructions tests on VE"
-	@echo "(veli_loadreg-x86 will do same VE logic tests on x86)"
-veli_loadreg-x86: veli_loadreg.cpp libveli-x86.a libjit1-x86.a
-	g++ $(CXXFLAGS) -Wall -DWORKING=${WORKING} -g -O2 -o $@ $^
 #
 # Aurora assembler.S: cpp->.asm, $(CC)->.o, nobjcopy->.bin, .bin-->.dump
 # Actually, jitpage.h (newer version of ve_util.h) will use 'bin.mk' makefile
@@ -210,10 +268,6 @@ jit_data-x86.o: jit_data.c jit_data.h
 	g++ ${CFLAGS} -O2 -c $< -o $@
 jitpage-x86.o: jitpage.c jitpage.h
 	g++ $(CXXFLAGS) -O2 -c $< -o $@
-cblock: cblock.cpp cblock.hpp
-	g++ -Wall -g2 -std=c++11 -DMAIN_CBLOCK -E $< -o cblock.i
-	g++ -Wall -g2 -std=c++11 -DMAIN_CBLOCK -c $< -o cblock.o
-	g++ -Wall -g2 cblock.o -o $@
 LIBVELI_SRC:=veliFoo.cpp wrpiFoo.cpp
 libveli.a:     $(patsubst %.cpp,%.o,    $(LIBVELI_SRC))
 	#$(AR) cq $@ $^
@@ -289,44 +343,6 @@ dltest0-x86: dltest0.c
 	g++ $(CFLAGS) -o $@ -Wall -Werror $< -ldl
 # next test show how to dynamically *compile* and load a dll given
 # a std::string containing 'C' code.
-.PHONY: dltest1.log
-dltest1.log:
-	# recreate and run dltest1 versions x86+gcc and VE+ncc
-	rm -f dltest1 dltest1-x86 tmp_*.c lib*_lucky.so
-	@# '13' has been hard-wired to produce incorrect std::string ccode
-	-{ $(MAKE) VERBOSE=1 dltest1-x86 \
-		&& /usr/bin/time ./dltest1-x86 13 \
-		&& echo YAY; } >& $@
-ifeq ($(CC),ncc)
-	@# '7' should return the correct value from the JIT function.
-	-{ echo ""; echo ""; \
-		$(MAKE) VERBOSE=1 dltest1 \
-		&& /usr/bin/time ve_exec ./dltest1 7 \
-		&& echo YAY; } &>> $@
-endif
-	# Attempting JIT-via-clang (compile and cross-compile),
-	# even though you might not have them installed...
-	-{ $(MAKE) VERBOSE=1       dltest1-clang \
-		&& /usr/bin/time ./dltest1-clang 123 \
-		&& echo YAY; } &>> $@
-	-{ $(MAKE) VERBOSE=1       dltest1-nclang \
-		&& /usr/bin/time ./dltest1-nclang -1 \
-		&& echo YAY; } &>> $@
-	-ls -l tmp_*.c lib*lucky*.so
-	-ls -l tmp_*.c lib*lucky*.so &>> $@
-
-#libgcc_lucky.so     this code and jit code runs on host
-#libncc_lucky.so     this code and jit code runs on VE
-#libclang_lucky.so   this code(can be gcc) and jit code from clang run on host
-#libnclang_lucky.so  this code(can be ncc) and jist code from clang -target ve-linux on VE
-dltest1: dltest1.cpp jitpipe.hpp Makefile
-	$(CXX) $(CXXFLAGS) -o $@ -Wall -Werror $< 
-dltest1-x86: dltest1.cpp jitpipe.hpp Makefile
-	g++ $(CXXFLAGS) -o $@ -Wall -Werror $< -ldl
-dltest1-clang: dltest1.cpp jitpipe.hpp Makefile
-	g++ $(CXXFLAGS) -DJIT_CLANG -o $@ -Wall -Werror $< -ldl
-dltest1-nclang: dltest1.cpp jitpipe.hpp Makefile
-	nc++ $(CXXFLAGS) -DJIT_NCLANG -o $@ -Wall -Werror $< 
 clean:
 	rm -f *.o *.i *.ii *.out *.gch
 	rm -f msk*.i msk*.S msk*.dis msk*.out
@@ -337,9 +353,10 @@ clean:
 	rm -f jitve_math.asm jitve_hello.asm jitve_hello.s jitve_hello.dis jitve*.dis \
 		jitpp_hello.asm
 realclean: clean
-	rm -f $(TARGETS)
+	rm -f $(TARGETS) dltest1 dltest1-x86 dltest1-clang dltest1-nclang veli_loadreg veli_loadreg-x86
+	rm -f libclang_lucky.so libgcc_lucky.so libncc_lucky.so libnclang_lucky.so
 	rm -f msk msk0 msk1 msk2 msk3 msk4 syscall_hello smir jitve0
 	rm -f bld.log asmfmt.log jitpp_hello.log mk*.log bld*.log
-	rm -f tmp_*.S *.bin
+	rm -f tmp_*.S *.bin *.log
 	rm -rf CMakeCache.txt CMakeFiles asmfmt asmfmt-x86 asmfmt.txt jitve_hello.s
 #
