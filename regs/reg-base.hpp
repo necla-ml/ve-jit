@@ -9,7 +9,7 @@
  */
 
 #include "bitfield.hpp"
-#include "throw.hpp"
+#include "../throw.hpp"
 #include <cstdint>
 #include <stdexcept>
 #include <functional>

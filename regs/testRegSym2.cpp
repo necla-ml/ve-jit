@@ -17,7 +17,7 @@
  */
 #include "regSymbol2.hpp"
 #include "spill2-impl.hpp"
-#include "throw.hpp"
+#include "../throw.hpp"
 
 #include "reg-aurora.hpp" // we need scalar registers for some real chipset
 

@@ -10,7 +10,7 @@
  */
 #include "exechash.hpp"
 #include "../asmfmt.hpp"
-#include "../regs/throw.hpp" // THROW(stuff to right of cout<<), adding fn and line number
+#include "../throw.hpp" // THROW(stuff to right of cout<<), adding fn and line number
 #include "../codegenasm.hpp"
 
 #include <functional>

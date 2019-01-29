@@ -1,6 +1,6 @@
 #ifndef CBLOCK_HPP
 #define CBLOCK_HPP
-#include "../regs/throw.hpp"
+#include "throw.hpp"
 /** \file
  * Arange statements (std::string) into blocks.
  *

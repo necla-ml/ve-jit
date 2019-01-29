@@ -4,7 +4,7 @@
 /** \file all-inline impls for \ref jitpipe_fwd.hpp */
 #include "jitpipe_fwd.hpp"
 
-#include "regs/throw.hpp"
+#include "throw.hpp"
 #include <iostream>
 #include <string>
 #include <fstream>

@@ -10,7 +10,7 @@
 #include <cassert>
 #include <type_traits>
 
-#include "regs/throw.hpp"
+#include "throw.hpp"
 #include <typeinfo>
 
 /// \group integer arithmetic helpers

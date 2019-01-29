@@ -4,7 +4,7 @@
 #else
 
 #include "velogic.hpp"
-#include "regs/throw.hpp"
+#include "throw.hpp"
 #include <cassert>
 
 /** wrpiFoo calls will claim to clobber %s0--7, %s40--49 */

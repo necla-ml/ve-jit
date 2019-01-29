@@ -3,8 +3,9 @@
 /** \file
  * injective SymId-->RegId map.
  */
-#include "throw.hpp"
+#include "../throw.hpp"
 #include "reg-base.hpp"
+#include "reg-aurora.hpp" // only for asmname? (really?)
 
 #include <unordered_map>
 #include <unordered_set>

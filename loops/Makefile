@@ -708,10 +708,6 @@ tf2-0.log: fuse2 Makefile tf2-3.log
 		) 2>&1 | tee $@
 cfuse: cfuse.cpp
 	g++ -Wall -std=c++11 -I.. -O3 $< -o $@ -ldl
-cblock: cblock.cpp cblock.hpp
-	g++ -Wall -g2 -std=c++11 -DMAIN_CBLOCK -E $< -o cblock.i
-	g++ -Wall -g2 -std=c++11 -DMAIN_CBLOCK -c $< -o cblock.o
-	g++ -Wall -g2 cblock.o -o $@
 %: %.cpp
 	g++ -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
 	g++ -Wall -std=c++11 -I.. -O3 $< -o $@

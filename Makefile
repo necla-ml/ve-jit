@@ -76,13 +76,19 @@ force: # force libs to be recompiled
 	$(MAKE) $(LIBJIT1_TARGETS)
 	$(MAKE) $(LIBVELI_TARGETS)
 
-vejit.tar.gz: asmfmt.hpp asmfmt_fwd.hpp jitpage.h libjit1.a libjit1-x86.a libveli.a libveli-x86.a
+vejit.tar.gz: jitpage.h jit_data.h \
+		throw.hpp asmfmt_fwd.hpp asmfmt.hpp codegenasm.hpp velogic.hpp \
+		jitpipe_fwd.hpp jitpipe.hpp cblock.hpp pstreams-1.0.1 \
+		libjit1.a libjit1-x86.a libveli.a libveli-x86.a
 	rm -rf vejit
 	mkdir vejit
 	mkdir vejit/include
 	mkdir vejit/bin
-	cp -av asmfmt*.hpp jitpage.h vejit/include/
-	cp -av libjit1.a vejit/bin/
+	mkdir -P vejit/share/vejit
+	cp -av $(filter %.hpp,$^) $(filter %.h,$^) vejit/include/
+	cp -av pstreams-1.0.1 vejit/include/
+	cp -av $(filter %.a,$^) vejit/bin/
+	cp -av cblock.cpp vejit/share/vejit/
 	tar czf $@ vejit
 #
 # see vl-run.sh for running veli_loadreg tests
@@ -199,7 +205,10 @@ jit_data-x86.o: jit_data.c jit_data.h
 	g++ ${CFLAGS} -O2 -c $< -o $@
 jitpage-x86.o: jitpage.c jitpage.h
 	g++ $(CXXFLAGS) -O2 -c $< -o $@
-
+cblock: cblock.cpp cblock.hpp
+	g++ -Wall -g2 -std=c++11 -DMAIN_CBLOCK -E $< -o cblock.i
+	g++ -Wall -g2 -std=c++11 -DMAIN_CBLOCK -c $< -o cblock.o
+	g++ -Wall -g2 cblock.o -o $@
 LIBVELI_SRC:=veliFoo.cpp wrpiFoo.cpp
 libveli.a:     $(patsubst %.cpp,%.o,    $(LIBVELI_SRC))
 	#$(AR) cq $@ $^
