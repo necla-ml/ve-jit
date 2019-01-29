@@ -76,19 +76,23 @@ force: # force libs to be recompiled
 	$(MAKE) $(LIBJIT1_TARGETS)
 	$(MAKE) $(LIBVELI_TARGETS)
 
+VEJIT_SHARE:=cblock.cpp dltest1.cpp veli_loadreg.cpp
 vejit.tar.gz: jitpage.h jit_data.h \
 		throw.hpp asmfmt_fwd.hpp asmfmt.hpp codegenasm.hpp velogic.hpp \
 		jitpipe_fwd.hpp jitpipe.hpp cblock.hpp pstreams-1.0.1 \
-		libjit1.a libjit1-x86.a libveli.a libveli-x86.a
+		libjit1.a libjit1-x86.a libveli.a libveli-x86.a \
+		${VEJIT_SHARE}
 	rm -rf vejit
 	mkdir vejit
 	mkdir vejit/include
 	mkdir vejit/bin
-	mkdir -P vejit/share/vejit
+	mkdir vejit/share
+	mkdir vejit/share/vejit
 	cp -av $(filter %.hpp,$^) $(filter %.h,$^) vejit/include/
 	cp -av pstreams-1.0.1 vejit/include/
 	cp -av $(filter %.a,$^) vejit/bin/
-	cp -av cblock.cpp vejit/share/vejit/
+	cp -av ${VEJIT_SHARE} vejit/share/vejit/
+	cp -av Makefile.share vejit/share/vejit/Makefile
 	tar czf $@ vejit
 #
 # see vl-run.sh for running veli_loadreg tests
