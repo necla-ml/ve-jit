@@ -31,6 +31,7 @@
 #include <map>
 #include <deque>
 #include <cassert>
+#include <sstream>
 
 #ifdef NDEBUG
 #define CBLOCK_DBG(V,N) do{}while(0)
@@ -57,6 +58,13 @@ struct CbmanipBase;
 struct IndentSpec;
 struct PostIndent;
 struct PreIndent;
+
+// jithex, jitdec are in code genasm.hpp, but want header-only ... XXX FIXME
+inline std::string asDec(std::size_t s){
+    std::ostringstream oss;
+    oss<<s;
+    return oss.str();
+}
 
 /// \group Cblock I/O helpers
 //@{
@@ -120,7 +128,10 @@ struct Cblock {
      * \throw if \c p is a path-string with '/' and \c p is not found.
      * see \c find(path) for a description of how path searches are done.*/
     Cblock& operator[](std::string p);
+    /** shift-left operator appends codeline \e as-is. */
     Cblock& operator<<(std::string codeline) { return append(codeline); }
+    /** prepends a newline, then adds codeline (same precedence as <<). */
+    Cblock& operator>>(std::string codeline) { return append("\n").append(codeline); }
     /** \c codeline append to \c _code (\c Cblock appends to \c _sub).
      * Mostly append as-is, \em except if last line of code has a ';' in it,
      * we add a newline (tweak for C-code readability). */
@@ -245,18 +256,19 @@ template<> Cblock& Endl<Cblock>(Cblock& cblock){
 }
 
 struct Cunit {
-    std::string name;
+    std::string name;       ///< maybe Cunit subtrees might be copied for unrolling ??
     Cblock root;
     int v; // verbosity
-    std::string indent;
+    std::string indent;                             ///< internal Cblock::write context
     //std::map<std::string, Cblock*> blk;
     Cunit(std::string name) : name(name), root(this,name), v(2), indent() {}
     ~Cunit() { root.clear(); }
     std::ostream& write(std::ostream& os) {return root.write(os);}  ///< write the program unit
     Cblock *find(std::string path);                 ///< absolute \c path down from \c root
     Cblock *find(std::string path, Cblock* from);   ///< search up \c from, then down from \c root
+    std::string str();                              ///< all code of root
     void dump(std::ostream& os);                    ///< dump the tree
-    std::string str();
+    std::string tree();                             ///< tree structure of root
     Cblock & operator[](std::string name) { return root[name]; }
 
 };
@@ -264,6 +276,11 @@ inline void Cunit::dump(std::ostream& os){
     root.dump(os);
 }
 inline std::string Cunit::str(){
+    std::ostringstream oss;
+    root.write(oss);
+    return oss.str();
+}
+inline std::string Cunit::tree(){
     std::ostringstream oss;
     root.dump(oss);
     return oss.str();
@@ -522,7 +539,7 @@ inline Cblock& mk_scope(Cunit& cunit, std::string name, std::string beg, std::st
     Cblock& block = *(new Cblock(&cunit,name));
     block["beg"]<<beg<<" { // "<<name<<PostIndent(+2);
     block["body"]; // empty
-    block["end"]<<"}"<<PreIndent(-2);
+    block["end"]<<"}//"<<name<<PreIndent(-2);
     return block;
 }
 #if 0 // this is just an instance of mk_scope
@@ -698,7 +715,8 @@ inline Cblock* Cblock::find(std::string p) const {
     return nullptr;
 }
 
-/** add \prefix indent to all non-whitespace lines, \c sep is a set of line separators. */
+/** add \prefix indent to all non-whitespace lines, \c sep is a set of line separators.
+ * Exception: cpp '#'-lines begin in first col (historical 'C' requirement) */
 inline std::ostream& prefix_lines(std::ostream& os, std::string code,
         std::string prefix, std::string sep=std::string("\n")){
     if( prefix.empty() ){
@@ -708,8 +726,10 @@ inline std::ostream& prefix_lines(std::ostream& os, std::string code,
         while ((nLocEnd = code.find_first_of(sep, nLoc)) != std::string::npos) {
             //std::cout<<" line["<<nLoc<<"..."<<nLocEnd<<"] = <"<<code.substr(nLoc,nLocEnd)<<">\n";
             // line is nLoc..nLocEnd, including the last sep char
-            if( code.find_first_not_of(" \r\n\t",nLoc) < nLocEnd ){ // if not a blank line
-                os << prefix << code.substr(nLoc,nLocEnd-nLoc) << "\n";
+            auto const first_nb = code.find_first_not_of(" \r\n\t",nLoc); // first non blank
+            if( first_nb < nLocEnd ){                     // if not a blank line
+                if( code[first_nb] != '#' ) os << prefix; // never indent cpp directives
+                os << code.substr(nLoc,nLocEnd-nLoc) << "\n"; // code string + newline)
             }
             nLoc = nLocEnd+1;
         }
@@ -717,8 +737,11 @@ inline std::ostream& prefix_lines(std::ostream& os, std::string code,
         if(nLoc < code.size()){
             //std::cout<<" line["<<nLoc<<"...end] = <"<<code.substr(nLoc)<<">\n";
             // line is nLoc..nLocEnd, including the last sep char
-            if( code.find_first_not_of(" \r\n\t",nLoc) < code.size() ){ // if not a blank line
-                os << prefix << code.substr(nLoc); //<< "\n";
+            auto const first_nb = code.find_first_not_of(" \r\n\t",nLoc);
+            if( first_nb < nLocEnd ){
+                if( code[first_nb] != '#' ) os << prefix;
+                os << code.substr(nLoc,nLocEnd-nLoc);
+                //os << "\n"; // NO newline
             }
         }
     }
@@ -738,13 +761,14 @@ inline std::ostream& Cblock::dump(std::ostream& os, int const ind/*=0*/)
         <<" sub["<<_sub.size()<<"]"
         <<(_postmanip? "postmanip": "")
         ;
-    for(auto s: _sub) s->dump(os,ind+2);
+    for(auto s: _sub) s->dump(os,ind+1); // it's easy to generate **very** deep trees
     return os;
 }
 inline std::ostream& Cblock::write(std::ostream& os)
 {
     std::string& in = _root->indent;
     if(canWrite()){
+        // very-verbose mode blocks commented with fullpath
         if(_root->v >= 2 || _code.size()==0){
             if(_root->v >= 2 && _code.size()) os<<in<<"//\n";
             if(_root->v >= 1){
