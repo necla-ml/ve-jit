@@ -175,10 +175,15 @@ struct Cblock {
     }
 
     int nWrites() const {return _nwrites;}
+    /** Note: write has a strange behaviour of emptying the string.
+     * <B>Subject to change</B> \deprecated */
+    std::ostream& write(std::ostream& os, bool const chkWrite=true);
+    /** Maybe for unrolling we have a max number of writes ? \deprecated */
     bool canWrite() { return _nwrites>=0 && _nwrites<_maxwrites; }
-    std::ostream& write(std::ostream& os);
     /** depth-first tree dump */
     std::ostream& dump(std::ostream& os, int const ind=0);
+    /** return string for subtree, unindented, no effect on \c write */
+    std::string str();
 
     Cblock& setType(std::string type) {_type=type; return *this;}
     Cblock& setName(std::string type); // {this->type=type; return *this;} and update root!
@@ -276,13 +281,12 @@ inline void Cunit::dump(std::ostream& os){
     root.dump(os);
 }
 inline std::string Cunit::str(){
-    std::ostringstream oss;
-    root.write(oss);
-    return oss.str();
+    return root.str();
 }
 inline std::string Cunit::tree(){
     std::ostringstream oss;
     root.dump(oss);
+    oss<<std::endl;
     return oss.str();
 }
 inline Cunit* CbmanipBase::getRoot() const {return cb->_root;}
@@ -764,35 +768,46 @@ inline std::ostream& Cblock::dump(std::ostream& os, int const ind/*=0*/)
     for(auto s: _sub) s->dump(os,ind+1); // it's easy to generate **very** deep trees
     return os;
 }
-inline std::ostream& Cblock::write(std::ostream& os)
+inline std::ostream& Cblock::write(std::ostream& os, bool chkWrite)
 {
-    std::string& in = _root->indent;
-    if(canWrite()){
-        // very-verbose mode blocks commented with fullpath
-        if(_root->v >= 2 || _code.size()==0){
-            if(_root->v >= 2 && _code.size()) os<<in<<"//\n";
-            if(_root->v >= 1){
-                os<<in<<"// Cblock : "<<this->fullpath()<<" : "<<_type;
-                if(_code.empty()) os<<" (empty)";
-                os<<"\n";
-            }
+    if(chkWrite && !canWrite()){
+        if(_root->v >= 1){
+            std::cout<<" SKIP-WRITE! "; std::cout.flush();
         }
-        if(_premanip) os << *_premanip;
-        if(!_code.empty()){
-            //std::cout<<" prefix_lines with code=<"<<_code<<">\n";
-            prefix_lines(os,_code,in) << "\n";
-        }
-        if(_root->v >= 3 ) os<<"// _sub.size() = "<<_sub.size()<<"\n";
-        for(auto s: _sub){
-            if(_root->v >= 3 ) os<<in<<"// ........ sub "<<_parent->_name<<"/"<<_name<<"/"<<s->_name<<std::endl;
-            s->write(os);
-        }
-        if(_postmanip) os << *_postmanip;
-        // if( _next ) _next->write(os);
-        ++_nwrites;
+        return os;
     }
+    std::string& in = _root->indent;
+    // very-verbose mode blocks commented with fullpath
+    if(_root->v >= 2 || _code.size()==0){
+        if(_root->v >= 2 && _code.size()) os<<in<<"//\n";
+        if(_root->v >= 1){
+            os<<in<<"// Cblock : "<<this->fullpath()<<" : "<<_type;
+            if(_code.empty()) os<<" (empty)";
+            os<<"\n";
+        }
+    }
+    if(_premanip) os << *_premanip;
+    if(!_code.empty()){
+        //std::cout<<" prefix_lines with code=<"<<_code<<">\n";
+        prefix_lines(os,_code,in) << "\n";
+    }
+    if(_root->v >= 3 ) os<<"// _sub.size() = "<<_sub.size()<<"\n";
+    for(auto s: _sub){
+        if(_root->v >= 3 ) os<<in<<"// ........ sub "<<_parent->_name<<"/"<<_name<<"/"<<s->_name<<std::endl;
+        s->write(os,chkWrite);
+    }
+    if(_postmanip) os << *_postmanip;
+    // if( _next ) _next->write(os);
+    if(chkWrite) ++_nwrites;
     return os;
 }
+inline std::string Cblock::str(){
+    std::ostringstream oss;
+    _root->indent.clear();
+    this->write( oss, false/*chkWrite*/ );
+    return oss.str();
+}
+
 }//cunit::
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
 #endif // CBLOCK_HPP

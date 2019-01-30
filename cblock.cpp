@@ -516,6 +516,17 @@ string cjitConvolutionForward00( int const verbosity=0 /*struct param const* con
 
 
     pr["end"]>>"// vim: ts=4 sw=4 et cindent cino=^=l0,\\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\\:,0#,!^F,o,O,e,0=break";
+    // debug: 'str()' should bypass the write-counting thing and always work
+    auto const sz0 = pr.str().size();
+    cout<<" pr.str().size() = "<<sz0;
+    assert( sz0 > 0 );
+    auto const sz1 = pr.str().size();
+    cout<<" pr.str().size() = "<<sz1;
+    assert( sz1 == sz0 );
+    // For demo program, dump the full tree...
+    cout<<string(80,'-')<< pr.tree() <<string(80,'-')<<endl;
+    cout<<string(80,'-')<< pr.str() <<string(80,'-')<<endl;
+
     pr.v = verbosity;
     return pr.str();
 }
@@ -674,6 +685,7 @@ int main(int,char**){
     test_cblock_macros();
     string code = cjitConvolutionForward00(); // optional arg: verbosity=0
     cout<<string(80,'-')<< code <<string(80,'-')<<endl;
+    assert(code.size()>0);
     cout<<"\nGoodbye"<<endl; cout.flush();
 }
 #endif // MAIN_CBLOCK
