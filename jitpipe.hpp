@@ -99,6 +99,7 @@ inline constexpr char const* DllPipe::pathSep() {
     return "/";
 #endif
 }
+// TODO: want 'C' version
 inline std::string DllPipe::getPath() {
     long const sz = pathconf(".",_PC_PATH_MAX); // assume we are interested cwd
     if(sz<=0) THROW("Invalid max path length?");

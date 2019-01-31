@@ -153,6 +153,10 @@ struct BLOBDISpipe : public PstreamPipe {
  *
  * \throw on any error, and for compilation errors append all info to end of tmp file,
  *        which is not removed.
+ * 
+ * TODO: want a 'C' version fo this, extern "C" { dllPipe_nclang(basename, ccode); }
+ *       to create clanc 'C' libbasename.so JIT.
+ *       [and maybe some other compiler-specific ones: gcc|ncc|clang? C|C++?]
  */
 class DllPipe {
   public:
