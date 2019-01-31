@@ -1,4 +1,5 @@
 VEJIT_ROOT:=.
+SHELL:=/bin/bash
 ifneq ($(CC),ncc)
 .PRECIOUS: jitpp_loadreg
 #
@@ -290,28 +291,20 @@ dltest0-x86: dltest0.c
 # next test show how to dynamically *compile* and load a dll given
 # a std::string containing 'C' code.
 .PHONY: dltest1.log
+RUNCMD:=	
 dltest1.log:
 	# recreate and run dltest1 versions x86+gcc and VE+ncc
 	rm -f dltest1 dltest1-x86 tmp_*.c lib*_lucky.so
 	@# '13' has been hard-wired to produce incorrect std::string ccode
-	-{ $(MAKE) VERBOSE=1 dltest1-x86 \
-		&& /usr/bin/time ./dltest1-x86 13 \
-		&& echo YAY; } >& $@
+	-{ $(MAKE) VERBOSE=1 dltest1-x86 && $(RUNCMD) ./dltest1-x86 13 && echo YAY; } >& $@ || echo "Ohoh, continuing anyway"
 ifeq ($(CC),ncc)
 	@# '7' should return the correct value from the JIT function.
-	-{ echo ""; echo ""; \
-		$(MAKE) VERBOSE=1 dltest1 \
-		&& /usr/bin/time ve_exec ./dltest1 7 \
-		&& echo YAY; } &>> $@
+	-{ echo ""; echo ""; $(MAKE) VERBOSE=1 dltest1 && $(RUNCMD) ve_exec ./dltest1 7 && echo YAY; } &>> $@ || echo "Ohoh, continuing anyway"
 endif
 	# Attempting JIT-via-clang (compile and cross-compile),
 	# even though you might not have them installed...
-	-{ $(MAKE) VERBOSE=1       dltest1-clang \
-		&& /usr/bin/time ./dltest1-clang 123 \
-		&& echo YAY; } &>> $@
-	-{ $(MAKE) VERBOSE=1       dltest1-nclang \
-		&& /usr/bin/time ./dltest1-nclang -1 \
-		&& echo YAY; } &>> $@
+	-{ $(MAKE) VERBOSE=1       dltest1-clang && $(RUNCMD) ./dltest1-clang 123 && echo YAY; } &>> $@ || echo "Ohoh, continuing anyway"
+	-{ $(MAKE) VERBOSE=1       dltest1-nclang && $(RUNCMD) ./dltest1-nclang -1 && echo YAY; } &>> $@ || echo "Ohoh, continuing anyway"
 	-ls -l tmp_*.c lib*lucky*.so
 	-ls -l tmp_*.c lib*lucky*.so &>> $@
 
@@ -326,7 +319,7 @@ dltest1-x86: dltest1.cpp jitpipe.hpp Makefile
 dltest1-clang: dltest1.cpp jitpipe.hpp Makefile
 	g++ $(CXXFLAGS) -DJIT_CLANG -o $@ -Wall -Werror $< -ldl
 dltest1-nclang: dltest1.cpp jitpipe.hpp Makefile
-	nc++ $(CXXFLAGS) -DJIT_NCLANG -o $@ -Wall -Werror $< 
+	g++ $(CXXFLAGS) -DJIT_NCLANG -o $@ -Wall -Werror $< -ldl
 clean:
 	rm -f *.o *.i *.ii *.out *.gch
 	rm -f msk*.i msk*.S msk*.dis msk*.out

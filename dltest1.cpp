@@ -99,9 +99,9 @@ int main(int argc,char**argv){
 #elif defined(JIT_NCLANG)
     jithow = DllPipe::CC::nclang;
     //std::cout<<" !!nclang!!override="<<(int)jithow<<std::endl;
-#if !defined(__ve)
-#error "Wrong compiler! -DJIT_NCLANG test wants this test to run on VE"
-#endif
+//#if !defined(__ve)
+//#error "Wrong compiler! -DJIT_NCLANG test wants this test to run on VE"
+//#endif
 
 #elif defined(JIT_GCC) // force JIT via gcc (only native .so)
     //std::cout<<" !!gcc!!override "<<std::endl;

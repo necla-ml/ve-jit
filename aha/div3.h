@@ -59,7 +59,9 @@ NSHIM = number of shift immediate values
 #define NBSM 63                 // Shift mask.  Use 63 for mod 64
                                 // shifts, or 31 for mod 32.
 
-int trialx[] = {0, 1, 2, 3, 4, 7, 8, 9, 31,32,33, 63,64,65, 127,128,129}; //, 1023,1024,1025};
+int trialx[] = {239, 39, 88,
+    0, 1, 2, 3, 4, 7, 8, 9, 10, 20,30,40,50,60,70,80,90,100,110,120,125,126,127
+};
 #if NARGS == 1
 int trialy[] = {0, 1, 2, 3, 4, 7, 8, 9, 31,32,33, 63,64,65, 127,128,129}; //, 1023,1024,1025};
 #endif
