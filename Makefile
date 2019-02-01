@@ -53,9 +53,11 @@ CC:=ncc-1.2.4
 CXX:=nc++-1.2.4
 CC:=ncc-1.5.2
 CXX:=nc++-1.5.2
+CC:=ncc-1.6.0
+CXX:=nc++-1.6.0
 
-CC:=ncc
-CXX:=nc++
+#CC:=ncc
+#CXX:=nc++
 CFLAGS:=-O2 -g2
 CXXFLAGS:=$(CFLAGS) -std=c++11
 VE_EXEC:=ve_exec
