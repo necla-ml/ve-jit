@@ -1,3 +1,10 @@
+# Aurora C: %-ncc.c via ncc,
+#       and %-nve.c via clang -target=ve
+#       and %-nvk.c via clang (no vector on stack option
+# All with CFLAGS/CXXFLAGS
+%-ve.o: %-ncc.c
+%-ve.o: %-nve.c
+%-ve.o: %-nvk.c
 # Aurora assembler.S: cpp->.asm, ncc->.o, nobjcopy->.bin, .bin-->.dump
 ifeq ($(VERBOSE),0)
 %.bin: %.S

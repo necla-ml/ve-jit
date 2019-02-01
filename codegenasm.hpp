@@ -60,7 +60,9 @@ inline bool constexpr positivePow2(uint64_t v) {
     return ((v & (v-1)) == 0);
 }
 
-/// \group using vejit_util.h
+/// \group C++ jit utilities
+/// Do we even want C versions?  Maybe C frontends should
+/// just call into the C++ code that can use these.
 //@{
 /** A portable count-ones routine */
     template<typename T>
@@ -338,4 +340,4 @@ struct CodeGenAsm
 inline CodeGenAsm::TmpReg::~TmpReg() {
     owner->free(tmp);
 }
-// vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
+// vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break 

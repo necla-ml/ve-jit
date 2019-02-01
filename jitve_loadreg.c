@@ -27,7 +27,7 @@
  *     (ex. load some big constant via mul IMM,K or other arithmetic ops,
  *      but such constants are likely pretty infrequent.)
  */
-#include "jitve_util.h"
+#include "jitpage.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -177,12 +177,12 @@ void jit_parm_opt2( unsigned long const parm, char * const jit_parm, size_t cons
 }
 /** call ```uint64_t loadreg_opt() [[abi=jit]]```, returning a constant value in %s0.
  * - jit code for loadreg_opt is in \c page
- * - execution begins at \c page->addr
+ * - execution begins at \c page->mem
  * - \c page code may only clobber \c %s0 and \c %s1
  * - VE inline assembly ==> probably need VE ncc compiler
  * - please use plain 'C' for this [and other] jit abi wrappers
  * \return 0 or 1 error count (returned %s0 must equal \c expect) */
-int call_loadreg( Jitpage *page, uint64_t const expect){
+int call_loadreg( JitPage *page, uint64_t const expect){
     int nerr = 0;
     uint64_t cval;
     //
@@ -195,7 +195,7 @@ int call_loadreg( Jitpage *page, uint64_t const expect){
             "\tbsic %lr,(,%s12)\n"
             "\tor %[cval], 0,%s1\n" /* retrieve kernel compute results */
             :[cval]"=r"(cval)
-            :[page]"r"(page->addr)
+            :[page]"r"(page->mem)
             :"%s0","%s1" "%s12"
        );
     // Check for errors in our kernel outputs:
@@ -277,7 +277,7 @@ void test_kernel_loadreg(char const* const cmd, unsigned long const parm, int co
     printf(" test_kernel_math(%lx) --> JIT code %s.S:\n%s",parm,kernel_name,kernel_math); fflush(stdout);
 
     // create .bin file
-    asm2bin(kernel_name, kernel_math);  // creates .S and .bin file
+    asm2bin(kernel_name, kernel_math, 2/*verbose*/);  // creates .S and .bin file
     // show it
     char line[80];
     snprintf(line,80,"nobjdump -b binary -mve -D %s.bin\0", kernel_name);
@@ -285,21 +285,24 @@ void test_kernel_loadreg(char const* const cmd, unsigned long const parm, int co
 
     // load the blob into an executable code page
     char const* basename = &kernel_name[0];
-    Jitpage page = bin2jitpage( basename );
-
+    JitPage jp;
     int nerr=0;
-    if(page.addr==NULL){
-        printf("Oops trying to get the executable code page!\n");
+    if(bin2jitpage( basename, jp, 2/*verbose*/ ) == NULL){
         ++nerr;
     }else{
-        // Execute the blob, using inline asm to follow the register-call
-        // convention adopted by this kernel. Use a wide range of inputs
-        // to the add_sub kernel.
-        unsigned long arg = 0;
-        nerr += call_addsub( &page, arg, parm );
-        if (nerr==0){
-            for(arg=1U; arg>0UL; arg<<=4){
-                nerr += call_addsub(&page, arg, parm );
+        if(page.mem==NULL){
+            printf("Oops trying to get the executable code page!\n");
+            ++nerr;
+        }else{
+            // Execute the blob, using inline asm to follow the register-call
+            // convention adopted by this kernel. Use a wide range of inputs
+            // to the add_sub kernel.
+            unsigned long arg = 0;
+            nerr += call_addsub( &page, arg, parm );
+            if (nerr==0){
+                for(arg=1U; arg>0UL; arg<<=4){
+                    nerr += call_addsub(&page, arg, parm );
+                }
             }
         }
     }
@@ -308,8 +311,8 @@ void test_kernel_loadreg(char const* const cmd, unsigned long const parm, int co
     if(nerr){ // provide a grep-able block of output
         printf(">>>>>>>> error:\n%s\n",kernel_math);
     }
+    jitpage_free(&jp);
     assert(nerr == 0);
-    jitpage_free(&page);
 }
 
 main()

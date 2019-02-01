@@ -4,7 +4,11 @@
  * C helpers for jit pages and assembling .S to .bin .
  *
  * While \ref asmfmt.hpp has some C++ stuff,
- * someimes you may want to create JIT code via C functions. */
+ * someimes you may want to create JIT code via C functions.
+ *
+ * Some functions are specific to VE assembler code (nas utils, .bin files).
+ * Others might have utils for VE+intrinsics 'C' code.
+ */
 
 #ifdef JITVVE_UTIL_H
 #error "Please do not mix up old jitve_util.h API with newer jitpage.h API"
@@ -12,8 +16,9 @@
 
 #include <stdint.h> // uint64_t
 #include <stddef.h> // size_t
-#ifdef __cplusplus__
+#ifdef __cplusplus
 extern "C" {
+//#warning "Good, jitpage.h is extern 'C' for C++ compile"
 #endif
     struct JitPage_s {
         void* mem;  ///< bin2jitpage set this non-NULL with read/write/exec permission
@@ -38,7 +43,7 @@ extern "C" {
      * basename.bin.
      * \return nonzero if error.
      */
-    int asm2bin(char const* basename, char const* cpp_asm_code);
+    int asm2bin(char const* basename, char const* const cpp_asm_code, int const verbose);
 
     /** Read basename.bin file into an executable code page.
      * \note basename should NOT have the .bin suffix.
@@ -58,7 +63,7 @@ extern "C" {
     /** munmap the exectuable code page.
      * - \c verbosity as per \c jitpage->verbosity:
      *   -  never(-1), print errors(0), warnings(1), debug(>=2).
-     * - \ret status nonzero on error
+     * \return status nonzero on error
      *   - (NULL input values are not an error, dup free ok)
      */
     int jitpage_free(JitPage* jitpage);
@@ -79,8 +84,8 @@ extern "C" {
      * string buffer \c mconst bounds \b unchecked !
      * \pre \c mconst must be at least 6 chars long (5+terminal nul)
      */
-    int strMconst(char *mconst,uint64_t const parm);
-#ifdef __cplusplus__
+    int strMconst(char *mconst, uint64_t const parm);
+#ifdef __cplusplus
 } // extern "C"
 #endif
 

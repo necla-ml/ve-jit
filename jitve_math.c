@@ -43,6 +43,10 @@
 #define LAB(s...) STR0(s\n)
 #define COMM(s...) "\t# " #s "\n"
 #define TTR(s...) "\t" #s "\n"
+
+/** This test creates a \b lot of files */
+static char* tmpdir="tmp/";
+
 void jit_parm_opt1( unsigned long parm, char *jit_parm, size_t const jsz ){
     printf("optimized JIT kernel to load constant value %lu\n",parm); fflush(stdout);
     {
@@ -271,24 +275,33 @@ void test_kernel_math(char const* const cmd, unsigned long const parm, int const
     //
     // uniquely name the kernel, in case we wanted several variants
     //                           and to later inspect each kernel
+    system("mkdir tmp") || printf(" (tmp/ may already exist, good)\n");
+    if( tmpdir[0] != '\0' ){
+        char mkdir_cmd[80];
+        snprintf(mkdir_cmd,80,"mkdir %s%c",tmpdir,'\0');
+        system(mkdir_cmd) || printf(" (%s tmp directory may already exist, good!)\n",tmpdir);
+    }
+
     char kernel_name[80];
     if( parm < 1000000 )
-        snprintf(kernel_name,80,"tmp_kernel_addsub_%lu_opt%d%c",parm,opt_level,'\0');
+        snprintf(kernel_name,80,"%stmp_kernel_addsub_%lu_opt%d%c",tmpdir,parm,opt_level,'\0');
     else
-        snprintf(kernel_name,80,"tmp_kernel_addsub_0x%lx_opt%d%c",parm,opt_level,'\0');
+        snprintf(kernel_name,80,"%stmp_kernel_addsub_0x%lx_opt%d%c",tmpdir,parm,opt_level,'\0');
     printf(" test_kernel_math(%lx) --> JIT code %s.S:\n%s",parm,kernel_name,kernel_math); fflush(stdout);
 
     // create .bin file
-    asm2bin(kernel_name, kernel_math);  // creates .S and .bin file
+    asm2bin(kernel_name, kernel_math, 2/*verbose*/);  // creates .S and .bin file
+    printf(" back from asm2bin(\"%s\",kernel_math)\n",kernel_name);
     // show it
     char line[80];
     snprintf(line,80,"nobjdump -b binary -mve -D %s.bin%c", kernel_name,'\0');
     if(system(line)) printf(" Possible issues with nobjdump [ignored]\n");
 
     // load the blob into an executable code page
+    printf(" calling bin2jitpage(\"%s\", &page, verbosity)\n",kernel_name);
     char const* basename = &kernel_name[0];
     JitPage page;
-    bin2jitpage( basename, &page, 0/*verbose*/ );
+    bin2jitpage( basename, &page, 10/*verbose*/ );
 
     int nerr=0;
     if(page.mem==NULL){
@@ -325,12 +338,13 @@ int main()
     printf(" I think that negat is %ld\n", (signed long)negat);
     // DOIT supplies the actual function call as a string to the
     // function being called (as the first function argument)
-#define DOIT(function,...) do{ \
-    printf("Function, Args: %s\n", #function ", " #__VA_ARGS__); \
-    function( #function "(char*," #__VA_ARGS__ ")", \
-              __VA_ARGS__ ); \
-}while(0)
     for(int opt_level=0; opt_level<3; ++opt_level){
+#define DOIT(function,...) do \
+        { \
+            printf("Function, Args: %s\n", #function ", " #__VA_ARGS__); \
+            function( #function "(char*," #__VA_ARGS__ ")", \
+                    __VA_ARGS__ ); \
+        }while(0)
         DOIT(test_kernel_math,0U,opt_level);
         DOIT(test_kernel_math,1U,opt_level);
         DOIT(test_kernel_math,57,opt_level);
@@ -353,10 +367,18 @@ int main()
         DOIT(test_kernel_math,negat, opt_level);
         printf("-(17UL)\n");
         DOIT(test_kernel_math,-(17UL),opt_level);  // -13UL is really -60  (mistaken hex?)
-    }
 #undef DOIT
-    if(system("ls -l tmp_kernel_addsub_*.S")) printf(" Failed to create .S file!\n");
-    if(system("ls -l tmp_kernel_addsub_*.bin")) printf(" Failed to create .bin file!\n");
+    }
+    {
+        char ls_cmd[80];
+        snprintf(ls_cmd,80,"ls -l %stmp_kernel_addsub_*.S%c",tmpdir,'\0');
+        int const x = system(ls_cmd);  printf(" ls returned %d\n",x);
+    }
+    {
+        char ls_cmd[80];
+        snprintf(ls_cmd,80,"ls -l %stmp_kernel_addsub_*.bin%c",tmpdir,'\0');
+        int const x = system(ls_cmd);  printf(" ls returned %d\n",x);
+    }
     printf("\n");
 }
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break

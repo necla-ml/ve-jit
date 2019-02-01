@@ -175,15 +175,15 @@ jitve0: jitve0.c bin.mk
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
 jitve_util.o: jitve_util.c jitve_util.h
 	$(CC) -O2 -c $< -o $@
-test_strMconst: test_strMconst.c jitve_util.o
+test_strMconst: test_strMconst.c jitpage.o
 	$(CC) $(CFLAGS) -O2 $^ -o $@
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
-jitve_hello: jitve_hello.c jitve_util.o
+jitve_hello: jitve_hello.c jitpage.o
 	$(CC) $(CFLAGS) -O2 -E -dD $< >& $(patsubst %.c,%.i,$<)
 	$(CC) $(CFLAGS) -O2 $^ -o $@
 	$(CC) $(CFLAGS) -Wa,-adhln -c $< >& $(patsubst %.c,%.asm,$<)
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
-jitve_math: jitve_math.c jitve_util.o
+jitve_math: jitve_math.c jitpage.o
 	$(CC) $(CFLAGS) -O2 -E -dD $< >& $(patsubst %.c,%.i,$<)
 	$(CC) $(CFLAGS) -O2 $^ -o $@
 	$(CC) $(CFLAGS) -Wa,-adhln -c $< >& $(patsubst %.c,%.asm,$<)
@@ -202,7 +202,7 @@ asmfmt.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
 jit_data.o: jit_data.c jit_data.h
 	$(CC) ${CFLAGS} -O2 -c $< -o $@
 jitpage.o: jitpage.c jitpage.h
-	$(CXX) $(CXXFLAGS) -O2 -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 libjit1-x86.a: asmfmt-x86.o jitpage-x86.o jit_data-x86.o
 	ar cq $@ $^
 asmfmt-x86.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp

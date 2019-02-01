@@ -2,9 +2,13 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>  // isprint
 #include <unistd.h>
 #include <sys/mman.h>
 #include <errno.h>
+#include <assert.h>
+#include <unistd.h>   // _SC_PAGE_SIZE
+#include <stdlib.h> // system
 
 #if 0
 /** file-local verbosity, modified w/ \c jitpage_verbose.
@@ -18,41 +22,45 @@ void jitpage_verbose(int const verbose){
 }
 #endif
 
-#ifdef __cplusplus__
+#ifdef __cplusplus
 extern "C" {
 #endif
 
-void asm2bin(char const* basename, char const* cpp_asm_code){
+int asm2bin(char const* basename, char const* const cpp_asm_code, int const v/*erbose*/){
     assert(strlen(basename)<80);
     char file_S[100];
-    snprintf(&file_S[0],100,"%s.S\0",basename);
-    printf("creating .S file %s\n",basename); fflush(stdout);
+    snprintf(&file_S[0],100,"%s.S%c",basename,'\0');
+    if(v){printf("creating .S file %s\n",basename); fflush(stdout);}
     {
         FILE* f_S = fopen(&file_S[0], "w");
-        fputs(cpp_asm_code, f_S);
-        fclose(f_S);
+        if(f_S==NULL) goto errors;
+        if(fputs(cpp_asm_code, f_S)<0) goto errors;
+        if(fclose(f_S)) goto errors;
     }
-    printf("created  .S file %s\n",basename); fflush(stdout);
+    if(v>1){printf("created  .S file %s\n",basename); fflush(stdout);}
     {
         char mk_cmd[100];
-        //snprintf(&mk_cmd[0],100,"VERBOSE=0 make -f bin.mk %s.bin\0",basename);
-        snprintf(&mk_cmd[0],100,"make -f bin.mk %s.bin\0",basename);
-        printf("cmd: %s\n",mk_cmd); fflush(stdout);
-        system(mk_cmd);
+        //snprintf(&mk_cmd[0],100,"VERBOSE=0 make -f bin.mk %s.bin%c",basename,'\0');
+        if(snprintf(&mk_cmd[0],100,"make -f bin.mk %s.bin%c",basename,'\0')<=0) goto errors;
+        if(v){printf("cmd: %s\n",mk_cmd); fflush(stdout);}
+        if(system(mk_cmd)!=0) goto errors;
         sleep(1);
         fflush(stdout);
         fflush(stderr);
-        snprintf(&mk_cmd[0],100,"ls -ld %s.*",basename);
-        system(mk_cmd);
+        if(snprintf(&mk_cmd[0],100,"ls -ld %s.*",basename)<=0) goto errors;
+        if(system(mk_cmd)!=0) goto errors;
         sleep(1);
         fflush(stdout);
         fflush(stderr);
     }
-    printf("asm2bin(\"%s\",code): DONE\n",basename); fflush(stdout);
+    if(v>1){printf("asm2bin(\"%s\",code): DONE\n",basename); fflush(stdout);}
+    return 0;
+errors:
+    return 1;
 }
 char* bin2jitpage(char const* basename, JitPage *jitpage, int const v){
     int ok=1;
-    if(basename == NULL || strlen(basename)>=40){
+    if(basename == NULL || strlen(basename)>=70){
         if(v>=-1){ printf("bin2jitpage missing or too-long basename\n"); fflush(stdout); }
         ok = 0;
     }
@@ -66,11 +74,12 @@ char* bin2jitpage(char const* basename, JitPage *jitpage, int const v){
     FILE* f_bin = NULL;
     if(ok){
         if(v>=2){ printf(" bin file VE machine code: %s.bin\n", basename); fflush(stdout); }
-        snprintf(&file_bin[0],50,"%s.bin",basename); file_bin[50-1]='\0'/*paranoia*/;
+        snprintf(&file_bin[0],50,"%s.bin",basename);
+        file_bin[50-1]='\0'/*paranoia*/;
         if(v>=2){ printf("opening %s\n",file_bin); fflush(stdout); }
         f_bin = fopen(file_bin,"rb");
         if( f_bin==NULL ){
-            if(v>=0){ printf(" bin2page(\"%s\",page): Missing file %s\n",basename,file_bin); }
+            if(v>=0){ printf(" bin2jitpage(\"%s\",page): Missing file %s\n",basename,file_bin); }
             ok = 0;
         }
     }
@@ -79,7 +88,7 @@ char* bin2jitpage(char const* basename, JitPage *jitpage, int const v){
         long const fsize = ftell(f_bin);
         if(v>=2){ printf(" %s has %ld bytes\n",file_bin,fsize); fflush(stdout); }
         if( fsize==0 ){
-            if(v>=0){ printf(" bin2page(\"%s\",page): %s bad file size %ld\n",basename,file_bin,fsize); }
+            if(v>=0){ printf(" bin2jitpage(\"%s\",page): %s bad file size %ld\n",basename,file_bin,fsize); }
             ok = 0;
         }else{
             // VE note: page_size seems to be 64M (cf. 4k typical of x86),
@@ -118,9 +127,9 @@ char* bin2jitpage(char const* basename, JitPage *jitpage, int const v){
             if(v>=2){ printf("reading %s\n",file_bin); fflush(stdout); }
             fseek(f_bin,0,SEEK_SET); // rewind(f_bin)
             size_t const nread = fread((void*)page, (size_t)sizeof(char), (size_t)fsize, f_bin);
-            if(v>=2){ printf(" bin2page read %lu bytes from %s\n",nread,file_bin); fflush(stdout); }
+            if(v>=2){ printf(" bin2jitpage read %lu bytes from %s\n",nread,file_bin); fflush(stdout); }
             if( nread != (size_t)fsize ){
-                if(v>=1){ printf(" bin2page unexpected # of read bytes\n"); fflush(stdout); }
+                if(v>=1){ printf(" bin2jitpage unexpected # of read bytes\n"); fflush(stdout); }
             }
         }
     }
@@ -151,7 +160,7 @@ void jitpage_readexec(JitPage *jitpage){
 }
 
 int jitpage_free(JitPage* page){
-    int status = EINVAL;
+    int status = 0;
     if( page && page->mem ){ // don't warn about NULLs
         status = munmap(page->mem, page->len);
         if(status){
@@ -175,7 +184,7 @@ void hexdump(char const* page, size_t sz){
     // reproduce hexdump -C "canonical hex+ASCII" output format
     for(size_t b=0; b<sz; b+=16){
         printf("%08lx ",(unsigned long)b);
-        int bbend = (b+16 < sz? b+16: sz);
+        size_t bbend = (b+16 < sz? b+16: sz);
         for(size_t bb=b; bb<bbend; ++bb){
             if( bb-b == 8 ) printf(" ");
             printf(" %02x",(unsigned char)page[bb]);
@@ -215,7 +224,7 @@ int strMconst(char *mconst,uint64_t const parm){
     return 1;
 }
 
-#ifdef __cplusplus__
+#ifdef __cplusplus
 } // extern "C"
 #endif
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
