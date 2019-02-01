@@ -27,7 +27,8 @@
  *     (ex. load some big constant via mul IMM,K or other arithmetic ops,
  *      but such constants are likely pretty infrequent.)
  */
-#include "jitve_util.h"
+//#include "jitve_util.h" // deprecated
+#include "jitpage.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -180,7 +181,7 @@ void jit_parm_opt2( unsigned long const parm, char * const jit_parm, size_t cons
 #undef JOUT
 }
 /** call with register ABI, get 2 return values. \return 0,1 or 2 error count. */
-int call_addsub( Jitpage *page, unsigned long arg, unsigned long parm ){        
+int call_addsub( JitPage *page, unsigned long arg, unsigned long parm ){        
     int nerr = 0;
     unsigned long ret1, ret2;
     //
@@ -195,7 +196,7 @@ int call_addsub( Jitpage *page, unsigned long arg, unsigned long parm ){
             "\tor %[ret1], 0,%s1\n" /* retrieve kernel compute results */
             "\tor %[ret2], 0,%s2\n"
             :[ret1]"=r"(ret1), [ret2]"=r"(ret2)
-            :[arg]"r"(arg), [page]"r"(page->addr)
+            :[arg]"r"(arg), [page]"r"(page->mem)
             :"%s0","%s1", "%s2", "%s12"
        );
     // Check for errors in our kernel outputs:
@@ -272,24 +273,25 @@ void test_kernel_math(char const* const cmd, unsigned long const parm, int const
     //                           and to later inspect each kernel
     char kernel_name[80];
     if( parm < 1000000 )
-        snprintf(kernel_name,80,"tmp_kernel_addsub_%lu_opt%d\0",parm,opt_level);
+        snprintf(kernel_name,80,"tmp_kernel_addsub_%lu_opt%d%c",parm,opt_level,'\0');
     else
-        snprintf(kernel_name,80,"tmp_kernel_addsub_0x%lx_opt%d\0",parm,opt_level);
+        snprintf(kernel_name,80,"tmp_kernel_addsub_0x%lx_opt%d%c",parm,opt_level,'\0');
     printf(" test_kernel_math(%lx) --> JIT code %s.S:\n%s",parm,kernel_name,kernel_math); fflush(stdout);
 
     // create .bin file
     asm2bin(kernel_name, kernel_math);  // creates .S and .bin file
     // show it
     char line[80];
-    snprintf(line,80,"nobjdump -b binary -mve -D %s.bin\0", kernel_name);
-    system(line);
+    snprintf(line,80,"nobjdump -b binary -mve -D %s.bin%c", kernel_name,'\0');
+    if(system(line)) printf(" Possible issues with nobjdump [ignored]\n");
 
     // load the blob into an executable code page
     char const* basename = &kernel_name[0];
-    Jitpage page = bin2jitpage( basename );
+    JitPage page;
+    bin2jitpage( basename, &page, 0/*verbose*/ );
 
     int nerr=0;
-    if(page.addr==NULL){
+    if(page.mem==NULL){
         printf("Oops trying to get the executable code page!\n");
         ++nerr;
     }else{
@@ -313,7 +315,7 @@ void test_kernel_math(char const* const cmd, unsigned long const parm, int const
     jitpage_free(&page);
 }
 
-main()
+int main()
 {
     printf(" I think that -13UL is %ld\n", -13UL);
     printf(" I think that -(13UL) is %ld\n", -(13UL));
@@ -353,8 +355,8 @@ main()
         DOIT(test_kernel_math,-(17UL),opt_level);  // -13UL is really -60  (mistaken hex?)
     }
 #undef DOIT
-    system("ls -l tmp_kernel_addsub_*.S");
-    system("ls -l tmp_kernel_addsub_*.bin");
+    if(system("ls -l tmp_kernel_addsub_*.S")) printf(" Failed to create .S file!\n");
+    if(system("ls -l tmp_kernel_addsub_*.bin")) printf(" Failed to create .bin file!\n");
     printf("\n");
 }
-/* vim: set ts=4 sw=4 et: */
+// vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break

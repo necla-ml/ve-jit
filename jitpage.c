@@ -18,7 +18,39 @@ void jitpage_verbose(int const verbose){
 }
 #endif
 
-char* bin2jitpage(char const* basename, struct JitPage *jitpage, int const v){
+#ifdef __cplusplus__
+extern "C" {
+#endif
+
+void asm2bin(char const* basename, char const* cpp_asm_code){
+    assert(strlen(basename)<80);
+    char file_S[100];
+    snprintf(&file_S[0],100,"%s.S\0",basename);
+    printf("creating .S file %s\n",basename); fflush(stdout);
+    {
+        FILE* f_S = fopen(&file_S[0], "w");
+        fputs(cpp_asm_code, f_S);
+        fclose(f_S);
+    }
+    printf("created  .S file %s\n",basename); fflush(stdout);
+    {
+        char mk_cmd[100];
+        //snprintf(&mk_cmd[0],100,"VERBOSE=0 make -f bin.mk %s.bin\0",basename);
+        snprintf(&mk_cmd[0],100,"make -f bin.mk %s.bin\0",basename);
+        printf("cmd: %s\n",mk_cmd); fflush(stdout);
+        system(mk_cmd);
+        sleep(1);
+        fflush(stdout);
+        fflush(stderr);
+        snprintf(&mk_cmd[0],100,"ls -ld %s.*",basename);
+        system(mk_cmd);
+        sleep(1);
+        fflush(stdout);
+        fflush(stderr);
+    }
+    printf("asm2bin(\"%s\",code): DONE\n",basename); fflush(stdout);
+}
+char* bin2jitpage(char const* basename, JitPage *jitpage, int const v){
     int ok=1;
     if(basename == NULL || strlen(basename)>=40){
         if(v>=-1){ printf("bin2jitpage missing or too-long basename\n"); fflush(stdout); }
@@ -104,7 +136,7 @@ char* bin2jitpage(char const* basename, struct JitPage *jitpage, int const v){
     return (char*)(jitpage->mem);
 }
 
-void jitpage_readexec(struct JitPage *jitpage){
+void jitpage_readexec(JitPage *jitpage){
     if( jitpage==NULL ){
         printf(" jitpage_readexec jipage==NULL!\n"); fflush(stdout);
     }else{
@@ -118,7 +150,7 @@ void jitpage_readexec(struct JitPage *jitpage){
     }
 }
 
-int jitpage_free(struct JitPage* page){
+int jitpage_free(JitPage* page){
     int status = EINVAL;
     if( page && page->mem ){ // don't warn about NULLs
         status = munmap(page->mem, page->len);
@@ -138,4 +170,52 @@ int jitpage_free(struct JitPage* page){
     }
     return status;
 }
+
+void hexdump(char const* page, size_t sz){
+    // reproduce hexdump -C "canonical hex+ASCII" output format
+    for(size_t b=0; b<sz; b+=16){
+        printf("%08lx ",(unsigned long)b);
+        int bbend = (b+16 < sz? b+16: sz);
+        for(size_t bb=b; bb<bbend; ++bb){
+            if( bb-b == 8 ) printf(" ");
+            printf(" %02x",(unsigned char)page[bb]);
+        }
+        printf("  |");
+        for(size_t bb=b; bb<bbend; ++bb){
+            printf("%c",(isprint(page[bb])? page[bb]: '.'));
+        }
+        printf("|\n");
+    }
+}
+
+int strMconst(char *mconst,uint64_t const parm){
+    printf(" strMconst(char*,%lx)...",parm); fflush(stdout);
+    if(parm==0UL){
+        sprintf(mconst,"(0)1"); // zero 1s (rest 0), 0
+    }else if(~parm==0UL){
+        sprintf(mconst,"(0)0"); // zero 0s (rest 1), -1
+    }else if(((parm+1)&(parm)) == 0){ // some zeroes, followed by all-ones
+        printf("(N)0..."); fflush(stdout);
+        int n=0; uint64_t p = parm;
+        while(p >>= 1) ++n;
+        printf(";n=%d",n); fflush(stdout);
+        sprintf(mconst,"(%d)0",63-n);
+    }else if(((~parm+1)&(~parm)) == 0){ // some ones, followed by all-zeros
+        printf("(N)1..."); fflush(stdout);
+        int n=0; uint64_t p = ~parm;
+        while(p >>= 1) ++n;
+        printf(";~n=%d",n); fflush(stdout);
+        sprintf(mconst,"(%d)1",63-n);
+    }else{
+        mconst[0]='\0';
+        printf("X\n"); fflush(stdout);
+        return 0;
+    }
+    printf("%s\n",mconst);
+    return 1;
+}
+
+#ifdef __cplusplus__
+} // extern "C"
+#endif
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break

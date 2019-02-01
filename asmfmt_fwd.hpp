@@ -10,11 +10,12 @@ std::string fname_bin( std::string const& fname_S );
 
 /** asm2bin : .S --> .bin . \post .bin file exists and has >0 bytes.
  * Makefile bin.mk should exist.
+ * \pre You want a VE binary blob (so we use ncc/nas/nobjcopy/nobjdump)
  * \ret size of binary blob file created.
  * \throw on error. */
 size_t asm2bin( std::string const& fname_S, int const verbose=1 );
 
-/** read a binary file into a new code page */
+/** read a binary blob file into a new code page */
 struct ExecutablePage {
     ExecutablePage( std::string const& fname_bin );
     ~ExecutablePage();
