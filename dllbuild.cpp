@@ -1,9 +1,11 @@
 #include "jitpage.h"    // low level 'C' utilities
 #include "dllbuild.hpp"
 #include "throw.hpp"
+#include <fstream>
+#include <unistd.h>     // getcwd, sysconf, pathconf
+#include <assert.h>
 //#include "jitpipe.hpp"
 //#include <sstream>
-//#include <fstream>
 //#include <array>
 //#include <cstdlib>
 //#include <cstdio>   // remove (rm file or directory)
@@ -12,9 +14,7 @@
 //#include <dlfcn.h>
 //#include <stdio.h>
 //#include <assert.h>
-#include <unistd.h>     // getcwd, sysconf, pathconf
 //#include <filesystem> // join paths (c++17)
-#include <assert.h>
 
 using namespace std;
 
@@ -28,13 +28,6 @@ class FileLocn {
     std::string abspath;
     std::string fullpath;
 };
-class SubDir{
-    // create subdir, then set current dir, and absolute path to subdir
-    SubDir(std::string subdir);
-    std::string subdir;
-    // calculated
-    std::string abspath;    // = cwd/subdir
-};
 SubDir::SubDir(std::string subdir)
 : subdir(subdir), abspath(subdir)
 {
@@ -45,6 +38,26 @@ SubDir::SubDir(std::string subdir)
         abspath = getPath() + '/' + subdir;
     }
 }
+std::string DllFile::write(SubDir const& subdir){
+    this->abspath = subdir.abspath + "/" + this->basename + this->suffix;
+    try{
+        std::ofstream ofs(abspath);
+        ofs <<"//Dllfile: basename="<<basename
+            <<"\n//Dllfile: suffix="<<suffix
+            <<"\n//Dllfile: abspath="<<abspath
+            <<"\n"<<comment
+            <<"\n"<<code
+            <<endl;
+        ofs.close();
+    }catch(...){
+        cout<<" Trouble writing file "<<abspath<<endl;
+        throw;
+    }
+    cout<<" Wrote file "<<abspath<<endl;
+    return this->abspath;
+}
+
+
 
 std::string getPath() {
     long const sz = pathconf(".",_PC_PATH_MAX); // assume we are interested cwd
@@ -278,8 +291,23 @@ int main(int argc,char**argv){
     DllBuild dllbuild;
     dllbuild.push_back(tmplucky);
 
-    DllOpen lib = dllbuild.create( libBase, ".");
+    if(1) { // test subdir creation and tmpluck.write
+        if(createDirectoryAnyDepth("subdir1/subdir2"))
+            THROW(" could not create subdir1/subdir2 writable");
+        else cout<<" seems subdir1/subdir2 is writable"<<endl;
+        // DllFile tmplucky
+        // --> file at abspath
+        // <current dir>/subdir1/subdir2/tmpdllbuild_file0-ncc.c
+        string abspath = tmplucky.write(SubDir("subdir1/subdir2"));
+        system("ls -l subdir1/subdir2");
+        system(("ls -l "+abspath).c_str());
+        system(("cat "+abspath).c_str());
+        system("rm -rf subdir1");           // clean up this test
+    }
 
+    //DllOpen lib = dllbuild.create( libBase, ".");
+
+#if 0 // later ...
     typedef int (*JitFunc)();
 #if 0
     JitFunc jitLuckyNumber = (JitFunc)dlsym(jitLibHandle, "myLuckyNumber");
@@ -292,6 +320,7 @@ int main(int argc,char**argv){
     
     int jitOutput = jitLuckyNumber();
     cout<<" JIT lucky number is "<<jitOutput<<endl;
+#endif
     cout<<"\nGoodbye"<<endl;
     return 0;
 }

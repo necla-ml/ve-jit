@@ -46,6 +46,14 @@ struct SymbolDecl{
     std::string comment;
     std::string fwddecl;
 };
+/** SubDir has create-writable or throw semantics, and set absolute path */
+struct SubDir{
+    // create subdir, then set current dir, and absolute path to subdir
+    SubDir(std::string subdir);
+    std::string subdir;
+    // calculated
+    std::string abspath;    // = cwd/subdir
+};
 /** <symbol>.c input data. */
 struct DllFile {
     std::string basename;
@@ -54,10 +62,12 @@ struct DllFile {
     std::vector<SymbolDecl> syms;  // just the public API symbols
     // optional...
 	std::string comment;
+    /** write comment+code to <subdir.abspath>/<basename><suffix>.
+     * \return \c abspath */
+    std::string  write(SubDir const& subdir);
   private:
     friend class DllBuild;
-    std::string dir;
-    std::string fullpath;
+    std::string abspath;
 };
 /** create empty, append various DllFile, then \c create() the DllOpen.
  *
