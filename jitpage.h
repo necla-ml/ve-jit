@@ -71,6 +71,10 @@ extern "C" {
     /** reproduce hexdump -C "canonical hex+ASCII" output format */
     void hexdump(char const* page, size_t sz);
 
+    /** try recursive mkdir, the return access(path,W_OK).
+     * \return \b true if write access \b denied. */
+    int createDirectoryAnyDepth(char const *path);
+
     /** create and M-string constant.
      * nas can use some constants in format (N)M.
      * Here N=repeat count 0..64

@@ -289,7 +289,9 @@ syscall_hello: syscall_hello.c
 dltest0: dltest0.c
 	$(CC) $(CFLAGS) -o $@ -Wall -Werror $< -ldl
 dltest0-x86: dltest0.c	
-	g++ $(CFLAGS) -o $@ -Wall -Werror $< -ldl
+	g++ $(CXXFLAGS) -o $@ -Wall -Werror $< -ldl
+dllbuild-x86: dllbuild.cpp -ljit1-x86
+	g++ -o $@ $(CXXFLAGS) -Wall -Werror -DDLLBUILD_MAIN $^
 # next test show how to dynamically *compile* and load a dll given
 # a std::string containing 'C' code.
 .PHONY: dltest1.log

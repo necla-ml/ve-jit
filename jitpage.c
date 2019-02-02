@@ -7,8 +7,9 @@
 #include <sys/mman.h>
 #include <errno.h>
 #include <assert.h>
-#include <unistd.h>   // _SC_PAGE_SIZE
+#include <unistd.h>   // _SC_PAGE_SIZE, sysconf, pathconf
 #include <stdlib.h> // system
+#include <sys/stat.h>   // mkdir
 
 #if 0
 /** file-local verbosity, modified w/ \c jitpage_verbose.
@@ -195,6 +196,32 @@ void hexdump(char const* page, size_t sz){
         }
         printf("|\n");
     }
+}
+
+int createDirectoryAnyDepth(char const *path) {
+    long const sz = pathconf(".",_PC_PATH_MAX);
+    char opath[sz]; 
+    char *p; 
+    size_t len; 
+    int mkdir_flags = S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH;
+    strncpy(opath, path, sz);
+    len = strlen(opath); 
+    if(opath[len - 1] == '/') 
+        opath[len - 1] = '\0'; 
+
+    for(p = opath; *p; p++) 
+    {
+        if(*p == '/' || *p == '\\') 
+        { 
+            *p = '\0'; 
+            if(access(opath, W_OK)) 
+                mkdir(opath,mkdir_flags);
+            *p = '/';
+        }
+    }
+    if(access(opath, W_OK))
+        mkdir(opath, mkdir_flags);
+    return access(opath,W_OK);
 }
 
 int strMconst(char *mconst,uint64_t const parm){

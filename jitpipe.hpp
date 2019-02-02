@@ -117,6 +117,8 @@ inline std::string DllPipe::getPath() {
     }
 }
 void DllPipe::mkTmpfile(std::string code){
+    // other inputs: this->basename, this->outDir, suffix
+    // output:       this->ccode_tmpfile
     std::string base = basename;
     std::string suffix(".c");
 
