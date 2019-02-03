@@ -7,7 +7,7 @@
 #include <sys/mman.h>
 #include <errno.h>
 #include <assert.h>
-#include <unistd.h>   // _SC_PAGE_SIZE, sysconf, pathconf
+#include <unistd.h>   // _SC_PAGE_SIZE, sysconf, pathconf, access
 #include <stdlib.h> // system
 #include <sys/stat.h>   // mkdir
 

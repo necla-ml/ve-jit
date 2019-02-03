@@ -48,24 +48,27 @@ struct SymbolDecl{
 };
 /** SubDir has create-writable or throw semantics, and set absolute path */
 struct SubDir{
+    SubDir() : subdir(), abspath() {}
     // create subdir, then set current dir, and absolute path to subdir
     SubDir(std::string subdir);
     std::string subdir;
     // calculated
     std::string abspath;    // = cwd/subdir
 };
-/** <symbol>.c input data. */
+/** basename*.{c|cpp|s|S} compilable code file */
 struct DllFile {
     std::string basename;
-    std::string suffix;
+    std::string suffix;             ///< *.{c|cpp|s|S}
 	std::string code;
-    std::vector<SymbolDecl> syms;  // just the public API symbols
+    std::vector<SymbolDecl> syms;   ///< just the public API symbols
     // optional...
 	std::string comment;
     /** write comment+code to <subdir.abspath>/<basename><suffix>.
      * \return \c abspath */
     std::string  write(SubDir const& subdir);
+    static std::string obj(std::string fname);   ///< %.{c,cpp,s,S} --> %.o \throw on err
   private:
+    std::string objname;        ///< set by \c write
     friend class DllBuild;
     std::string abspath;
 };
@@ -75,6 +78,9 @@ struct DllFile {
  * until you get a real JIT assembler to bypass all filesystem operations.
  */
 struct DllBuild : std::vector<DllFile> {
+    DllBuild() : std::vector<DllFile>(), prepped(false), made(false),
+    dir(), basename(), libname(), mkfname(), fullpath()
+    {}
     /** For testing -- create build files (ok for host- or cross-compile).
      * /post \c dir is left with all files necessary to build the library
      *       via 'make', as well as a header with any known fwd decls.
@@ -95,8 +101,10 @@ struct DllBuild : std::vector<DllFile> {
     DllOpen dllopen();
     bool prepped;
     bool made;
+    SubDir dir;
     std::string basename;
-    std::string dir;
+    std::string libname;        ///< libbasename.so
+    std::string mkfname;        ///< basename.mk
     std::string fullpath;
 };
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
