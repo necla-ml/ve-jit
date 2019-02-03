@@ -1,3 +1,9 @@
+#
+# bin.mk (template)
+#
+#LDFLAGS?=
+$(LIBNAME): $(OBJECTS)
+	ncc -o $(LIBNAME) $(LDFLAGS) $(filter %-ve.o,$(OBJECTS))
 # This file ONLY generates -ve.o object files or VE .bin binary blobs
 # 
 # Allow override of default compiler (maybe particular version is required)

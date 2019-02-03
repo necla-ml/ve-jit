@@ -40,11 +40,29 @@ SubDir::SubDir(std::string subdir)
 }
 std::string DllFile::obj(std::string fname){
     std::string ret;
-    auto last_dot = fname.find_last_of('.');
-    if(last_dot != std::string::npos){
-        std::string ftype = fname.substr(last_dot+1);
-        if( ftype == "c" || ftype == "cpp" || ftype == "s" || ftype == "S" ){
-            ret = fname.substr(0,last_dot) + ".o";
+    size_t p, pp=0;
+    if((p=fname.rfind('-'))!= std::string::npos){
+        if(0){ ;
+        }else if((p=fname.rfind("-vi.c"))==fname.size()-5){ pp=p;
+        }else if((p=fname.rfind("-vi.cpp"))==fname.size()-7){ pp=p;
+        }else if((p=fname.rfind("-ncc.c"))==fname.size()-6){ pp=p;
+        }else if((p=fname.rfind("-ncc.cpp"))==fname.size()-8){ pp=p;
+        }else if((p=fname.rfind("-clang.c"))==fname.size()-8){ pp=p;
+        }else if((p=fname.rfind("-clang.cpp"))==fname.size()-10){ pp=p;
+        }
+        if(pp){
+            ret = fname.substr(0,pp).append("-ve.o");
+        }
+    }
+    if(ret.empty()){
+        auto last_dot = fname.find_last_of('.');
+        if(last_dot != std::string::npos){
+            std::string ftype = fname.substr(last_dot+1);
+            if( ftype == "c" || ftype == "cpp" ){
+                ret = fname.substr(0,last_dot) + "-ve.o";
+            }else if( ftype == "s" || ftype == "S" ){
+                ret = fname.substr(0,last_dot) + ".bin";
+            }
         }
     }
     if(ret.empty()) THROW("DllFile::obj("<<fname<<") must match %.{c|cpp|s|S}");
@@ -134,29 +152,43 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
     this->mkfname  = this->basename+".mk";
     this->fullpath = dir.abspath+"/"+libname;
     ostringstream mkfile;
-    mkfile<<"# Auto-generated Makefile for "<<libname
-        <<"\nOBJECTS:=";
-    for(size_t i=0U; i<size(); ++i){
-        DllFile& df = (*this)[i];
-        if(df.basename.empty()){
-            ostringstream oss;
-            oss<<"lib"<<basename<<"_file"<<i;
-            df.basename=oss.str();
-            cout<<" Warning: auto-suppying source file name "<<oss.str()<<endl;
-        }
-        if(df.suffix.empty()){
-            df.suffix = "-ncc.c";
-            cout<<" Warning: auto-suppying source suffix "<<df.suffix
-                <<" for basename "<<df.basename<<endl;
-        }
-        string dfSourceFile = df.basename+df.suffix;
-        df.objname = DllFile::obj(dfSourceFile); // checks name correctness
-        df.abspath = dir.abspath+'/'+dfSourceFile;
-        mkfile<<" \\\n\t"<<df.objname;  // object file target
-        df.write(this->dir);            // source file input (throw if err)
-    }
+    mkfile<<"# Auto-generated Makefile for "<<libname;
     mkfile<<"\nLIBNAME:="<<libname
-        <<"\n# end of customized prologue.  Follow by standard build recipes from bin.mk\n";
+        <<"\nLDFLAGS:=$(LDFLAGS) -shared -fPIC -Wl,-rpath="<<dir.abspath<<" -L"<<dir.abspath
+        <<"\nall: $(LIBNAME)\n";
+    {
+        ostringstream sources; sources<<"\nSOURCES:=";
+        ostringstream objects; objects<<"\nOBJECTS:=";
+        ostringstream deps;    deps   <<"\n";
+        for(size_t i=0U; i<size(); ++i){
+            DllFile& df = (*this)[i];
+            if(1){ // handle absent fields in DllFile
+                if(df.basename.empty()){
+                    ostringstream oss;
+                    oss<<"lib"<<basename<<"_file"<<i;
+                    df.basename=oss.str();
+                    cout<<" Warning: auto-suppying source file name "<<oss.str()<<endl;
+                }
+                if(df.suffix.empty()){
+                    df.suffix = "-ncc.c";
+                    cout<<" Warning: auto-suppying source suffix "<<df.suffix
+                        <<" for basename "<<df.basename<<endl;
+                }
+            }
+            string dfSourceFile = df.basename+df.suffix;
+            sources<<" \\\n\t\t"<<dfSourceFile;
+            df.objname = DllFile::obj(dfSourceFile); // checks name correctness
+            deps<<"\n"<<df.objname<<": "<<dfSourceFile;
+            objects<<" "<<df.objname;
+            df.abspath = dir.abspath+'/'+dfSourceFile;
+            df.write(this->dir);            // source file input (throw if err)
+        }
+        mkfile<<"\n#sources\n"<<sources.str()<<endl;
+        mkfile<<"\n#deps   \n"<<deps   .str()<<endl;
+        mkfile<<"\n#objects\n"<<objects.str()<<endl;
+        mkfile<<endl;
+    }
+    mkfile<<"\n# end of customized prologue.  Follow by standard build recipes from bin.mk\n";
     try{
         if(access("bin.mk",R_OK))
             THROW("No read access to template file bin.mk");
@@ -190,12 +222,13 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
 void DllBuild::make(){
     if(!prepped)
         THROW("Please prep(basename,dir) before make()");
-    std::string mk = "make -C "+dir.abspath+" -f "+mkfname;
+    std::string mk = "make VERBOSE=1 -C "+dir.abspath+" -f "+mkfname;
     // TODO: pstreams to capture stdout, stderr into log files etc.
     auto ret = system(mk.c_str());
     if(ret){
         THROW(" Build error: "+mk);
     }
+    system(("ls -l "+dir.abspath).c_str());
     made = true;
 }
 DllOpen DllBuild::dllopen(){
@@ -367,7 +400,7 @@ int main(int argc,char**argv){
             SymbolDecl("myLuckyNumber",
                 "a JIT lucky number generator",
                 "int myLuckyNumber()" ));
-    tmplucky.comment = tmplucky.basename + " has one JIT function";
+    tmplucky.comment = "// " + tmplucky.basename + " has one JIT function";
 
     DllBuild dllbuild;
     dllbuild.push_back(tmplucky);
