@@ -18,6 +18,41 @@
 
 using namespace std;
 
+/** 0 ~ we are linked with bin.mk object file,
+ *  1 ~ read bin.mk (from current dir, fragile?). */
+#define BIN_MK_FROM_FILE 0
+#if ! BIN_MK_FROM_FILE
+extern "C" {
+extern unsigned char _binary_bin_mk_start;
+extern unsigned char _binary_bin_mk_end;
+extern unsigned char _binary_bin_mk_size;
+}
+static std::string bin_mk_file_to_string(){
+    //system("ls -l bin.mk");
+    //cout<<" binary_bin_mk_start @ "<<(void*)&_binary_bin_mk_start<<endl;
+    //cout<<" binary_bin_mk_end   @ "<<(void*)&_binary_bin_mk_end<<endl;
+    //cout<<" binary_bin_mk_size    "<<(size_t)&_binary_bin_mk_size<<endl;
+    return std::string((char*)&_binary_bin_mk_start, (size_t)&_binary_bin_mk_size);
+}
+#else
+static std::string bin_mk_file_to_string(){
+    std::ostringstream oss;
+    try{
+        if(access("bin.mk",R_OK))
+            THROW("No read access to template file bin.mk");
+        ifstream ifs("bin.mk");
+        if(ifs){
+            oss << ifs.rdbuf();
+            ifs.close();
+        }
+    }catch(...){
+        cout<<" Trouble appending bin.mk template to makefile string"<<endl;
+        throw;
+    }
+    return oss.str();
+}
+#endif
+
 static std::string getPath();
 
 class FileLocn {
@@ -189,34 +224,25 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
         mkfile<<endl;
     }
     mkfile<<"\n# end of customized prologue.  Follow by standard build recipes from bin.mk\n";
-    try{
-        if(access("bin.mk",R_OK))
-            THROW("No read access to template file bin.mk");
-        ifstream ifs("bin.mk");
-        if(ifs){
-            mkfile << ifs.rdbuf();
-            ifs.close();
+    mkfile << bin_mk_file_to_string() << "\n#";
+    { // write mkfile to <dir.abspath>/<mkfname>
+        std::string absmkfile;
+        try{
+            absmkfile = dir.abspath+"/"+mkfname;
+            ofstream ofs(absmkfile);
+            if(ofs){
+                //ofs << mkfile.rdbuf();
+                ofs << mkfile.str();
+                ofs.close();
+            }else{
+                THROW(" Trouble constructing ofs("<<absmkfile<<")");
+            }
+        }catch(...){
+            cout<<" Trouble writing file "<<absmkfile<<endl;
+            throw;
         }
-    }catch(...){
-        cout<<" Trouble appending bin.mk template to makefile string"<<endl;
-        throw;
+        system(("ls -l "+dir.abspath).c_str());
     }
-    std::string absmkfile;
-    try{
-        absmkfile = dir.abspath+"/"+mkfname;
-        ofstream ofs(absmkfile);
-        if(ofs){
-            //ofs << mkfile.rdbuf();
-            ofs << mkfile.str();
-            ofs.close();
-        }else{
-            THROW(" Trouble constructing ofs("<<absmkfile<<")");
-        }
-    }catch(...){
-        cout<<" Trouble writing file "<<absmkfile<<endl;
-        throw;
-    }
-    system(("ls -l "+dir.abspath).c_str());
     prepped = true;
 }
 void DllBuild::make(){

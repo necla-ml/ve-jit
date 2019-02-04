@@ -290,7 +290,18 @@ dltest0: dltest0.c
 	$(CC) $(CFLAGS) -o $@ -Wall -Werror $< -ldl
 dltest0-x86: dltest0.c	
 	g++ $(CXXFLAGS) -o $@ -Wall -Werror $< -ldl
-dllbuild-x86: dllbuild.cpp -ljit1-x86
+bin.mk-x86.o: bin.mk
+	objcopy --input binary --output elf64-x86-64 --binary-architecture i386 \
+		--rename-section .data=.rodata,alloc,load,readonly,data,contents \
+		$< $@
+bin.mk-ve.o: bin.mk
+	nobjcopy --input binary --output elf64-ve --binary-architecture ve \
+		--rename-section .data=.rodata,alloc,load,readonly,data,contents \
+		$< $@
+	# 0000000000000ee6 D _binary_bin_mk_end
+	# 0000000000000ee6 A _binary_bin_mk_size
+	# 0000000000000000 D _binary_bin_mk_start
+dllbuild-x86: dllbuild.cpp bin.mk-x86.o -ljit1-x86
 	g++ -o $@ $(CXXFLAGS) -Wall -Werror -DDLLBUILD_MAIN $^
 # next test show how to dynamically *compile* and load a dll given
 # a std::string containing 'C' code.
