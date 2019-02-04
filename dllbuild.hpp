@@ -22,19 +22,22 @@
  * Q: might it eventually be better to support loading a libary and
  *    reading **all** its public symbols?
  */
-struct DllOpen{
-    std::string basename;
-    void *libHandle;
-    std::unordered_map< char const*, void* > dlsyms;
-    void* operator[](char const* s) const {return dlsyms.at(s);}
-    // optional...
-    std::string libname;            ///< full path
-    std::vector<std::string> files; ///< full paths of all jit code files
-    DllOpen() : basename(), libHandle(nullptr), dlsyms(), libname(), files() {}
+class DllOpen{
+  public:
+    void* operator[](std::string const& s) const {return dlsyms.at(s);}
     ~DllOpen() {
         libHandle = nullptr;
         files.clear();
     }
+  private:
+    friend class DllBuild;
+    std::string basename;
+    void *libHandle;
+    std::unordered_map< std::string, void* > dlsyms;
+    // optional...
+    std::string libname;            ///< full path
+    std::vector<std::string> files; ///< full paths of all jit code files
+    DllOpen() : basename(), libHandle(nullptr), dlsyms(), libname(), files() {}
 };
 /** single-symbol data. */
 struct SymbolDecl{
@@ -67,6 +70,7 @@ struct DllFile {
      * \return \c abspath */
     std::string  write(SubDir const& subdir);
     static std::string obj(std::string fname);   ///< %.{c,cpp,s,S} --> %.o \throw on err
+    std::string const& getFilePath() const {return this->abspath;}
   private:
     std::string objname;        ///< set by \c write
     friend class DllBuild;
@@ -89,6 +93,8 @@ struct DllBuild : std::vector<DllFile> {
     void prep(std::string basename, std::string dir=".");
     /** For testing -- . \pre you have all the [cross-]compiling tools. */
     void make();
+    /** open and load symbols, \throw if not \c prepped and \c made */
+    DllOpen create(){ return dllopen(); }
     /** \c prep, \c make and load all public symbols (JIT scenario).
      * Use this when caller is able to execute the machine code in the dll
      * (i.e. VE invoking host cross-compile for VE target). */
@@ -97,6 +103,8 @@ struct DllBuild : std::vector<DllFile> {
         if(!made){make(); made=true;}
         return dllopen();
     }
+    /** return \c libname, or \throw if not \c prepped */
+    std::string const & getLibName() const;
   private:
     DllOpen dllopen();
     bool prepped;
@@ -105,6 +113,6 @@ struct DllBuild : std::vector<DllFile> {
     std::string basename;
     std::string libname;        ///< libbasename.so
     std::string mkfname;        ///< basename.mk
-    std::string fullpath;
+    std::string fullpath;       ///< absolute path to libname
 };
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break

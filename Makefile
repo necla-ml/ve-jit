@@ -302,7 +302,9 @@ bin.mk-ve.o: bin.mk
 	# 0000000000000ee6 A _binary_bin_mk_size
 	# 0000000000000000 D _binary_bin_mk_start
 dllbuild-x86: dllbuild.cpp bin.mk-x86.o -ljit1-x86
-	g++ -o $@ $(CXXFLAGS) -Wall -Werror -DDLLBUILD_MAIN $^
+	g++ -o $@ $(CXXFLAGS) -Wall -Werror -DDLLBUILD_MAIN $^ -ldl
+dllbuild-ve: dllbuild.cpp bin.mk-ve.o -ljit1
+	$(CXX) -o $@ $(CXXFLAGS) -Wall -Werror -DDLLBUILD_MAIN $^ -ldl
 # next test show how to dynamically *compile* and load a dll given
 # a std::string containing 'C' code.
 .PHONY: dltest1.log

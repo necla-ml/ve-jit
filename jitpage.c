@@ -200,7 +200,7 @@ void hexdump(char const* page, size_t sz){
 
 int createDirectoryAnyDepth(char const *path) {
     long const sz = pathconf(".",_PC_PATH_MAX);
-    char opath[sz]; 
+    char* opath = (char*)malloc(sz);
     char *p; 
     size_t len; 
     int mkdir_flags = S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH;
@@ -221,7 +221,9 @@ int createDirectoryAnyDepth(char const *path) {
     }
     if(access(opath, W_OK))
         mkdir(opath, mkdir_flags);
-    return access(opath,W_OK);
+    int ret = access(opath,W_OK);
+    free(opath);
+    return ret;
 }
 
 int strMconst(char *mconst,uint64_t const parm){

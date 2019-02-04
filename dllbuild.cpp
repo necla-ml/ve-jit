@@ -176,6 +176,11 @@ FileLocn writeFile(std::string const& code, std::string const& basename,
 }
 #endif
 
+std::string const & DllBuild::getLibName() const {
+    if(!prepped) THROW("getLibName requires DllBuild::prep(basename,dir)");
+    return this->libname;
+}
+
 void DllBuild::prep(string basename, string subdir/*="."*/){
     if(empty()){
         cout<<" Nothing to do for dll "<<basename<<endl;
@@ -258,10 +263,38 @@ void DllBuild::make(){
     made = true;
 }
 DllOpen DllBuild::dllopen(){
+    cout<<"*** DllBuild::dllopen() BEGINS"<<endl;
     if(!(prepped and made))
         THROW("Please prep(basename,dir) and make() before you dllopen()");
     DllOpen ret;
     cout<<"// TODO: dlopen, get all expected syms immediately"<<endl;
+    ret.libname = this->libname;
+    ret.libHandle = dlopen(fullpath.c_str(), RTLD_NOW);
+    if(!ret.libHandle) THROW("failed dlopen("<<fullpath<<")");
+    int nerr=0; // symbol load error count
+    cout<<"Library: "<<this->libname<<endl;
+    for(auto const& df: *this){
+        auto const& filepath = df.getFilePath();
+        cout<<"   File: "<<df.basename<<df.suffix<<" : "<<filepath<<endl;
+        ret.files.push_back(filepath);
+        for(auto const& sym: df.syms){
+            void* addr = dlsym(ret.libHandle, sym.symbol.c_str());
+            cout<<"      "<<sym.symbol<<" @ "<<addr<<"\n";
+            if(!sym.comment.empty()){ cout<<"        // "<<sym.comment<<"\n"; }
+            if(!sym.fwddecl.empty()){ cout<<"        "<<sym.fwddecl<<"\n"; }
+            if(addr==nullptr){
+                cout<<"**Error: could not load symbol "<<sym.symbol<<endl;
+                ++nerr;
+            }
+            if(ret.dlsyms.find(sym.symbol)!=ret.dlsyms.end()){
+                cout<<"**Error: duplicate symbol "<<sym.symbol<<endl;
+                ++nerr;
+            }
+            ret.dlsyms.insert(make_pair(sym.symbol,addr));
+        }
+    }
+    cout<<"*** DllBuild::dllopen() DONE : nerr="<<nerr<<endl;
+    if(nerr) THROW(nerr<<" symbol load errors from "<<libname);
     return ret;
 }
 
@@ -445,7 +478,27 @@ int main(int argc,char**argv){
         system("rm -rf subdir1");           // clean up this test
     }
 
-    DllOpen lib = dllbuild.create( libBase, "tmp-dllbuild");
+    //DllOpen lib = dllbuild.create( libBase, "tmp-dllbuild");
+    // let's do it step by step...
+    dllbuild.prep( libBase, "tmp-dllbuild"/*build subdirectory*/ );
+    dllbuild.make();
+    if(1){
+        cout<<"\nExpected symbols...\n";
+        cout<<"Library: "<<dllbuild.getLibName()<<endl;
+        for(auto const& df: dllbuild){
+            cout<<"   File: "<<df.basename<<df.suffix<<" :"<<endl;
+            for(auto const& sym: df.syms){
+                cout<<"      "<<sym.symbol<<endl;
+                if(!sym.comment.empty()){ cout<<"        // "<<sym.comment<<endl; }
+                if(!sym.fwddecl.empty()){ cout<<"        "<<sym.fwddecl<<endl; }
+            }
+        }
+    }
+#if !defined(__ve)
+    cout<<" STOPPING EARLY: we are an x86 executable and should not load a VE .so"<<endl;
+#else
+    DllOpen lib = dllbuild.create();
+#endif
 
 #if 0 // later ...
     typedef int (*JitFunc)();
