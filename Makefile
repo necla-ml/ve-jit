@@ -197,7 +197,8 @@ jitve_math: jitve_math.c jitpage.o
 # Note that libjit1.a could be running x86 code or VE code
 #
 .PRECIOUS: asmfmt.o jit_data.o jitpage.o
-libjit1.a: asmfmt.o jitpage.o jit_data.o
+libjit1.a: asmfmt.o jitpage.o jit_data.o \
+		cblock-ve.o dllbuild-ve.o bin.mk-ve.o
 	$(AR) cqsv $@ $^
 asmfmt.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
 	$(CXX) ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
@@ -205,7 +206,8 @@ jit_data.o: jit_data.c jit_data.h
 	$(CC) ${CFLAGS} -O2 -c $< -o $@
 jitpage.o: jitpage.c jitpage.h
 	$(CXX) $(CXXFLAGS) -c $< -o $@
-libjit1-x86.a: asmfmt-x86.o jitpage-x86.o jit_data-x86.o
+libjit1-x86.a: asmfmt-x86.o jitpage-x86.o jit_data-x86.o \
+		cblock-x86.o dllbuild-x86.o bin.mk-x86.o
 	ar cq $@ $^
 asmfmt-x86.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
 	g++ ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
@@ -213,9 +215,13 @@ jit_data-x86.o: jit_data.c jit_data.h
 	g++ ${CFLAGS} -O2 -c $< -o $@
 jitpage-x86.o: jitpage.c jitpage.h
 	g++ $(CXXFLAGS) -O2 -c $< -o $@
+cblock-x86.o: cblock.cpp cblock.hpp
+	g++ -Wall -g2 -std=c++11 -c $< -o $@
+cblock-ve.o: cblock.cpp cblock.hpp
+	$(CXX) -Wall -g2 -std=c++11 -DMAIN_CBLOCK -c $< -o $@
 cblock: cblock.cpp cblock.hpp
-	g++ -Wall -g2 -std=c++11 -DMAIN_CBLOCK -E $< -o cblock.i
-	g++ -Wall -g2 -std=c++11 -DMAIN_CBLOCK -c $< -o cblock.o
+	g++ -Wall -g2 -std=c++11 -E $< -o cblock.i
+	g++ -Wall -g2 -std=c++11 -c $< -o cblock.o
 	g++ -Wall -g2 cblock.o -o $@
 LIBVELI_SRC:=veliFoo.cpp wrpiFoo.cpp
 libveli.a:     $(patsubst %.cpp,%.o,    $(LIBVELI_SRC))
@@ -301,10 +307,14 @@ bin.mk-ve.o: bin.mk
 	# 0000000000000ee6 D _binary_bin_mk_end
 	# 0000000000000ee6 A _binary_bin_mk_size
 	# 0000000000000000 D _binary_bin_mk_start
-dllbuild-x86: dllbuild.cpp bin.mk-x86.o -ljit1-x86
-	g++ -o $@ $(CXXFLAGS) -Wall -Werror -DDLLBUILD_MAIN $^ -ldl
-dllbuild-ve: dllbuild.cpp bin.mk-ve.o -ljit1
-	$(CXX) -o $@ $(CXXFLAGS) -Wall -Werror -DDLLBUILD_MAIN $^ -ldl
+dllbuild-x86.o: dllbuild.cpp
+	g++ -o $@ $(CXXFLAGS) -Wall -Werror -c $<
+dllbuild-ve.o: dllbuild.cpp
+	$(CXX) -o $@ $(CXXFLAGS) -Wall -Werror -c $<
+dllbuild-x86: dllbuild.cpp libjit1-x86.a
+	g++    -o $@ $(CXXFLAGS) -Wall -Werror -DDLLBUILD_MAIN $< -L. -ljit1-x86 -ldl
+dllbuild-ve: dllbuild.cpp libjit1-x86.a
+	$(CXX) -o $@ $(CXXFLAGS) -Wall -Werror -DDLLBUILD_MAIN $< -L. -ljit1 -ldl
 # next test show how to dynamically *compile* and load a dll given
 # a std::string containing 'C' code.
 .PHONY: dltest1.log
