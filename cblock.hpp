@@ -32,6 +32,7 @@
 #include <deque>
 #include <cassert>
 #include <sstream>
+#include <algorithm>    // std::max
 
 #ifdef NDEBUG
 #define CBLOCK_DBG(V,N) do{}while(0)

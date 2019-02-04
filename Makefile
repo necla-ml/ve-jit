@@ -1,6 +1,8 @@
 VEJIT_ROOT:=.
 SHELL:=/bin/bash
-ifneq ($(CC),ncc)
+
+ifneq ($(CC:ncc%=ncc),ncc)
+
 .PRECIOUS: jitpp_loadreg
 #
 # only a few things can compile for x86...
@@ -216,9 +218,9 @@ jit_data-x86.o: jit_data.c jit_data.h
 jitpage-x86.o: jitpage.c jitpage.h
 	g++ $(CXXFLAGS) -O2 -c $< -o $@
 cblock-x86.o: cblock.cpp cblock.hpp
-	g++ -Wall -g2 -std=c++11 -c $< -o $@
+	g++    -Wall -g2 -std=c++11 -c $< -o $@
 cblock-ve.o: cblock.cpp cblock.hpp
-	$(CXX) -Wall -g2 -std=c++11 -DMAIN_CBLOCK -c $< -o $@
+	$(CXX) -Wall -g2 -std=c++11 -c $< -o $@
 cblock: cblock.cpp cblock.hpp
 	g++ -Wall -g2 -std=c++11 -E $< -o cblock.i
 	g++ -Wall -g2 -std=c++11 -c $< -o cblock.o
