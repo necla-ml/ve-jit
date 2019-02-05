@@ -91,14 +91,16 @@ struct DllBuild : std::vector<DllFile> {
      * If cross-compiling, stop after 'prep' or 'make' stage, because you
      * can't run any dll code. */
     void prep(std::string basename, std::string dir=".");
-    /** For testing -- . \pre you have all the [cross-]compiling tools. */
-    void make();
+    /** For testing -- . \pre you have all the [cross-]compiling tools.
+     * \c env is prefixed to the 'make' command, and could include things like
+     * CFLAGS='...' LDFLAGS='...'*/
+    void make(std::string env="");
     /** open and load symbols, \throw if not \c prepped and \c made */
     DllOpen create(){ return dllopen(); }
     /** \c prep, \c make and load all public symbols (JIT scenario).
      * Use this when caller is able to execute the machine code in the dll
      * (i.e. VE invoking host cross-compile for VE target). */
-    DllOpen create(std::string basename, std::string dir="."){
+    DllOpen create(std::string basename, std::string dir=".", std::string env=""){
         if(!prepped){prep(basename,dir); prepped=true;}
         if(!made){make(); made=true;}
         return dllopen();

@@ -715,9 +715,6 @@ inline Cblock* Cblock::find(std::string p) const {
         return subfind;                     // return subfind Cblock
 #endif
     }
-    CBLOCK_DBG(v,3,"TBD: unknown case\n");
-    assert("unseen case?"==nullptr);
-    return nullptr;
 }
 
 /** add \prefix indent to all non-whitespace lines, \c sep is a set of line separators.

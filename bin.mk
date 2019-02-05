@@ -1,6 +1,10 @@
 #
 # bin.mk (template)
 #
+# Example of how to compile a [local copy of] a jit '-vi.c' file
+#        [copied from ../vednn-ek/test/tmp_cjitConv01/cjitConvFwd_parmstr-vi.c]
+#   CFLAGS=-I../vednn-ek/test/vednn-ftrace1/include make VERBOSE=1 -f bin.mk cjitConvFwd_parmstr-ve.o
+#
 #LDFLAGS?=
 $(LIBNAME): $(OBJECTS)
 	ncc -o $(LIBNAME) $(LDFLAGS) $(filter %-ve.o,$(OBJECTS))
@@ -22,19 +26,19 @@ CXXLANG?=clang++
 # can be totally overridden from environment if nec.
 CFLAGS?=
 CXXFLAGS?=
-CLANG_FLAGS?=$(CFLAGS)
-CXXLANG_FLAGS?=$(CXXFLAGS)
-# env flags append to some reasonable defaults
-CFLAGS:=-O2 -g2 -fPIC $(CFLAGS)
+CLANG_FLAGS?=
+CXXLANG_FLAGS?=
+CFLAGS:=-O3 -g2 -fPIC $(CFLAGS)
 CXXFLAGS:=-std=c++11 -O2 -g2 -fPIC $(CXXFLAGS)
-# clang default flags : env CLANG_FLAGS append to both CLANG_FLAGS and CLANG_VFLAGS
-CLANG_FLAGS:=-target ve -mllvm -O3 -fPIC -ggdb $(CLANG_FLAGS)
-CXXLANG_FLAGS:=-target ve -mllvm -O3 -fPIC -ggdb $(CXXLANG_FLAGS)
+CLANG_FLAGS:=$(CLANG_FLAGS) $(CFLAGS)
+CXXLANG_FLAGS:=$(CXXLANG_FLAGS) $(CXXFLAGS)
+# env flags append to some reasonable defaults
 # clang vector instrinsics flags (reuse C[XX]LANG_FLAGS env variables to adjust)
-CLANG_VI_FLAGS:=-show-spill-message-vec -fno-vectorize -fno-slp-vectorize -fno-crash-diagnostics
+CLANG_VI_FLAGS:=-show-spill-message-vec -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics
+# huh, what is correct? -show-spill-message-vec 
 # maybe: -fno-unroll-loops
-CLANG_FLAGS:=-target ve -mllvm -O3 -fPIC -ggdb   $(CLANG_VI_FLAGS) $(CLANG_FLAGS)
-CXXLANG_FLAGS:=-target ve -mllvm -O3 -fPIC -ggdb $(CLANG_VI_FLAGS) $(CXXLANG_FLAGS)
+CLANG_FLAGS:=-target ve -mllvm $(CLANG_VI_FLAGS) $(CLANG_FLAGS)
+CXXLANG_FLAGS:=-target ve -mllvm $(CXXLANG_FLAGS) $(CXXLANG_FLAGS)
 #
 # We will distinguish C files requiring different types of VE compile
 # by suffix.
@@ -48,7 +52,11 @@ CXXLANG_FLAGS:=-target ve -mllvm -O3 -fPIC -ggdb $(CLANG_VI_FLAGS) $(CXXLANG_FLA
 %-ve.o: %-clang.c
 	$(CLANG) $(CLANG_FLAGS) -c $< -o $@
 %-ve.o: %-vi.c
-	$(CLANG) $(CLANG_VFLAGS) -c $< -o $@
+	which $(CLANG)
+	$(CLANG) --version
+	@# OK $(CLANG) -target ve -O3 -mllvm -show-spill-message-vec -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics -fPIC -o $@ -c $<
+	@# OK $(CLANG) -target ve -mllvm $(CLANG_VI_FLAGS) -fPIC -o $@ -c $<
+	$(CLANG) $(CLANG_FLAGS) $(CFLAGS) -o $@ -c $<
 %-ve.o: %-ncc.cpp
 	$(NCXX) $(CXXFLAGS) -c $< -o $@
 %-ve.o: %-clang.cpp

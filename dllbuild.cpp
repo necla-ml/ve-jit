@@ -250,10 +250,10 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
     }
     prepped = true;
 }
-void DllBuild::make(){
+void DllBuild::make(std::string env){
     if(!prepped)
         THROW("Please prep(basename,dir) before make()");
-    std::string mk = "make VERBOSE=1 -C "+dir.abspath+" -f "+mkfname;
+    std::string mk = env+" make VERBOSE=1 -C "+dir.abspath+" -f "+mkfname;
     // TODO: pstreams to capture stdout, stderr into log files etc.
     auto ret = system(mk.c_str());
     if(ret){

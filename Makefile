@@ -82,9 +82,10 @@ force: # force libs to be recompiled
 	$(MAKE) $(LIBJIT1_TARGETS)
 	$(MAKE) $(LIBVELI_TARGETS)
 
-VEJIT_SHARE:=cblock.cpp dltest1.cpp veli_loadreg.cpp
-vejit.tar.gz: jitpage.h jit_data.h \
-		throw.hpp asmfmt_fwd.hpp asmfmt.hpp codegenasm.hpp velogic.hpp \
+VEJIT_SHARE:=cblock.cpp dltest1.cpp veli_loadreg.cpp dllbuild.cpp
+vejit.tar.gz: jitpage.h jit_data.h throw.hpp \
+		asmfmt_fwd.hpp asmfmt.hpp codegenasm.hpp velogic.hpp \
+		cblock.hpp dllbuild.hpp \
 		jitpage.hpp jitpipe_fwd.hpp jitpipe.hpp cblock.hpp pstreams-1.0.1 \
 		libjit1.a libjit1-x86.a libveli.a libveli-x86.a \
 		${VEJIT_SHARE}
@@ -350,7 +351,7 @@ dltest1-clang: dltest1.cpp jitpipe.hpp Makefile
 dltest1-nclang: dltest1.cpp jitpipe.hpp Makefile
 	g++ $(CXXFLAGS) -DJIT_NCLANG -o $@ -Wall -Werror $< -ldl
 clean:
-	rm -f *.o *.i *.ii *.out *.gch
+	rm -f *.o *.i *.ii *.out *.gch bin.mk*.o
 	rm -f msk*.i msk*.S msk*.dis msk*.out
 	rm -f syscall_hello.o syscall_hello.asm syscall_hello.dis
 	rm -f asmkern0.asm asmkern0.dis
