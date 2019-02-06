@@ -61,3 +61,7 @@ asmfmt-ve
 asmfmt-ve.log
 cblock
 dllbuild-x86
+ftostring
+dltest1link
+dllbuild-ve
+bin_mk.c

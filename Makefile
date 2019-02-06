@@ -17,7 +17,7 @@ SHELL:=/bin/bash
 CFLAGS:=-O2 -g2
 CXXFLAGS:=$(CFLAGS) -std=c++11
 LIBVELI_TARGETS:=libveli-x86.a
-LIBJIT1_TARGETS:=libjit1-x86.a
+LIBJIT1_TARGETS:=libjit1-x86.a libjit1-x86.so
 else
 #
 # we may want to generate jit code on host OR ve
@@ -66,7 +66,7 @@ VE_EXEC:=ve_exec
 OBJDUMP:=nobjdump
 OBJCOPY:=nobjcopy
 LIBVELI_TARGETS:=libveli.a libveli-x86.a
-LIBJIT1_TARGETS:=libjit1.a libjit1-x86.a
+LIBJIT1_TARGETS:=libjit1.a libjit1-x86.a libjit1.so libjit1-x86.so
 endif
 TARGETS+=$(LIBJIT1_TARGETS) $(LIBVELI_TARGETS)
 
@@ -88,6 +88,7 @@ vejit.tar.gz: jitpage.h jit_data.h throw.hpp \
 		cblock.hpp dllbuild.hpp \
 		jitpage.hpp jitpipe_fwd.hpp jitpipe.hpp cblock.hpp pstreams-1.0.1 \
 		libjit1.a libjit1-x86.a libveli.a libveli-x86.a \
+		libjit1.so libjit1-x86.so \
 		${VEJIT_SHARE}
 	rm -rf vejit
 	mkdir vejit
@@ -97,7 +98,7 @@ vejit.tar.gz: jitpage.h jit_data.h throw.hpp \
 	mkdir vejit/share/vejit
 	cp -av $(filter %.hpp,$^) $(filter %.h,$^) vejit/include/
 	cp -av pstreams-1.0.1 vejit/include/
-	cp -av $(filter %.a,$^) vejit/lib/
+	cp -av $(filter %.a,$^) $(filter %.so,$^) vejit/lib/
 	cp -av ${VEJIT_SHARE} vejit/share/vejit/
 	cp -av Makefile.share vejit/share/vejit/Makefile
 	tar czf $@ vejit
@@ -201,31 +202,68 @@ jitve_math: jitve_math.c jitpage.o
 #
 .PRECIOUS: asmfmt.o jit_data.o jitpage.o
 libjit1.a: asmfmt.o jitpage.o jit_data.o \
-		cblock-ve.o dllbuild-ve.o bin.mk-ve.o
+		cblock-ve.o dllbuild-ve.o bin.mk-ve.lo
+	rm -f $@
 	$(AR) cqsv $@ $^
+#libbin_mk.a: bin.mk-ve.o
+#	rm -f $@; $(AR) cqsv $@ $^
+libjit1.so: asmfmt.lo jitpage.lo jit_data.lo \
+		cblock-ve.lo dllbuild-ve.lo bin.mk-ve.lo
+	$(CC) -o $@ -shared $^
 asmfmt.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
 	$(CXX) ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
+asmfmt.lo: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
+	$(CXX) ${CXXFLAGS} -fPIC -O2 -c asmfmt.cpp -o $@
 jit_data.o: jit_data.c jit_data.h
 	$(CC) ${CFLAGS} -O2 -c $< -o $@
+jit_data.lo: jit_data.c jit_data.h
+	$(CC) ${CFLAGS} -fPIC -O2 -c $< -o $@
 jitpage.o: jitpage.c jitpage.h
 	$(CXX) $(CXXFLAGS) -c $< -o $@
-libjit1-x86.a: asmfmt-x86.o jitpage-x86.o jit_data-x86.o \
-		cblock-x86.o dllbuild-x86.o bin.mk-x86.o
-	ar cq $@ $^
-asmfmt-x86.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
-	g++ ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
-jit_data-x86.o: jit_data.c jit_data.h
-	g++ ${CFLAGS} -O2 -c $< -o $@
-jitpage-x86.o: jitpage.c jitpage.h
-	g++ $(CXXFLAGS) -O2 -c $< -o $@
-cblock-x86.o: cblock.cpp cblock.hpp
-	g++    -Wall -g2 -std=c++11 -c $< -o $@
+jitpage.lo: jitpage.c jitpage.h
+	$(CXX) $(CXXFLAGS) -fPIC -c $< -o $@
 cblock-ve.o: cblock.cpp cblock.hpp
 	$(CXX) -Wall -g2 -std=c++11 -c $< -o $@
+cblock-ve.lo: cblock.cpp cblock.hpp
+	$(CXX) -fPIC -Wall -g2 -std=c++11 -c $< -o $@
+dllbuild-ve.o: dllbuild.cpp
+	$(CXX) -o $@ $(CXXFLAGS) -Wall -Werror -c $<
+dllbuild-ve.lo: dllbuild.cpp
+	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -c $<
+
+libjit1-x86.a: asmfmt-x86.o jitpage-x86.o jit_data-x86.o \
+		cblock-x86.o dllbuild-x86.o bin.mk-x86.lo
+	rm -f $@
+	ar cq $@ $^
+libjit1-x86.so: asmfmt-x86.lo jitpage-x86.lo jit_data-x86.lo \
+		cblock-x86.lo dllbuild-x86.lo bin.mk-x86.lo
+	gcc -o $@ -shared $^
+dllbuild-x86.lo: dllbuild.cpp dllbuild.hpp
+	g++ -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -c $<
+asmfmt-x86.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
+	g++ ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
+asmfmt-x86.lo: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
+	g++ ${CXXFLAGS} -fPIC -O2 -c asmfmt.cpp -o $@
+jit_data-x86.o: jit_data.c jit_data.h
+	g++ ${CFLAGS} -O2 -c $< -o $@
+jit_data-x86.lo: jit_data.c jit_data.h
+	g++ ${CFLAGS} -fPIC -O2 -c $< -o $@
+jitpage-x86.o: jitpage.c jitpage.h
+	g++ $(CXXFLAGS) -O2 -c $< -o $@
+jitpage-x86.lo: jitpage.c jitpage.h
+	g++ $(CXXFLAGS) -fPIC -O2 -c $< -o $@
+cblock-x86.o: cblock.cpp cblock.hpp
+	g++    -Wall -g2 -std=c++11 -c $< -o $@
+cblock-x86.lo: cblock.cpp cblock.hpp
+	g++ -fPIC -Wall -g2 -std=c++11 -c $< -o $@
+dllbuild-x86.o: dllbuild.cpp dllbuild.hpp
+	g++ -o $@ $(CXXFLAGS) -Wall -Werror -c $<
+
 cblock: cblock.cpp cblock.hpp
 	g++ -Wall -g2 -std=c++11 -E $< -o cblock.i
 	g++ -Wall -g2 -std=c++11 -c $< -o cblock.o
 	g++ -Wall -g2 cblock.o -o $@
+
 LIBVELI_SRC:=veliFoo.cpp wrpiFoo.cpp
 libveli.a:     $(patsubst %.cpp,%.o,    $(LIBVELI_SRC))
 	#$(AR) cq $@ $^
@@ -299,25 +337,38 @@ dltest0: dltest0.c
 	$(CC) $(CFLAGS) -o $@ -Wall -Werror $< -ldl
 dltest0-x86: dltest0.c	
 	g++ $(CXXFLAGS) -o $@ -Wall -Werror $< -ldl
-bin.mk-x86.o: bin.mk
-	objcopy --input binary --output elf64-x86-64 --binary-architecture i386 \
-		--rename-section .data=.rodata,alloc,load,readonly,data,contents \
-		$< $@
-bin.mk-ve.o: bin.mk
-	nobjcopy --input binary --output elf64-ve --binary-architecture ve \
-		--rename-section .data=.rodata,alloc,load,readonly,data,contents \
-		$< $@
-	# 0000000000000ee6 D _binary_bin_mk_end
-	# 0000000000000ee6 A _binary_bin_mk_size
-	# 0000000000000000 D _binary_bin_mk_start
-dllbuild-x86.o: dllbuild.cpp
-	g++ -o $@ $(CXXFLAGS) -Wall -Werror -c $<
-dllbuild-ve.o: dllbuild.cpp
-	$(CXX) -o $@ $(CXXFLAGS) -Wall -Werror -c $<
+#bin.mk-x86.o: bin.mk
+#	objcopy --input binary --output elf64-x86-64 --binary-architecture i386 \
+#		--rename-section .data=.rodata,alloc,load,readonly,data,contents \
+#		$< $@
+ftostring: ftostring.c
+	gcc -O3 $< -o $@
+bin.mk-x86.lo: bin.mk ftostring
+	# objcopy method lacks --add-symbol.  could use custom linker script, but use xdd...
+	./ftostring bin.mk bin_mk >& bin_mk.c
+	gcc -fPIC -c bin_mk.c -o $@ #&& rm -f bin_mk.c
+	readelf -s $@
+	readelf -h $@
+bin.mk-ve.lo: bin.mk ftostring
+	# objcopy method lacks --add-symbol.  could use custom linker script, but use xdd...
+	./ftostring bin.mk bin_mk >& bin_mk.c
+	$(CC) -fPIC -c bin_mk.c -o $@ #&& rm -f bin_mk.c
+	readelf -s $@
+	readelf -h $@
+#bin.mk-ve.o: bin.mk
+#	nobjcopy --input binary --output elf64-ve --binary-architecture ve \
+#		--rename-section .data=.rodata,alloc,load,readonly,data,contents \
+#		$< $@
+#	# 0000000000000ee6 D _binary_bin_mk_end
+#	# 0000000000000ee6 A _binary_bin_mk_size
+#	# 0000000000000000 D _binary_bin_mk_start
 dllbuild-x86: dllbuild.cpp libjit1-x86.a
-	g++    -o $@ $(CXXFLAGS) -Wall -Werror -DDLLBUILD_MAIN $< -L. -ljit1-x86 -ldl
-dllbuild-ve: dllbuild.cpp libjit1-x86.a
-	$(CXX) -o $@ $(CXXFLAGS) -Wall -Werror -DDLLBUILD_MAIN $< -L. -ljit1 -ldl
+	g++ -o $@ $(CXXFLAGS) -Wall -Werror -DDLLBUILD_MAIN $< -L. -ljit1-x86 -ldl
+dllbuild-x86b: dllbuild.cpp libjit1-x86.so
+	g++ -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1-x86.so -ldl
+dllbuild-ve: dllbuild.cpp libjit1.a libjit1.so
+	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1.a -ldl
+	$(CXX) -o $@b $(CXXFLAGS) -fPIC -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1.so -ldl
 # next test show how to dynamically *compile* and load a dll given
 # a std::string containing 'C' code.
 .PHONY: dltest1.log
@@ -351,7 +402,7 @@ dltest1-clang: dltest1.cpp jitpipe.hpp Makefile
 dltest1-nclang: dltest1.cpp jitpipe.hpp Makefile
 	g++ $(CXXFLAGS) -DJIT_NCLANG -o $@ -Wall -Werror $< -ldl
 clean:
-	rm -f *.o *.i *.ii *.out *.gch bin.mk*.o
+	rm -f *.o *.lo *.i *.ii *.out *.gch bin.mk*.o bin_mk.c
 	rm -f msk*.i msk*.S msk*.dis msk*.out
 	rm -f syscall_hello.o syscall_hello.asm syscall_hello.dis
 	rm -f asmkern0.asm asmkern0.dis

@@ -1,6 +1,7 @@
-#include "jitpage.h"    // low level 'C' utilities
 #include "dllbuild.hpp"
+//#include "cblock.hpp"    // prefix_lines (debug output)
 #include "throw.hpp"
+#include "jitpage.h"    // low level 'C' utilities
 #include <fstream>
 #include <unistd.h>     // getcwd, sysconf, pathconf, access
 #include <assert.h>
@@ -23,16 +24,29 @@ using namespace std;
 #define BIN_MK_FROM_FILE 0
 #if ! BIN_MK_FROM_FILE
 extern "C" {
+#if 0
+// using objcopy to create a .rodata section works ONLY if you make a static lib    
 extern unsigned char _binary_bin_mk_start;
 extern unsigned char _binary_bin_mk_end;
 extern unsigned char _binary_bin_mk_size;
-}
+#else
+// it's always ok to convert to C_string and "compile" bin.mk file into a string
+// see ftostring.cpp
+extern char const bin_mk[];
+extern int bin_mk_size;
+#endif
+}//extern "C"
+
 static std::string bin_mk_file_to_string(){
     //system("ls -l bin.mk");
     //cout<<" binary_bin_mk_start @ "<<(void*)&_binary_bin_mk_start<<endl;
     //cout<<" binary_bin_mk_end   @ "<<(void*)&_binary_bin_mk_end<<endl;
     //cout<<" binary_bin_mk_size    "<<(size_t)&_binary_bin_mk_size<<endl;
-    return std::string((char*)&_binary_bin_mk_start, (size_t)&_binary_bin_mk_size);
+    //return std::string((char*)&_binary_bin_mk_start, (size_t)&_binary_bin_mk_size);
+    cout<<" bin_mk @ "<<(void*)&bin_mk[0]<<endl;
+    cout<<" bin_mk_size "<<bin_mk_size<<endl;
+    cout.flush();
+    return std::string(&bin_mk[0], (size_t)bin_mk_size);
 }
 #else
 static std::string bin_mk_file_to_string(){
@@ -246,7 +260,8 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
             cout<<" Trouble writing file "<<absmkfile<<endl;
             throw;
         }
-        system(("ls -l "+dir.abspath).c_str());
+        //system(("ls -l "+dir.abspath).c_str());
+        cout<<" makefile written: "<<absmkfile<<endl;
     }
     prepped = true;
 }
@@ -259,30 +274,77 @@ void DllBuild::make(std::string env){
     if(ret){
         THROW(" Build error: "+mk);
     }
-    system(("ls -l "+dir.abspath).c_str());
+    //system(("ls -l "+dir.abspath).c_str());
+    cout<<" 'make' ran in: "<<dir.abspath<<endl;
     made = true;
 }
+DllOpen::DllOpen() : basename(), libHandle(nullptr), dlsyms(), libname(), files() {
+    cout<<" +DllOpen"; cout.flush();
+}
+DllOpen::~DllOpen() {
+    cout<<" -DllOpen"; cout.flush();
+    libHandle = nullptr;
+    files.clear();
+}
+// When inlined from cblock.hpp I got linker errors (std::string::size multiple defn of Cblock::append or so !!!!!)
+static std::ostream& prefix_lines(std::ostream& os, std::string code,
+        std::string prefix, std::string sep=std::string("\n")){
+    if( prefix.empty() ){
+        os << code;
+    }else if( !code.empty()){
+        size_t nLoc = 0, nLocEnd;
+        while ((nLocEnd = code.find_first_of(sep, nLoc)) != std::string::npos) {
+            //std::cout<<" line["<<nLoc<<"..."<<nLocEnd<<"] = <"<<code.substr(nLoc,nLocEnd)<<">\n";
+            // line is nLoc..nLocEnd, including the last sep char
+            auto const first_nb = code.find_first_not_of(" \r\n\t",nLoc); // first non blank
+            if( first_nb < nLocEnd ){                     // if not a blank line
+                if( code[first_nb] != '#' ) os << prefix; // never indent cpp directives
+                os << code.substr(nLoc,nLocEnd-nLoc) << "\n"; // code string + newline)
+            }
+            nLoc = nLocEnd+1;
+        }
+        //std::cout<<" nLoc="<<nLoc<<" code.size()="<<code.size();
+        if(nLoc < code.size()){
+            //std::cout<<" line["<<nLoc<<"...end] = <"<<code.substr(nLoc)<<">\n";
+            // line is nLoc..nLocEnd, including the last sep char
+            auto const first_nb = code.find_first_not_of(" \r\n\t",nLoc);
+            if( first_nb < nLocEnd ){
+                if( code[first_nb] != '#' ) os << prefix;
+                os << code.substr(nLoc,nLocEnd-nLoc);
+                //os << "\n"; // NO newline
+            }
+        }
+    }
+    return os;
+}
 DllOpen DllBuild::dllopen(){
+    //using cprog::prefix_lines;
     cout<<"*** DllBuild::dllopen() BEGINS"<<endl;
     if(!(prepped and made))
         THROW("Please prep(basename,dir) and make() before you dllopen()");
     DllOpen ret;
-    cout<<"// TODO: dlopen, get all expected syms immediately"<<endl;
     ret.libname = this->libname;
+    //ret.libHandle = dlopen(fullpath.c_str(), RTLD_LAZY);
     ret.libHandle = dlopen(fullpath.c_str(), RTLD_NOW);
-    if(!ret.libHandle) THROW("failed dlopen("<<fullpath<<")");
+    if(!ret.libHandle){ std::ostringstream oss; oss<<"failed dlopen("<<fullpath<<") dlerror "<<dlerror(); cout<<oss.str()<<endl; cout.flush(); THROW(oss.str()); }
     int nerr=0; // symbol load error count
-    cout<<"Library: "<<this->libname<<endl;
+    cout<<"Library: "<<this->libname<<endl; cout.flush();
     for(auto const& df: *this){
         auto const& filepath = df.getFilePath();
-        cout<<"   File: "<<df.basename<<df.suffix<<" : "<<filepath<<endl;
+        cout<<"   File: "<<df.basename<<df.suffix
+            <<"\n       : "<<filepath<<endl;
+        cout.flush();
         ret.files.push_back(filepath);
         for(auto const& sym: df.syms){
+            //void* addr = nullptr;
+            dlerror(); // clear previous error [if any]
             void* addr = dlsym(ret.libHandle, sym.symbol.c_str());
-            cout<<"      "<<sym.symbol<<" @ "<<addr<<"\n";
-            if(!sym.comment.empty()){ cout<<"        // "<<sym.comment<<"\n"; }
-            if(!sym.fwddecl.empty()){ cout<<"        "<<sym.fwddecl<<"\n"; }
-            if(addr==nullptr){
+            cout<<"   Symbol: "<<sym.symbol<<" @ "<<addr<<"\n"; cout.flush();
+            if(!sym.comment.empty()) prefix_lines(cout,sym.comment,"        // ")<<"\n";
+            if(!sym.fwddecl.empty()) prefix_lines(cout,sym.fwddecl,"        ")<<"\n";
+            char const* dlerr=dlerror();
+            //if(addr==nullptr) // sometimes symbols might really have value 0
+            if(dlerr){
                 cout<<"**Error: could not load symbol "<<sym.symbol<<endl;
                 ++nerr;
             }
@@ -294,6 +356,7 @@ DllOpen DllBuild::dllopen(){
         }
     }
     cout<<"*** DllBuild::dllopen() DONE : nerr="<<nerr<<endl;
+    cout.flush();
     if(nerr) THROW(nerr<<" symbol load errors from "<<libname);
     return ret;
 }

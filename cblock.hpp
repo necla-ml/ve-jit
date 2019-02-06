@@ -256,7 +256,7 @@ struct Cblock {
     //friend Cblock& operator<<(Cblock& cb, Endl<Cblock> const&);
     template<class T> friend T& Endl(T& t);
 };
-template<> Cblock& Endl<Cblock>(Cblock& cblock){
+template<> inline Cblock& Endl<Cblock>(Cblock& cblock){
     cblock._code.append("\n"); // since frequent, cut out some intermediate functions
     return cblock;
 }

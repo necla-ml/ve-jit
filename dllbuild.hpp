@@ -25,10 +25,7 @@
 class DllOpen{
   public:
     void* operator[](std::string const& s) const {return dlsyms.at(s);}
-    ~DllOpen() {
-        libHandle = nullptr;
-        files.clear();
-    }
+    ~DllOpen();
   private:
     friend class DllBuild;
     std::string basename;
@@ -37,7 +34,7 @@ class DllOpen{
     // optional...
     std::string libname;            ///< full path
     std::vector<std::string> files; ///< full paths of all jit code files
-    DllOpen() : basename(), libHandle(nullptr), dlsyms(), libname(), files() {}
+    DllOpen();
 };
 /** single-symbol data. */
 struct SymbolDecl{
