@@ -19,7 +19,8 @@ int main(int argc, char** argv) {
 		sep = (n%10? ",": "\n,");
 	}
 	fclose(f);
-	printf("\n%s 0x00 };",sep); /* I will add a terminal null, just in case */
+	/*printf("%s 0x00",sep); not nec. */
+	printf("\n};");
 	printf("\nint %s_size=sizeof(bin_mk)/sizeof(char);",array_name);
 	printf("\n#ifdef __cplusplus\n}//extern \"C\" {\n#endif // __cplusplus\n");
 	return 0;

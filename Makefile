@@ -204,12 +204,14 @@ jitve_math: jitve_math.c jitpage.o
 libjit1.a: asmfmt.o jitpage.o jit_data.o \
 		cblock-ve.o dllbuild-ve.o bin.mk-ve.lo
 	rm -f $@
-	$(AR) cqsv $@ $^
+	$(AR) rcs $@ $^
+	readelf -h $@
 #libbin_mk.a: bin.mk-ve.o
-#	rm -f $@; $(AR) cqsv $@ $^
+#	rm -f $@; $(AR) rcs $@ $^
 libjit1.so: asmfmt.lo jitpage.lo jit_data.lo \
 		cblock-ve.lo dllbuild-ve.lo bin.mk-ve.lo
 	$(CC) -o $@ -shared $^
+	readelf -h $@
 asmfmt.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
 	$(CXX) ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
 asmfmt.lo: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
@@ -234,10 +236,14 @@ dllbuild-ve.lo: dllbuild.cpp
 libjit1-x86.a: asmfmt-x86.o jitpage-x86.o jit_data-x86.o \
 		cblock-x86.o dllbuild-x86.o bin.mk-x86.lo
 	rm -f $@
-	ar cq $@ $^
+	ar rcs $@ $^
+	readelf -h $@
+	readelf -d $@
 libjit1-x86.so: asmfmt-x86.lo jitpage-x86.lo jit_data-x86.lo \
 		cblock-x86.lo dllbuild-x86.lo bin.mk-x86.lo
 	gcc -o $@ -shared $^
+	readelf -h $@
+	readelf -d $@
 dllbuild-x86.lo: dllbuild.cpp dllbuild.hpp
 	g++ -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -c $<
 asmfmt-x86.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
@@ -266,10 +272,10 @@ cblock: cblock.cpp cblock.hpp
 
 LIBVELI_SRC:=veliFoo.cpp wrpiFoo.cpp
 libveli.a:     $(patsubst %.cpp,%.o,    $(LIBVELI_SRC))
-	#$(AR) cq $@ $^
-	rm -f $@; $(AR) cqsv $@ $^
+	#$(AR) rcs $@ $^
+	rm -f $@; $(AR) rcs $@ $^
 libveli-x86.a: $(patsubst %.cpp,%-x86.o,$(LIBVELI_SRC))
-	$(AR) cq $@ $^
+	$(AR) rcs $@ $^
 $(patsubst $(LIBVELI_SRC),%.cpp,%-x86.o) %-x86.o: %.cpp
 	g++ ${CXXFLAGS} -Wall -O2 -c $< -o $@
 #$(patsubst $(LIBVELI_SRC),%.cpp,%.o) %.o: %.cpp
@@ -344,13 +350,13 @@ dltest0-x86: dltest0.c
 ftostring: ftostring.c
 	gcc -O3 $< -o $@
 bin.mk-x86.lo: bin.mk ftostring
-	# objcopy method lacks --add-symbol.  could use custom linker script, but use xdd...
+	# objcopy method lacks --add-symbol.  could use custom linker script, but use ftostring...
 	./ftostring bin.mk bin_mk >& bin_mk.c
 	gcc -fPIC -c bin_mk.c -o $@ #&& rm -f bin_mk.c
 	readelf -s $@
 	readelf -h $@
 bin.mk-ve.lo: bin.mk ftostring
-	# objcopy method lacks --add-symbol.  could use custom linker script, but use xdd...
+	# objcopy method lacks --add-symbol.  could use custom linker script, but use ftostring...
 	./ftostring bin.mk bin_mk >& bin_mk.c
 	$(CC) -fPIC -c bin_mk.c -o $@ #&& rm -f bin_mk.c
 	readelf -s $@
@@ -362,13 +368,31 @@ bin.mk-ve.lo: bin.mk ftostring
 #	# 0000000000000ee6 D _binary_bin_mk_end
 #	# 0000000000000ee6 A _binary_bin_mk_size
 #	# 0000000000000000 D _binary_bin_mk_start
+#	# This object file is NOT RELOCATABLE, so cannot be put into a .so
+#	# because the symbols are missing info (and my linker does no have --add-symbol or such)
+#	# use portable 'ftostring.c' and compile (uggh)
+.PHONY: dllbuild dllbuild-clean dllbuild-do
+dllbuild: dllbuild-clean dllbuild-do
+dllbuild-clean:
+	rm -f dllbuild-{x86,x86b,ve,veb} libjit1{,-x86}.{a,so} *.o *.lo
+dllbuild-do:
+	{ $(MAKE) dllbuild-x86 dllbuild-x86b dllbuild-ve;\
+		echo "~~~~~~~~x86"; ./dllbuild-x86 7; \
+		echo "~~~~~~~~x86 dll"; ./dllbuild-x86b 7; \
+		echo "~~~~~~~~ve"; ./dllbuild-ve 7; \
+		echo "~~~~~~~~ve dll"; ./dllbuild-veb 7; \
+		} >& dllbuild.log
 dllbuild-x86: dllbuild.cpp libjit1-x86.a
-	g++ -o $@ $(CXXFLAGS) -Wall -Werror -DDLLBUILD_MAIN $< -L. -ljit1-x86 -ldl
+	g++ -o $@ $(CXXFLAGS) -Wall -Werror -DDLLBUILD_MAIN $< -L. libjit1-x86.a -ldl
+	readelf -d $@
 dllbuild-x86b: dllbuild.cpp libjit1-x86.so
 	g++ -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1-x86.so -ldl
+	readelf -d $@
 dllbuild-ve: dllbuild.cpp libjit1.a libjit1.so
 	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1.a -ldl
+	nreadelf -d $@
 	$(CXX) -o $@b $(CXXFLAGS) -fPIC -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1.so -ldl
+	nreadelf -d $@b
 # next test show how to dynamically *compile* and load a dll given
 # a std::string containing 'C' code.
 .PHONY: dltest1.log

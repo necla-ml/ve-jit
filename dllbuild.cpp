@@ -561,6 +561,12 @@ int main(int argc,char**argv){
     cout<<" STOPPING EARLY: we are an x86 executable and should not load a VE .so"<<endl;
 #else
     DllOpen lib = dllbuild.create();
+    typedef int (*LuckyNumberFn)();
+    void * luckySymbol = lib["myLuckyNumber"]; // create stores symbols as void*
+    LuckyNumberFn cjit_fn = (LuckyNumberFn)(luckySymbol);
+    cout<<" Calling symbol 'myLuckyNumber' ... cjit_fn @ "<<(void*)cjit_fn<<endl; cout.flush();
+    int cjit_fn_ret = cjit_fn();
+    cout<<" cjit_fn returned "<<cjit_fn_ret<<endl; cout.flush();
 #endif
 
 #if 0 // later ...
