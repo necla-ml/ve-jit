@@ -1,5 +1,8 @@
 VEJIT_ROOT:=.
 SHELL:=/bin/bash
+# major clean and rebuild tests:
+#   dlprt
+#   dllbuild
 
 ifneq ($(CC:ncc%=ncc),ncc)
 
@@ -8,7 +11,7 @@ ifneq ($(CC:ncc%=ncc),ncc)
 # only a few things can compile for x86...
 #
 TARGETS:=test_strMconst asmfmt-x86 jitpp_loadreg veliFoo.o
-TARGETS+=veliFoo.o veli_loadreg-x86
+TARGETS+=veliFoo.o veli_loadreg-x86 dlprt-x86
 VE_EXEC:=time
 OBJDUMP:=objdump
 OBJDUMP:=objdump
@@ -44,7 +47,8 @@ TARGETS=asmkern0.asm libjit1.a libjit1-x86.a asmfmt-ve\
 	jitve0 jitve_hello test_strMconst jitve_math \
 	jitpp_hello test_naspipe-x86 test_vejitpage_sh-x86 \
 	jitpp_loadreg \
-	asmfmt-x86 veli_loadreg-x86 veli_loadreg
+	asmfmt-x86 veli_loadreg-x86 veli_loadreg \
+	dlprt-x86 dlprt-ve
 # slow!
 #TARGETS+=test_naspipe test_vejitpage_sh
 CC?=ncc-1.5.1
@@ -208,14 +212,14 @@ libjit1.a: asmfmt.o jitpage.o jit_data.o \
 	readelf -h $@
 #libbin_mk.a: bin.mk-ve.o
 #	rm -f $@; $(AR) rcs $@ $^
-libjit1.so: asmfmt.lo jitpage.lo jit_data.lo \
-		cblock-ve.lo dllbuild-ve.lo bin.mk-ve.lo
-	$(CC) -o $@ -shared $^
+#// nc++ only has a .a version std:: C++ library?
+#// dlrt-ve needs -lnc++ before dlopen would succeed !
+libjit1.so: jitpage.lo jit_data.lo bin.mk-ve.lo \
+	asmfmt.lo cblock-ve.lo dllbuild-ve.lo # C++ things
+	$(CXX) -o $@ -shared $^ #-ldl #-lnc++
 	readelf -h $@
-asmfmt.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
-	$(CXX) ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
-asmfmt.lo: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
-	$(CXX) ${CXXFLAGS} -fPIC -O2 -c asmfmt.cpp -o $@
+	readelf -d $@
+# C things	
 jit_data.o: jit_data.c jit_data.h
 	$(CC) ${CFLAGS} -O2 -c $< -o $@
 jit_data.lo: jit_data.c jit_data.h
@@ -224,6 +228,11 @@ jitpage.o: jitpage.c jitpage.h
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 jitpage.lo: jitpage.c jitpage.h
 	$(CXX) $(CXXFLAGS) -fPIC -c $< -o $@
+# C++ things...	
+asmfmt.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
+	$(CXX) ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
+asmfmt.lo: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
+	$(CXX) ${CXXFLAGS} -fPIC -O2 -c asmfmt.cpp -o $@
 cblock-ve.o: cblock.cpp cblock.hpp
 	$(CXX) -Wall -g2 -std=c++11 -c $< -o $@
 cblock-ve.lo: cblock.cpp cblock.hpp
@@ -241,7 +250,7 @@ libjit1-x86.a: asmfmt-x86.o jitpage-x86.o jit_data-x86.o \
 	readelf -d $@
 libjit1-x86.so: asmfmt-x86.lo jitpage-x86.lo jit_data-x86.lo \
 		cblock-x86.lo dllbuild-x86.lo bin.mk-x86.lo
-	gcc -o $@ -shared $^
+	gcc -o $@ -shared $^ # -ldl
 	readelf -h $@
 	readelf -d $@
 dllbuild-x86.lo: dllbuild.cpp dllbuild.hpp
@@ -269,6 +278,34 @@ cblock: cblock.cpp cblock.hpp
 	g++ -Wall -g2 -std=c++11 -E $< -o cblock.i
 	g++ -Wall -g2 -std=c++11 -c $< -o cblock.o
 	g++ -Wall -g2 cblock.o -o $@
+# x86 tool to dlopen and walk symbol table	
+.PHONY: dlprt dlprt-clean dlprt-do
+dlprt: dlprt-clean dlprt-do
+dlprt-clean:
+	rm -f dlprt-x86 dlprt-ve libjit1.so libjit1-x86.so dlprt-x86.log dlprt-ve.log
+dlprt-do: dlprt-x86.log
+ifeq ($(CC:ncc%=ncc),ncc)
+dlprt-do: dlprt-ve.log
+endif
+dlprt-x86: dlprt.c
+	g++ -E $< -o $@.i
+	g++ -g2 $< -o $@ -ldl
+	{ ./$@ libm.so; echo "exit status $$?"; } >& dlprt-x86.log; \
+		echo "exit status $$?";
+dlprt-ve: dlprt.c
+	nc++ -E $< -o $@.i
+	nc++ -g2 $< -o $@ -ldl
+	{ ./$@ libm.so; echo "exit status $$?"; } >& dlprt-ve.log; \
+		echo "exit status $$?";
+.PHONY: dlprt-x86.log dlprt-ve.log
+dlprt-ve.log: dlprt-ve libjit1.so
+	#./dlprt-ve libjit1.so; echo "exit status $$?"
+	{ ./dlprt-ve libjit1.so; echo "exit status $$?"; } >> dlprt-ve.log 2>&1; \
+		echo "exit status $$?";
+dlprt-x86.log: dlprt-x86 libjit1-x86.so
+	# The next test FAILS
+	{ ./dlprt-x86 libjit1-x86.so; echo "exit status $$?"; } >> dlprt-x86.log 2>&1; \
+		echo "exit status $$?";
 
 LIBVELI_SRC:=veliFoo.cpp wrpiFoo.cpp
 libveli.a:     $(patsubst %.cpp,%.o,    $(LIBVELI_SRC))
@@ -371,17 +408,32 @@ bin.mk-ve.lo: bin.mk ftostring
 #	# This object file is NOT RELOCATABLE, so cannot be put into a .so
 #	# because the symbols are missing info (and my linker does no have --add-symbol or such)
 #	# use portable 'ftostring.c' and compile (uggh)
+
 .PHONY: dllbuild dllbuild-clean dllbuild-do
 dllbuild: dllbuild-clean dllbuild-do
 dllbuild-clean:
 	rm -f dllbuild-{x86,x86b,ve,veb} libjit1{,-x86}.{a,so} *.o *.lo
 dllbuild-do:
+	# It is important to demo bin.mk basic correctness for the different build methods
+	# So now dllbuild puts multiple named builds into tmpdllbuild/ ,
+	# differentiated by a a new 'suffix' argument to the test program.
 	{ $(MAKE) dllbuild-x86 dllbuild-x86b dllbuild-ve;\
-		echo "~~~~~~~~x86"; ./dllbuild-x86 7; \
-		echo "~~~~~~~~x86 dll"; ./dllbuild-x86b 7; \
-		echo "~~~~~~~~ve"; ./dllbuild-ve 7; \
-		echo "~~~~~~~~ve dll"; ./dllbuild-veb 7; \
-		} >& dllbuild.log
+		echo ""; echo "TEST dllbuild x86"; ./dllbuild-x86 7; \
+		echo ""; echo "TEST dllbuild x86 dll"; ./dllbuild-x86b 7; \
+		echo ""; echo "TEST dllbuild ve"; ./dllbuild-ve 7; \
+		echo ""; echo "TEST dllbuild ve ncc";     ./dllbuild-ve 7; \
+		echo ""; echo "TEST dllbuild ve clang";   ./dllbuild-ve 7 -clang.c; \
+		echo ""; echo "TEST dllbuild ve nc++";    ./dllbuild-ve 7 -ncc.cpp; \
+		echo ""; echo "TEST dllbuild ve clang++"; ./dllbuild-ve 7 -clang.cpp; \
+		echo ""; echo "TEST dllbuild ve clang C+intrinsics"; ./dllbuild-ve 7 -vi.c; \
+		} >& dllbuild.log && echo "dllbuild.log seems OK" || echo "dllbuild.log Huh?"
+	{ \
+		echo ""; echo "TEST dllbuild ve dll ncc";     ./dllbuild-veb 7; \
+		echo ""; echo "TEST dllbuild ve dll clang";   ./dllbuild-veb 7 -clang.c; \
+		echo ""; echo "TEST dllbuild ve dll nc++";    ./dllbuild-veb 7 -ncc.cpp; \
+		echo ""; echo "TEST dllbuild ve dll clang++"; ./dllbuild-veb 7 -clang.cpp; \
+		echo ""; echo "TEST dllbuild ve dll clang C+intrinsics"; ./dllbuild-veb 7 -vi.c; \
+		} >& dllvebug.log && echo "dllvebug.log seems OK" || echo "dllvebug.log Huh?"
 dllbuild-x86: dllbuild.cpp libjit1-x86.a
 	g++ -o $@ $(CXXFLAGS) -Wall -Werror -DDLLBUILD_MAIN $< -L. libjit1-x86.a -ldl
 	readelf -d $@

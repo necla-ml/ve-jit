@@ -16,6 +16,7 @@
 
 #include <stdint.h> // uint64_t
 #include <stddef.h> // size_t
+
 #ifdef __cplusplus
 extern "C" {
 //#warning "Good, jitpage.h is extern 'C' for C++ compile"
@@ -89,6 +90,7 @@ extern "C" {
      * \pre \c mconst must be at least 6 chars long (5+terminal nul)
      */
     int strMconst(char *mconst, uint64_t const parm);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

@@ -3,6 +3,7 @@
 #include "throw.hpp"
 #include "jitpage.h"    // low level 'C' utilities
 #include <fstream>
+#include <cstring>
 #include <unistd.h>     // getcwd, sysconf, pathconf, access
 #include <assert.h>
 //#include "jitpipe.hpp"
@@ -324,18 +325,28 @@ DllOpen DllBuild::dllopen(){
         THROW("Please prep(basename,dir) and make() before you dllopen()");
     DllOpen ret;
     ret.libname = this->libname;
-    //ret.libHandle = dlopen(fullpath.c_str(), RTLD_LAZY);
+    cout<<"DllBuild::dllopen() calling dlopen... libname="<<libname<<endl; cout.flush();
+    cout<<"DllBuild::dllopen() calling dlopen... fullpath="<<fullpath<<endl; cout.flush();
+#if 1
     ret.libHandle = dlopen(fullpath.c_str(), RTLD_NOW);
+#elif 0
+    ret.libHandle = dlopen(fullpath.c_str(), RTLD_LAZY);
+#else
+    static char * fpath=nullptr;
+    if( fpath != nullptr ) free(fpath);
+    strcpy( fpath, fullpath.c_str() );
+    ret.libHandle = dlopen(fpath, RTLD_LAZY);
+#endif
     if(!ret.libHandle){ std::ostringstream oss; oss<<"failed dlopen("<<fullpath<<") dlerror "<<dlerror(); cout<<oss.str()<<endl; cout.flush(); THROW(oss.str()); }
     int nerr=0; // symbol load error count
     cout<<"Library: "<<this->libname<<endl; cout.flush();
     for(auto const& df: *this){
-        auto const& filepath = df.getFilePath();
+        auto const filepath = df.getFilePath();
         cout<<"   File: "<<df.basename<<df.suffix
             <<"\n       : "<<filepath<<endl;
         cout.flush();
         ret.files.push_back(filepath);
-        for(auto const& sym: df.syms){
+        for(auto const sym: df.syms){
             //void* addr = nullptr;
             dlerror(); // clear previous error [if any]
             void* addr = dlsym(ret.libHandle, sym.symbol.c_str());
@@ -456,6 +467,21 @@ cout<<"EXCELLENT, dlsym(jitLibHandle,\"myLuckyNumber\") has my jit function"
 #ifdef DLLBUILD_MAIN
 using namespace std;
 
+// copied here to avoid including jitpipe_fwd.hpp
+static std::string multiReplace(
+        const std::string needle,
+        const std::string replace,
+        std::string haystack)
+{
+    size_t const nlen = needle.length();
+    size_t const rlen = replace.length();
+    size_t nLoc = 0;;
+    while ((nLoc = haystack.find(needle, nLoc)) != std::string::npos) {
+        haystack.replace(nLoc, nlen, replace);
+        nLoc += rlen;
+    }
+    return haystack;
+}
 #if 0
 /** print a prefix stating where we think we're running */
 static void pfx_where(){
@@ -494,10 +520,22 @@ std::string program_myLuckyNumber( int const runtime_lucky_number ){
 
 using namespace std;
 int main(int argc,char**argv){
-    if( argc != 2 ){
-        cout<<" This programs requires one parameter, you favorite 'int' number"<<endl;
+    if( argc < 2 || argc > 3){
+        cout<<
+            "\n Usage:  foo INT [options]"
+            "\n    INT is your 'jit' lucky number"
+            "\n options:"
+            "\n    file suffix [-ncc.c] controls compiler defaults:"
+            "\n    foo-ncc.c /.cpp   : ncc/nc++ cross-compile   --> foo-ve.o"
+            "\n    foo-vi.c  /.cpp   : clang vector instrinsics --> foo-ve.o"
+            "\n        Modify 'bin.mk' to change this behavior."
+            "\n        and then rebuild libjit1"
+            ;
         return 1;
     }
+    printf(" Program: %s %s",argv[0],argv[1]);
+    if(argc==3) printf(" %s",argv[2]);
+    printf("\n");
 
     int runtime_lucky_number;
     try{
@@ -507,16 +545,23 @@ int main(int argc,char**argv){
         cout<<" Trouble converting program argument into an int?"<<endl;
         return 1;
     }
+    char const* codefile_suffix = "-ncc.c";
+    if( argc >= 3 ){
+        codefile_suffix = argv[2];
+    }
 
     string ccode = program_myLuckyNumber( runtime_lucky_number );
     cout<<" Here is the JIT code for returning the lucky number "<<runtime_lucky_number<<":\n"
         <<string(80,'-')<<"\nstd::string ccode -->\n"<<ccode<<"\";\n"<<string(80,'-')<<endl;
 
+
     string libBase("tmpdllbuild");
+    libBase.append(codefile_suffix);
+    libBase = multiReplace(".","_",libBase);
 
     DllFile tmplucky;
     tmplucky.basename = libBase + "_file0";
-    tmplucky.suffix = "-ncc.c"; // -ve implies "use ncc to compile"
+    tmplucky.suffix = codefile_suffix;
     tmplucky.code = ccode;
     tmplucky.syms.push_back(
             SymbolDecl("myLuckyNumber",

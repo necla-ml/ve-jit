@@ -28,7 +28,7 @@ struct JITpipe;         // run std::string through cpp and nas (VE assembler) --
 struct HEXDUMPpipe;     // run std::string through hexdump -C
 struct BLOBDISpipe;     // run std::string through binary-blob disassembly
 
-/** non-overlapping global \c needle --> \c replace in \c haystack */
+/** non-overlapping global \c needle --> \c replace in \c haystack. \return \e fresh string. */
 inline std::string multiReplace(
         const std::string needle,
         const std::string replace,

@@ -7,7 +7,10 @@
 #
 #LDFLAGS?=
 $(LIBNAME): $(OBJECTS)
-	ncc -o $(LIBNAME) $(LDFLAGS) $(filter %-ve.o,$(OBJECTS))
+	ncc -o $@ $(LDFLAGS) $(filter %-ve.o,$(OBJECTS))
+	nreadelf -h $@
+	nreadelf -d $@
+	nreadelf -s $@
 # This file ONLY generates -ve.o object files or VE .bin binary blobs
 # 
 # Allow override of default compiler (maybe particular version is required)
@@ -28,8 +31,12 @@ CFLAGS?=
 CXXFLAGS?=
 CLANG_FLAGS?=
 CXXLANG_FLAGS?=
-CFLAGS:=-O3 -g2 -fPIC $(CFLAGS)
-CXXFLAGS:=-std=c++11 -O2 -g2 -fPIC $(CXXFLAGS)
+$(info Begin with CFLAGS        = $(CFLAGS))
+$(info Begin with CXXFLAGS      = $(CXXFLAGS))
+$(info Begin with CLANG_FLAGS   = $(CLANG_FLAGS))
+$(info Begin with CXXLANG_FLAGS = $(CXXLANG_FLAGS))
+CFLAGS:=-O2 -fPIC $(CFLAGS)
+CXXFLAGS:=-std=c++11 -O2 -fPIC $(CXXFLAGS)
 CLANG_FLAGS:=$(CLANG_FLAGS) $(CFLAGS)
 CXXLANG_FLAGS:=$(CXXLANG_FLAGS) $(CXXFLAGS)
 # env flags append to some reasonable defaults
@@ -39,6 +46,10 @@ CLANG_VI_FLAGS:=-show-spill-message-vec -fno-vectorize -fno-unroll-loops -fno-sl
 # maybe: -fno-unroll-loops
 CLANG_FLAGS:=-target ve -mllvm $(CLANG_VI_FLAGS) $(CLANG_FLAGS)
 CXXLANG_FLAGS:=-target ve -mllvm $(CXXLANG_FLAGS) $(CXXLANG_FLAGS)
+$(info Ending with CFLAGS        = $(CFLAGS))
+$(info Ending with CXXFLAGS      = $(CXXFLAGS))
+$(info Ending with CLANG_FLAGS   = $(CLANG_FLAGS))
+$(info Ending with CXXLANG_FLAGS = $(CXXLANG_FLAGS))
 #
 # We will distinguish C files requiring different types of VE compile
 # by suffix.
@@ -47,16 +58,21 @@ CXXLANG_FLAGS:=-target ve -mllvm $(CXXLANG_FLAGS) $(CXXLANG_FLAGS)
 #       and %-clang.c    via clang scalar code (want good optimizer)
 #       and %-vi.c       via clang VECTOR INTRINSICS
 # All with CFLAGS/CXXFLAGS
+# Begin by cancelling the default rule -- we REQUIRE a special suffix
+%.o: %.c
 %-ve.o: %-ncc.c
 	$(NCC) $(CFLAGS) -c $< -o $@
 %-ve.o: %-clang.c
 	$(CLANG) $(CLANG_FLAGS) -c $< -o $@
+# OK $(CLANG) -target ve -O3 -mllvm -show-spill-message-vec -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics -fPIC -o $@ -c $<
+# OK $(CLANG) -target ve -mllvm $(CLANG_VI_FLAGS) -fPIC -o $@ -c $<
 %-ve.o: %-vi.c
 	which $(CLANG)
 	$(CLANG) --version
-	@# OK $(CLANG) -target ve -O3 -mllvm -show-spill-message-vec -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics -fPIC -o $@ -c $<
-	@# OK $(CLANG) -target ve -mllvm $(CLANG_VI_FLAGS) -fPIC -o $@ -c $<
-	$(CLANG) $(CLANG_FLAGS) $(CFLAGS) -o $@ -c $<
+	#$(CLANG) $(CLANG_FLAGS) -o $@ -c $<
+	$(CLANG) $(CLANG_FLAGS) -o $(patsubst %-vi.c,%-vi.s,$<) -S $<
+	cat $(patsubst %-vi.c,%-vi.s,$<)
+	$(NCC) $(CFLAGS) -o $@ -c $(patsubst %-vi.c,%-vi.s,$<)
 %-ve.o: %-ncc.cpp
 	$(NCXX) $(CXXFLAGS) -c $< -o $@
 %-ve.o: %-clang.cpp
