@@ -5,6 +5,7 @@
 #include <string>
 #include <stack>
 
+#if ASMFMTREMOVE < 2
 /* terminal .S --> .bin or throw */
 std::string fname_bin( std::string const& fname_S );
 
@@ -24,18 +25,12 @@ struct ExecutablePage {
     JitPage const page;
     static const int verbosity=0; 
 };
+#endif //CODEREMOVE < 2
 
-/** remove asm comments (after '#'),
- * accepting ';'- or newline-separated multiline \c asmcode.
- * The returned string may be uglified, so you might need to
- * pass it through an \c AsmFmtCols::ins again.
- * Could be a static member fn? */
-std::string uncomment_asm( std::string asmcode );
+/* assemble a .S file to a .bin file and load it into an ExecutablePage */
+//ExecutablePage asm2page( std::string const& fname_S );
 
-/** assemble a .S file to a .bin file and load it into an ExecutablePage */
-ExecutablePage asm2page( std::string const& fname_S );
-
-
+#if ASMFMTREMOVE < 1
 /** simple assembly line formatting. -std=c++11.
  *
  * Keeping adding labels, instructions and comments to build up
@@ -65,11 +60,14 @@ class AsmFmtCols {
        * Any subsequent non-const function calls will throw an error.
        * To kill this formatter \em skipping cout, use \c flush(). */
       void write();
-      std::string str() const;                ///< return copy of internal ostringstream
+      /** return copy of internal ostringstream.
+       * \note This returns a temporary so that directly calling \c c_str()
+       * on the return value results in a \b dangling pointer. */
+      std::string str() const;
       /** Silent pre-destructor \c write(), possibly with file output,
-       * that returns the text as a std::string. */
+       * that returns the text as a std::string temporary. */
       std::string flush();
-      /** Flush any code, and also output the \c stack_undefs */
+      /** Flush any code, and also output the \c stack_undefs. \return a temporary string */
       std::string flush_all() { pop_scopes(); return flush(); }
       //std::string flush_undefs(); // old name
       /** output #define text for these string pairs, and push a corresponding
@@ -161,7 +159,6 @@ class AsmFmtCols {
       /** push with \c scope, pop with \c pop_scopes or pop_scope. */
       std::stack<std::string> stack_undefs;
 };
-
 #if 0
 /** extend AsmFmtCols with scoped symbolic register names */
 class AsmFmt : protected AsmFmtCols {
@@ -170,6 +167,14 @@ class AsmFmt : protected AsmFmtCols {
 
 };
 #endif
+/** remove asm comments (after '#'),
+ * accepting ';'- or newline-separated multiline \c asmcode.
+ * The returned string may be uglified, so you might need to
+ * pass it through an \c AsmFmtCols::ins again.
+ * Could be a static member fn? */
+std::string uncomment_asm( std::string asmcode );
+
+#endif //CODEREMOVE < 1
 
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
 #endif // ASMFMT_FWD_HPP

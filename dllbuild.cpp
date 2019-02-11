@@ -122,12 +122,17 @@ std::string DllFile::write(SubDir const& subdir){
     this->abspath = subdir.abspath + "/" + this->basename + this->suffix;
     try{
         std::ofstream ofs(abspath);
+        cout<<" ofstream ofs("<<abspath<<") CREATED"<<endl; cout.flush();
         ofs <<"//Dllfile: basename = "<<basename
             <<"\n//Dllfile: suffix   = "<<suffix
-            <<"\n//Dllfile: abspath  = "<<abspath
-            <<"\n"<<comment
-            <<"\n"<<code
+            <<"\n//Dllfile: abspath  = "<<abspath;
+        cout<<" writing comment: "<<comment<<endl; cout.flush();
+        ofs <<"\n"<<comment;
+        cout<<" writing code: "<<code<<endl; cout.flush();
+        ofs <<"\n"<<code
             <<endl;
+        cout<<" and an extra ofs.flush() !!!"<<endl; cout.flush();
+        ofs.flush();
         ofs.close();
     }catch(...){
         cout<<" Trouble writing file "<<abspath<<endl;
@@ -284,6 +289,7 @@ DllOpen::DllOpen() : basename(), libHandle(nullptr), dlsyms(), libname(), files(
 }
 DllOpen::~DllOpen() {
     cout<<" -DllOpen"; cout.flush();
+    if(libHandle) dlclose(libHandle);
     libHandle = nullptr;
     files.clear();
 }
@@ -318,12 +324,13 @@ static std::ostream& prefix_lines(std::ostream& os, std::string code,
     }
     return os;
 }
-DllOpen DllBuild::dllopen(){
+std::unique_ptr<DllOpen> DllBuild::dllopen(){
     //using cprog::prefix_lines;
     cout<<"*** DllBuild::dllopen() BEGINS"<<endl;
     if(!(prepped and made))
         THROW("Please prep(basename,dir) and make() before you dllopen()");
-    DllOpen ret;
+    std::unique_ptr<DllOpen> pRet( new DllOpen );
+    DllOpen& ret = *pRet;
     ret.libname = this->libname;
     cout<<"DllBuild::dllopen() calling dlopen... libname="<<libname<<endl; cout.flush();
     cout<<"DllBuild::dllopen() calling dlopen... fullpath="<<fullpath<<endl; cout.flush();
@@ -369,7 +376,7 @@ DllOpen DllBuild::dllopen(){
     cout<<"*** DllBuild::dllopen() DONE : nerr="<<nerr<<endl;
     cout.flush();
     if(nerr) THROW(nerr<<" symbol load errors from "<<libname);
-    return ret;
+    return pRet;
 }
 
 #if 0
@@ -495,7 +502,7 @@ static void pfx_where(){
 std::string program_myLuckyNumber( int const runtime_lucky_number ){
     std::ostringstream oss;
     // Best practice, since 'c' code might be compiled via C++ compiler:
-    oss<<"#ifdef __cpluscplus\n"
+    oss<<"#ifdef __cplusplus\n"
         "extern \"C\" {\n"
         "#endif\n";
 
@@ -512,7 +519,7 @@ std::string program_myLuckyNumber( int const runtime_lucky_number ){
     oss<<"}\n";
     // and force the jit kernel to have 'C' linkage.  'C' linkage
     // means we can look up the plain symbol name without issue.
-    oss<<"#ifdef __cpluscplus\n"
+    oss<<"#ifdef __cplusplus\n"
         "} // extern \"C\"\n"
         "#endif\n";
     return oss.str();
@@ -573,16 +580,48 @@ int main(int argc,char**argv){
     dllbuild.push_back(tmplucky);
 
     if(1) { // test subdir creation and tmpluck.write
+        system("rm -rf subdir1");           // clean up this test
         if(createDirectoryAnyDepth("subdir1/subdir2"))
             THROW(" could not create subdir1/subdir2 writable");
         else cout<<" seems subdir1/subdir2 is writable"<<endl;
+        if(access("subdir1/subdir2",W_OK)){
+            cout<<" not there yet? sleep(1) ..."; cout.flush();
+            sleep(1);
+        }
+        if(access("subdir1/subdir2",W_OK))
+            THROW(" Still no write access to template file subdir1/subdir2");
+        cout<<" GOOD. subdir seems there"<<endl;
         // DllFile tmplucky
         // --> file at abspath
         // <current dir>/subdir1/subdir2/tmpdllbuild_file0-ncc.c
         string abspath = tmplucky.write(SubDir("subdir1/subdir2"));
+        cout<<" abspath = "<<abspath<<endl; cout.flush();
+        if(access(abspath.c_str(),R_OK)){
+            cout<<abspath<<" not there yet? sleep(1) ..."; cout.flush();
+            sleep(1);
+        }
+        cout<<" abspath = "<<abspath.c_str()<<endl; cout.flush();
+        if(access(abspath.c_str(),R_OK)){
+            cout<<" still no access!"<<endl; cout.flush();
+            THROW(" Still no read access to template file subdir1/subdir2");
+        }
+        cout<<" abspath = "<<abspath<<endl; cout.flush();
+        cout<<" GOOD. apparently have read access to tmplucky.write(...) path"<<endl; cout.flush();
+        cout<<" GOOD. created abspath = "<<abspath<<endl; cout.flush();
+        cout<<" system commands ... "<<endl; cout.flush();
         system("ls -l subdir1/subdir2");
+        cout.flush();
+#if 0
         system(("ls -l "+abspath).c_str());
         system(("cat "+abspath).c_str());
+#else
+        { string cmd = "ls -l " + abspath;
+            cout<<" Try system( "<< cmd <<" )"<<endl; cout.flush();
+            system(cmd.c_str()); cout.flush(); }
+        { string cmd = "cat   " + abspath;
+            cout<<" Try system( "<< cmd <<" )"<<endl; cout.flush();
+            system(cmd.c_str()); cout.flush(); }
+#endif
         system("rm -rf subdir1");           // clean up this test
     }
 
@@ -605,7 +644,8 @@ int main(int argc,char**argv){
 #if !defined(__ve)
     cout<<" STOPPING EARLY: we are an x86 executable and should not load a VE .so"<<endl;
 #else
-    DllOpen lib = dllbuild.create();
+    unique_ptr<DllOpen> pLib = dllbuild.create();
+    DllOpen& lib = *pLib;
     typedef int (*LuckyNumberFn)();
     void * luckySymbol = lib["myLuckyNumber"]; // create stores symbols as void*
     LuckyNumberFn cjit_fn = (LuckyNumberFn)(luckySymbol);

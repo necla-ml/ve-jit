@@ -65,3 +65,16 @@ ftostring
 dltest1link
 dllbuild-ve
 bin_mk.c
+dllok0 dllok2 dllok3 dllok4
+dllvebug1 dllvebug2
+dllvebug10
+dlprt-ve
+dlprt-x86
+bug-ve
+bug-x86
+bug-pic-ve
+bug
+a.out
+bug0.cpp
+empty.cpp
+hdrs.cpp

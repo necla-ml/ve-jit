@@ -1,5 +1,7 @@
 VEJIT_ROOT:=.
 SHELL:=/bin/bash
+# normal build target = all
+# distribution target = vejit.tar.gz
 # major clean and rebuild tests:
 #   dlprt
 #   dllbuild
@@ -90,6 +92,8 @@ VEJIT_SHARE:=cblock.cpp dltest1.cpp veli_loadreg.cpp dllbuild.cpp
 vejit.tar.gz: jitpage.h jit_data.h throw.hpp \
 		asmfmt_fwd.hpp asmfmt.hpp codegenasm.hpp velogic.hpp \
 		cblock.hpp dllbuild.hpp \
+		asmfmt.cpp cblock.cpp dllbuild.cpp jitpage.c jit_data.c \
+		bin.mk-ve.lo \
 		jitpage.hpp jitpipe_fwd.hpp jitpipe.hpp cblock.hpp pstreams-1.0.1 \
 		libjit1.a libjit1-x86.a libveli.a libveli-x86.a \
 		libjit1.so libjit1-x86.so \
@@ -100,9 +104,11 @@ vejit.tar.gz: jitpage.h jit_data.h throw.hpp \
 	mkdir vejit/lib
 	mkdir vejit/share
 	mkdir vejit/share/vejit
+	mkdir vejit/share/vejit/src
 	cp -av $(filter %.hpp,$^) $(filter %.h,$^) vejit/include/
 	cp -av pstreams-1.0.1 vejit/include/
-	cp -av $(filter %.a,$^) $(filter %.so,$^) vejit/lib/
+	cp -av $(filter %.a,$^) $(filter %.so,$^) bin.mk-ve.lo vejit/lib/
+	cp -av $(filter %.cpp,$^) $(filter %.c,$^) vejit/share/vejit/src/
 	cp -av ${VEJIT_SHARE} vejit/share/vejit/
 	cp -av Makefile.share vejit/share/vejit/Makefile
 	tar czf $@ vejit
@@ -214,33 +220,150 @@ libjit1.a: asmfmt.o jitpage.o jit_data.o \
 #	rm -f $@; $(AR) rcs $@ $^
 #// nc++ only has a .a version std:: C++ library?
 #// dlrt-ve needs -lnc++ before dlopen would succeed !
+# C things	
+jit_data.o: jit_data.c jit_data.h
+	$(CC) ${CFLAGS} -O2 -c $< -o $@
+jitpage.o: jitpage.c jitpage.h
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+# C++ things...	
+asmfmt.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
+	$(CXX) ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
+cblock-ve.o: cblock.cpp cblock.hpp
+	$(CXX) -Wall -g2 -std=c++11 -c $< -o $@
+dllbuild-ve.o: dllbuild.cpp
+	$(CXX) -o $@ $(CXXFLAGS) -Wall -Werror -c $<
 libjit1.so: jitpage.lo jit_data.lo bin.mk-ve.lo \
 	asmfmt.lo cblock-ve.lo dllbuild-ve.lo # C++ things
 	$(CXX) -o $@ -shared $^ #-ldl #-lnc++
 	readelf -h $@
 	readelf -d $@
-# C things	
-jit_data.o: jit_data.c jit_data.h
-	$(CC) ${CFLAGS} -O2 -c $< -o $@
 jit_data.lo: jit_data.c jit_data.h
 	$(CC) ${CFLAGS} -fPIC -O2 -c $< -o $@
-jitpage.o: jitpage.c jitpage.h
-	$(CXX) $(CXXFLAGS) -c $< -o $@
 jitpage.lo: jitpage.c jitpage.h
 	$(CXX) $(CXXFLAGS) -fPIC -c $< -o $@
-# C++ things...	
-asmfmt.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
-	$(CXX) ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
 asmfmt.lo: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
 	$(CXX) ${CXXFLAGS} -fPIC -O2 -c asmfmt.cpp -o $@
-cblock-ve.o: cblock.cpp cblock.hpp
-	$(CXX) -Wall -g2 -std=c++11 -c $< -o $@
 cblock-ve.lo: cblock.cpp cblock.hpp
 	$(CXX) -fPIC -Wall -g2 -std=c++11 -c $< -o $@
-dllbuild-ve.o: dllbuild.cpp
-	$(CXX) -o $@ $(CXXFLAGS) -Wall -Werror -c $<
 dllbuild-ve.lo: dllbuild.cpp
 	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -c $<
+
+libvenobug.so: \
+	jitpage.lo \
+	jit_data.lo \
+	bin.mk-ve.lo
+	$(CC) -o $@ -shared $^
+.PHONY: hdrs0.cpp bug0.cpp hdrs1.cpp hdrs2.cpp empty.cpp
+empty.cpp:
+	rm -f $@
+	touch empty.cpp
+empty.lo: empty.cpp 
+	$(CXX) ${CXXFLAGS} -fPIC -O2 -c $< -o $@
+libveempty.so: empty.lo
+	$(CXX) -o $@ -shared $^
+hdrs0.cpp:
+	{ \
+		echo '#include "stdint.h"'; \
+		} > $@
+bug0.cpp:
+	{ \
+		echo '#include <iostream>'; \
+		echo '#include <iomanip>'; \
+		echo 'using namespace std;'; \
+		echo 'int main(int,char**){ cout<<"Goodbye"<<endl; }'; \
+		} > $@
+hdrs1.cpp:
+	{ \
+		echo '#include "jitpage.h"'; \
+		} > $@
+hdrs2.cpp:
+	{ \
+		echo '#include <iostream>'; \
+		} > $@
+hdrs%.lo: hdrs%.cpp 
+	$(CXX) ${CXXFLAGS} -fPIC -O2 -c $< -o $@
+libvehdrs%.so: hdrs%.lo
+	$(CXX) -o $@ -shared $^
+	nnm -C $@
+#bug%: bug0.cpp libvenobug.so libvehdrs%.so
+bug%: bug0.cpp libvehdrs%.so
+	# ok
+	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -L. -Wl,-rpath=`pwd` $^
+	-./$@ 7
+	echo "Exit status $$?"
+hdrs9.cpp:
+	{ \
+		echo '#include "jitpage.h"'; \
+		echo '#include <iosfwd>'; \
+		echo '#include <string>'; \
+		echo '#include <stack>'; \
+		echo '#include <sstream>'; \
+		echo '#include <deque>'; \
+		echo '#include <iostream>'; \
+		} > $@
+libveasmfmt.so: asmfmt.lo
+	$(CXX) -o $@ -shared $^
+asmfmt2.lo: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
+	$(CXX) ${CXXFLAGS} -fPIC -O2 -DASMFMTREMOVE=2 -E asmfmt.cpp -o asmfmt2.i
+	$(CXX) ${CXXFLAGS} -fPIC -O2 -DASMFMTREMOVE=2 -c asmfmt.cpp -o $@
+libveasmfmt2.so: asmfmt2.lo
+	$(CXX) -o $@ -shared $^
+libvebug.so: \
+	jitpage.lo \
+	jit_data.lo \
+	bin.mk-ve.lo \
+	asmfmt.lo
+	$(CXX) -o $@ -shared $^
+dllok0: dllbug.cpp libvenobug.so
+	$(CXX) -o $@ $(CXXFLAGS) -DCODEREMOVE=0 -fPIC -Wall -Werror -L. -Wl,-rpath=`pwd` $^
+	-./$@ 7
+	echo "Exit status $$?"
+dllok1: dllbug.cpp libvenobug.so
+	$(CXX) -o $@ $(CXXFLAGS) -DCODEREMOVE=0 -fPIC -Wall -Werror -L. -Wl,-rpath=`pwd` $^ asmfmt.lo
+	-./$@ 7
+	echo "Exit status $$?"
+dllok2: dllbug.cpp libvenobug.so libveempty.so
+	$(CXX) -o $@ $(CXXFLAGS) -DCODEREMOVE=0 -fPIC -Wall -Werror -L. -Wl,-rpath=`pwd` $^
+	-./$@ 7
+	echo "Exit status $$?"
+dllok3: dllbug.cpp libvenobug.so libvehdrs0.so
+	$(CXX) -o $@ $(CXXFLAGS) -DCODEREMOVE=0 -fPIC -Wall -Werror -L. -Wl,-rpath=`pwd` $^
+	-./$@ 7
+	echo "Exit status $$?"
+dllok4: dllbug.cpp libvenobug.so libvehdrs1.so
+	$(CXX) -o $@ $(CXXFLAGS) -DCODEREMOVE=0 -fPIC -Wall -Werror -L. -Wl,-rpath=`pwd` $^
+	./$@ 7
+	echo "Exit status $$?"
+dllok4: dllbug.cpp libvenobug.so libvehdrs2.so
+	$(CXX) -o $@ $(CXXFLAGS) -DCODEREMOVE=0 -fPIC -Wall -Werror -L. -Wl,-rpath=`pwd` $^
+	./$@ 7
+	echo "Exit status $$?"
+dllvebug0: dllbug.cpp libvenobug.so libvehdrs9.so
+	$(CXX) $(CXXFLAGS) -DCODEREMOVE=9 -fPIC -Wall -Werror -E $< -o dllbug9.i
+	$(CXX) -o $@ $(CXXFLAGS) -DCODEREMOVE=9 -fPIC -Wall -Werror -L. -Wl,-rpath=`pwd` $^
+	./$@ 7
+	echo "Exit status $$?"
+dllvebug1: dllbug.cpp libvenobug.so libvehdrs2.so
+	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -L. -Wl,-rpath=`pwd` $^
+	./$@ 7
+	echo "Exit status $$?"
+dllvebug11: dllbug.cpp libvenobug.so libveasmfmt2.so
+	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -L. -Wl,-rpath=`pwd` $^
+	./$@ 7
+	echo "Exit status $$?"
+dllvebug12: dllbug.cpp libvenobug.so libveasmfmt.so
+	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -L. -Wl,-rpath=`pwd` $^
+	./$@ 7
+	echo "Exit status $$?"
+dllvebug13: dllbug.cpp libveasmfmt.so libvenobug.so
+	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -L. -Wl,-rpath=`pwd` $^
+	./$@ 7
+	echo "Exit status $$?"
+dllvebug14: dllbug.cpp libvebug.so
+	# incorrect execution
+	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -L. -Wl,-rpath=`pwd` $^
+	./$@ 7
+	echo "Exit status $$?"
 
 libjit1-x86.a: asmfmt-x86.o jitpage-x86.o jit_data-x86.o \
 		cblock-x86.o dllbuild-x86.o bin.mk-x86.lo
@@ -409,15 +532,17 @@ bin.mk-ve.lo: bin.mk ftostring
 #	# because the symbols are missing info (and my linker does no have --add-symbol or such)
 #	# use portable 'ftostring.c' and compile (uggh)
 
-.PHONY: dllbuild dllbuild-clean dllbuild-do
+.PHONY: dllbuild dllbuild-clean dllbuild-do dllbuild.log dllvebug.log
 dllbuild: dllbuild-clean dllbuild-do
 dllbuild-clean:
+	rm -rf tmp-dllbuild
 	rm -f dllbuild-{x86,x86b,ve,veb} libjit1{,-x86}.{a,so} *.o *.lo
-dllbuild-do:
+dllbuild-do: dllbuild.log dllvebug.log
+dllbuild.log:
 	# It is important to demo bin.mk basic correctness for the different build methods
 	# So now dllbuild puts multiple named builds into tmpdllbuild/ ,
 	# differentiated by a a new 'suffix' argument to the test program.
-	{ $(MAKE) dllbuild-x86 dllbuild-x86b dllbuild-ve;\
+	{ $(MAKE) VERBOSE=1 dllbuild-x86 dllbuild-x86b dllbuild-ve;\
 		echo ""; echo "TEST dllbuild x86"; ./dllbuild-x86 7; \
 		echo ""; echo "TEST dllbuild x86 dll"; ./dllbuild-x86b 7; \
 		echo ""; echo "TEST dllbuild ve"; ./dllbuild-ve 7; \
@@ -427,24 +552,28 @@ dllbuild-do:
 		echo ""; echo "TEST dllbuild ve clang++"; ./dllbuild-ve 7 -clang.cpp; \
 		echo ""; echo "TEST dllbuild ve clang C+intrinsics"; ./dllbuild-ve 7 -vi.c; \
 		} >& dllbuild.log && echo "dllbuild.log seems OK" || echo "dllbuild.log Huh?"
-	{ \
+	# NOTE -clang.cpp expected to fail becase clang++ does not understand "-std=c++11"
+dllvebug.log:
+	{ $(MAKE) VERBOSE=1 dllbuild-veb; \
 		echo ""; echo "TEST dllbuild ve dll ncc";     ./dllbuild-veb 7; \
 		echo ""; echo "TEST dllbuild ve dll clang";   ./dllbuild-veb 7 -clang.c; \
 		echo ""; echo "TEST dllbuild ve dll nc++";    ./dllbuild-veb 7 -ncc.cpp; \
 		echo ""; echo "TEST dllbuild ve dll clang++"; ./dllbuild-veb 7 -clang.cpp; \
 		echo ""; echo "TEST dllbuild ve dll clang C+intrinsics"; ./dllbuild-veb 7 -vi.c; \
 		} >& dllvebug.log && echo "dllvebug.log seems OK" || echo "dllvebug.log Huh?"
+	# NOTE **all** above fail because dllbuild-veb is linked with a shared C++ library.
 dllbuild-x86: dllbuild.cpp libjit1-x86.a
 	g++ -o $@ $(CXXFLAGS) -Wall -Werror -DDLLBUILD_MAIN $< -L. libjit1-x86.a -ldl
 	readelf -d $@
 dllbuild-x86b: dllbuild.cpp libjit1-x86.so
 	g++ -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1-x86.so -ldl
 	readelf -d $@
-dllbuild-ve: dllbuild.cpp libjit1.a libjit1.so
+dllbuild-ve: dllbuild.cpp libjit1.a
 	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1.a -ldl
 	nreadelf -d $@
-	$(CXX) -o $@b $(CXXFLAGS) -fPIC -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1.so -ldl
-	nreadelf -d $@b
+dllbuild-veb: dllbuild.cpp libjit1.so
+	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1.so
+	nreadelf -d $@
 # next test show how to dynamically *compile* and load a dll given
 # a std::string containing 'C' code.
 .PHONY: dltest1.log
@@ -486,10 +615,12 @@ clean:
 	for f in tmp_*.S; do b=`basename $$f .S`; rm -f $$b.asm $$b.dis $$b.dump; done
 	rm -f jitve_math.asm jitve_hello.asm jitve_hello.s jitve_hello.dis jitve*.dis \
 		jitpp_hello.asm
+	$(MAKE) -f bugN.mk clean
 realclean: clean
 	rm -f $(TARGETS)
 	rm -f msk msk0 msk1 msk2 msk3 msk4 syscall_hello smir jitve0
 	rm -f bld.log asmfmt.log jitpp_hello.log mk*.log bld*.log
 	rm -f tmp_*.S *.bin
 	rm -rf CMakeCache.txt CMakeFiles asmfmt asmfmt-x86 asmfmt.txt jitve_hello.s
+	$(MAKE) -f bugN.mk realclean
 #

@@ -6,6 +6,11 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <memory>           // std::unique_ptr
+#ifndef NDEBUF
+#include "throw.hpp"
+#endif
+
 #include <dlfcn.h>
 /** DllOpen loads void* symbols from a [jit] library.
  *
@@ -24,7 +29,14 @@
  */
 class DllOpen{
   public:
-    void* operator[](std::string const& s) const {return dlsyms.at(s);}
+    DllOpen(DllOpen const& other) = delete;
+    DllOpen& operator=(DllOpen const& other) = delete;
+    void* operator[](std::string const& s) const {
+#ifndef NDEBUG
+        if(dlsyms.find(s) == dlsyms.end()) THROW("DllOpen["<<s<<"] not present");
+#endif
+        return dlsyms.at(s);
+    }
     ~DllOpen();
   private:
     friend class DllBuild;
@@ -57,6 +69,7 @@ struct SubDir{
 };
 /** basename*.{c|cpp|s|S} compilable code file */
 struct DllFile {
+    DllFile() : basename(), suffix(), code(), syms(), comment(), objname(), abspath() {}
     std::string basename;
     std::string suffix;             ///< *.{c|cpp|s|S}
 	std::string code;
@@ -93,11 +106,14 @@ struct DllBuild : std::vector<DllFile> {
      * CFLAGS='...' LDFLAGS='...'*/
     void make(std::string env="");
     /** open and load symbols, \throw if not \c prepped and \c made */
-    DllOpen create(){ return dllopen(); }
+    std::unique_ptr<DllOpen> create(){ return dllopen(); }
     /** \c prep, \c make and load all public symbols (JIT scenario).
      * Use this when caller is able to execute the machine code in the dll
      * (i.e. VE invoking host cross-compile for VE target). */
-    DllOpen create(std::string basename, std::string dir=".", std::string env=""){
+    std::unique_ptr<DllOpen> create(
+            std::string basename,
+            std::string dir=".",
+            std::string env=""){
         if(!prepped){prep(basename,dir); prepped=true;}
         if(!made){make(); made=true;}
         return dllopen();
@@ -105,13 +121,13 @@ struct DllBuild : std::vector<DllFile> {
     /** return \c libname, or \throw if not \c prepped */
     std::string const & getLibName() const;
   private:
-    DllOpen dllopen();
+    std::unique_ptr<DllOpen> dllopen();
     bool prepped;
     bool made;
     SubDir dir;
     std::string basename;
     std::string libname;        ///< libbasename.so
     std::string mkfname;        ///< basename.mk
-    std::string fullpath;       ///< absolute path to libname
+    std::string fullpath;       ///< absolute path to libname {dir.abspath}/{libname}
 };
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break

@@ -1,3 +1,6 @@
+#ifndef ASMFMTREMOVE
+#define ASMFMTREMOVE 0
+#endif
 #include "asmfmt.hpp"
 #include <iostream>
 #include <sstream>
@@ -11,6 +14,7 @@
 
 using namespace std;
 
+#if ASMFMTREMOVE < 2
 string fname_bin( string const& fname_S ){
     auto len = fname_S.size();
     if( len >= 2 && fname_S.substr(len-2) != ".S" ){
@@ -72,7 +76,9 @@ ExecutablePage::~ExecutablePage(){
         throw runtime_error(" Problems releasing ExecutablePage");
     }
 }
+#endif //ASMFMTREMOVE < 2
 
+#if ASMFMTREMOVE < 1
 char const* const    AsmFmtCols::ws =" \t\r"; // NOT including '\n'
 char const* const    AsmFmtCols::indent = "    ";
 int const            AsmFmtCols::inwidth = 4;
@@ -482,7 +488,6 @@ AsmFmtCols& AsmFmtCols::undef(std::string const& symbol,std::string const& name)
     return *this;
 }
 
-
 std::string uncomment_asm( std::string asmcode )
 {
     // for multiline, we need a bit more than just 'parts(instruction)'
@@ -506,6 +511,7 @@ std::string uncomment_asm( std::string asmcode )
     }
     return oss.str();
 }
+#endif //CODEREMOVE < 1
 
 #ifdef _MAIN
 #include <iostream>
