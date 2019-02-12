@@ -35,7 +35,7 @@
 #include <algorithm>    // std::max
 
 #ifdef NDEBUG
-#define CBLOCK_DBG(V,N) do{}while(0)
+#define CBLOCK_DBG(V,N,...) do{}while(0)
 #else
 #define CBLOCK_DBG(V,N,...) do { \
     if((V)>=(N)){ \

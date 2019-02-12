@@ -2,12 +2,16 @@
 #include <assert.h>
 
 int main(int argc, char** argv) {
-	assert(argc == 3);
+	if(argc != 3){
+		fprintf(stderr," Usage: ftostring FILENAME VARIABLE"
+				"\n --> char const VARIABLE[]={...}"
+				"\n and int const VARIABLE_size=...\n");
+		return 3;
+	}
 	char const* const fn = argv[1];
 	char const* const array_name = argv[2];
 	FILE* f = fopen(fn, "rb");
 	printf("\n#ifdef __cplusplus\nextern \"C\" {\n#endif // __cplusplus\n");
-	printf("\nint %s_size;\n",array_name);
 	printf("char const %s[] = \n",array_name);
 	char const* sep = "{";
 	unsigned long n = 0;
@@ -21,7 +25,7 @@ int main(int argc, char** argv) {
 	fclose(f);
 	/*printf("%s 0x00",sep); not nec. */
 	printf("\n};");
-	printf("\nint %s_size=sizeof(bin_mk)/sizeof(char);",array_name);
+	printf("\nint %s_size = sizeof(bin_mk)/sizeof(char);",array_name);
 	printf("\n#ifdef __cplusplus\n}//extern \"C\" {\n#endif // __cplusplus\n");
 	return 0;
 }

@@ -2,6 +2,7 @@
 //#include "cblock.hpp"    // prefix_lines (debug output)
 #include "throw.hpp"
 #include "jitpage.h"    // low level 'C' utilities
+#include "pstreams-1.0.1/pstream.h"
 #include <fstream>
 #include <cstring>
 #include <unistd.h>     // getcwd, sysconf, pathconf, access
@@ -274,13 +275,44 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
 void DllBuild::make(std::string env){
     if(!prepped)
         THROW("Please prep(basename,dir) before make()");
-    std::string mk = env+" make VERBOSE=1 -C "+dir.abspath+" -f "+mkfname;
-    // TODO: pstreams to capture stdout, stderr into log files etc.
+    string mk = env+" make VERBOSE=1 -C "+dir.abspath+" -f "+mkfname;
+    cout<<" Make command: "<<mk<<endl; cout.flush();
+#if 0
     auto ret = system(mk.c_str());
     if(ret){
         THROW(" Build error: "+mk);
     }
-    //system(("ls -l "+dir.abspath).c_str());
+#else // pstreams to capture stdout, stderr into log files etc.
+    using namespace redi;
+    redi::pstream mkstream(mk,
+            pstreams::pstdin | pstreams::pstdout | pstreams::pstderr);
+    mkstream << peof;
+    string err;
+    string out;
+    int status;
+    int error;
+    {
+        mkstream.err();
+        std::stringstream ss_err;
+        ss_err << mkstream.rdbuf();
+        err = ss_err.str();   // stderr --> std::string
+    }
+    {
+        mkstream.out();
+        std::stringstream ss_out;
+        ss_out << mkstream.rdbuf();
+        out = ss_out.str();   // stdout --> std::string
+    }
+    mkstream.close();                 // retrieve exit status and errno
+    status = mkstream.rdbuf()->status();
+    error  = mkstream.rdbuf()->error();
+    cout<<string(40,'-')<<" stdout:"<<endl<<out<<endl;
+    cout<<string(40,'-')<<" stderr:"<<endl<<err<<endl;
+    cout<<" Make error  = "<<error <<endl;
+    cout<<" Make status = "<<status<<endl;
+    if(error) THROW(" Make failed! status="<<status<<" error="<<error);
+#endif
+    //system(("ls -l "+dir.abspath).c_str()); // <-- unsafe c_str usage
     cout<<" 'make' ran in: "<<dir.abspath<<endl;
     made = true;
 }
@@ -334,10 +366,19 @@ std::unique_ptr<DllOpen> DllBuild::dllopen(){
     ret.libname = this->libname;
     cout<<"DllBuild::dllopen() calling dlopen... libname="<<libname<<endl; cout.flush();
     cout<<"DllBuild::dllopen() calling dlopen... fullpath="<<fullpath<<endl; cout.flush();
-#if 1
+#if 0
     ret.libHandle = dlopen(fullpath.c_str(), RTLD_NOW);
-#elif 0
+    cout<<"DllBuild::dllopen() dlopen(fullpath, RTLD_NOW) OK"<<endl; cout.flush();
+#elif 1
+    cout<<" debug... dlopen_rel + dl_dump..."<<endl;
+    void * dbg = dlopen_rel( fullpath.c_str(), RTLD_LAZY );
+    if(!dbg) THROW(" dlopen_rel failed!");
+    dl_dump(dbg);
+    cout<<" debug... back from dl_dump..."<<endl;
+    dlclose(dbg);
+    cout<<"now dlopen..."<<endl; cout.flush();
     ret.libHandle = dlopen(fullpath.c_str(), RTLD_LAZY);
+    cout<<"DllBuild::dllopen() dlopen(fullpath, RTLD_LAZY) OK"<<endl; cout.flush();
 #else
     static char * fpath=nullptr;
     if( fpath != nullptr ) free(fpath);

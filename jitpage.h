@@ -91,6 +91,15 @@ extern "C" {
      */
     int strMconst(char *mconst, uint64_t const parm);
 
+    /** safety-wrapper around dlopen, converting relpath to abspath
+     * if necessary.
+     * \p opt=RTLD_NOW or RTLD_LAZY
+     */
+    void * dlopen_rel(char const* const relpath, int opt);
+
+    /** walk symbol table of dlopen handle \p handle, dumping to \c stdout. */
+    void dl_dump(void * const handle);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

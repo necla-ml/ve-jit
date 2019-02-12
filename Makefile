@@ -89,12 +89,15 @@ force: # force libs to be recompiled
 	$(MAKE) $(LIBVELI_TARGETS)
 
 VEJIT_SHARE:=cblock.cpp dltest1.cpp veli_loadreg.cpp dllbuild.cpp
+.PHONY: all-vejit-libs
+all-vejit-libs:
+	./mklibs.sh >& mklibs.log	# writes libs into vejit/lib/
 vejit.tar.gz: jitpage.h jit_data.h throw.hpp \
 		asmfmt_fwd.hpp asmfmt.hpp codegenasm.hpp velogic.hpp \
 		cblock.hpp dllbuild.hpp \
 		asmfmt.cpp cblock.cpp dllbuild.cpp jitpage.c jit_data.c \
 		bin.mk-ve.lo \
-		jitpage.hpp jitpipe_fwd.hpp jitpipe.hpp cblock.hpp pstreams-1.0.1 \
+		jitpage.hpp jitpipe_fwd.hpp jitpipe.hpp cblock.hpp pstreams-1.0.1 bin_mk.c \
 		libjit1.a libjit1-x86.a libveli.a libveli-x86.a \
 		libjit1.so libjit1-x86.so \
 		${VEJIT_SHARE}
@@ -105,9 +108,11 @@ vejit.tar.gz: jitpage.h jit_data.h throw.hpp \
 	mkdir vejit/share
 	mkdir vejit/share/vejit
 	mkdir vejit/share/vejit/src
+	$(MAKE) all-vejit-libs # libjit1[_omp][_ft][-x86].{a|so}
 	cp -av $(filter %.hpp,$^) $(filter %.h,$^) vejit/include/
 	cp -av pstreams-1.0.1 vejit/include/
-	cp -av $(filter %.a,$^) $(filter %.so,$^) bin.mk-ve.lo vejit/lib/
+	#cp -av $(filter %.a,$^) $(filter %.so,$^) bin.mk-ve.lo vejit/lib/
+	cp -av $(filter libveli%,$^) bin.mk-ve.lo bin.mk-x86.lo vejit/lib/
 	cp -av $(filter %.cpp,$^) $(filter %.c,$^) vejit/share/vejit/src/
 	cp -av ${VEJIT_SHARE} vejit/share/vejit/
 	cp -av Makefile.share vejit/share/vejit/Makefile
@@ -123,7 +128,7 @@ veli_loadreg: veli_loadreg.cpp libveli.a libjit1.a
 	@echo "veli_loadreg runs VE Logic for Instructions tests on VE"
 	@echo "(veli_loadreg-x86 will do same VE logic tests on x86)"
 veli_loadreg-x86: veli_loadreg.cpp libveli-x86.a libjit1-x86.a
-	g++ $(CXXFLAGS) -Wall -DWORKING=${WORKING} -g -O2 -o $@ $^
+	g++ $(CXXFLAGS) -Wall -DWORKING=${WORKING} -g -O2 -o $@ $^ -ldl
 #
 # Aurora assembler.S: cpp->.asm, $(CC)->.o, nobjcopy->.bin, .bin-->.dump
 # Actually, jitpage.h (newer version of ve_util.h) will use 'bin.mk' makefile
@@ -210,7 +215,11 @@ jitve_math: jitve_math.c jitpage.o
 #
 # Note that libjit1.a could be running x86 code or VE code
 #
+# NEW: CMakeLists.txt + mklibs.sh to build variants of libjit1
+#
 .PRECIOUS: asmfmt.o jit_data.o jitpage.o
+#%-omp.o: %.c: $(CC) ${CFLAGS} -O2 -c $< -o $@
+#%-omp-ftrace1.o: %.c: $(CC) ${CFLAGS} -O2 -c $< -o $@
 libjit1.a: asmfmt.o jitpage.o jit_data.o \
 		cblock-ve.o dllbuild-ve.o bin.mk-ve.lo
 	rm -f $@
@@ -224,7 +233,7 @@ libjit1.a: asmfmt.o jitpage.o jit_data.o \
 jit_data.o: jit_data.c jit_data.h
 	$(CC) ${CFLAGS} -O2 -c $< -o $@
 jitpage.o: jitpage.c jitpage.h
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CC) $(CXXFLAGS) -D_GNU_SOURCE -c $< -o $@
 # C++ things...	
 asmfmt.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
 	$(CXX) ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
@@ -240,7 +249,7 @@ libjit1.so: jitpage.lo jit_data.lo bin.mk-ve.lo \
 jit_data.lo: jit_data.c jit_data.h
 	$(CC) ${CFLAGS} -fPIC -O2 -c $< -o $@
 jitpage.lo: jitpage.c jitpage.h
-	$(CXX) $(CXXFLAGS) -fPIC -c $< -o $@
+	$(CXX) $(CXXFLAGS) -fPIC -c $< -o $@ -ldl
 asmfmt.lo: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
 	$(CXX) ${CXXFLAGS} -fPIC -O2 -c asmfmt.cpp -o $@
 cblock-ve.lo: cblock.cpp cblock.hpp
@@ -334,7 +343,7 @@ dllok4: dllbug.cpp libvenobug.so libvehdrs1.so
 	$(CXX) -o $@ $(CXXFLAGS) -DCODEREMOVE=0 -fPIC -Wall -Werror -L. -Wl,-rpath=`pwd` $^
 	./$@ 7
 	echo "Exit status $$?"
-dllok4: dllbug.cpp libvenobug.so libvehdrs2.so
+dllok5: dllbug.cpp libvenobug.so libvehdrs2.so
 	$(CXX) -o $@ $(CXXFLAGS) -DCODEREMOVE=0 -fPIC -Wall -Werror -L. -Wl,-rpath=`pwd` $^
 	./$@ 7
 	echo "Exit status $$?"
@@ -387,9 +396,9 @@ jit_data-x86.o: jit_data.c jit_data.h
 jit_data-x86.lo: jit_data.c jit_data.h
 	g++ ${CFLAGS} -fPIC -O2 -c $< -o $@
 jitpage-x86.o: jitpage.c jitpage.h
-	g++ $(CXXFLAGS) -O2 -c $< -o $@
+	g++ $(CXXFLAGS) -O2 -c $< -o $@ -ldl
 jitpage-x86.lo: jitpage.c jitpage.h
-	g++ $(CXXFLAGS) -fPIC -O2 -c $< -o $@
+	g++ $(CXXFLAGS) -fPIC -O2 -c $< -o $@ -ldl
 cblock-x86.o: cblock.cpp cblock.hpp
 	g++    -Wall -g2 -std=c++11 -c $< -o $@
 cblock-x86.lo: cblock.cpp cblock.hpp
@@ -451,7 +460,7 @@ veliFoo.o: veliFoo.cpp velogic.hpp
 #asmfmt.cpp has a standalone demo program with -D_MAIN compiler	
 asmfmt-x86: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp jitpage.o
 	g++ $(CXXFLAGS) -O2 -E -dD $< >& $(patsubst %,%.i,$@)
-	g++ ${CXXFLAGS} -Wall -D_MAIN asmfmt.cpp jitpage.c -o $@
+	g++ ${CXXFLAGS} -Wall -D_MAIN asmfmt.cpp jitpage.c -o $@ -ldl
 asmfmt-ve: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp jitpage.o
 	$(CXX) $(CXXFLAGS) -O2 -E -dD $< >& $(patsubst %,%.i,$@)
 	#$(CXX) $(CXXFLAGS) -O2 -D_MAIN $(filter-out %.hpp,$^) -o $@

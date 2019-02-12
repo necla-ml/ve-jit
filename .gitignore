@@ -70,6 +70,7 @@ dllvebug1 dllvebug2
 dllvebug10
 dlprt-ve
 dlprt-x86
+dlprt*.log
 bug-ve
 bug-x86
 bug-pic-ve
@@ -78,3 +79,10 @@ a.out
 bug0.cpp
 empty.cpp
 hdrs.cpp
+dllok[0-9]
+dllbuild.veb
+dllbuild.x86b
+dllvebug[0-9]
+dllbuild-veb
+dllbuild-x86b
+[a-z].log

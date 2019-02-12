@@ -103,7 +103,7 @@ static void * dlopen_rel(char const* const relpath, int opt){
         char const* err=dlerror();
         printf(" dlopen error: %s\n",(err?err:"unknown error"));
       }
-      //free((void*)abspath);
+      free((void*)abspath);
     }
   }
   return ret;
