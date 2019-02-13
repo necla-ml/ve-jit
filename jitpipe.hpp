@@ -129,6 +129,7 @@ void DllPipe::mkTmpfile(std::string code){
     }
     // Write, then set this->ccode_tmpfile
     {
+#if 0
         //std::string tmpfile(std::tmpnam(nullptr));
         // 
         // warning: the use of `tempnam' is dangerous, better use `mkstemp'
@@ -143,7 +144,30 @@ void DllPipe::mkTmpfile(std::string code){
         }catch(...){
             THROW("Problem creating "<<tmpfile<<" 'C'-code file)");
         }
-        this->ccode_tmpfile = tmpfile;
+#else
+        // use mkstemp to avoid compiler warning about tempnam unsafe
+        std::string templ = outDir+"/tmpXXXXXX";
+        char* templ_data = const_cast<char*>(templ.data()); // c++17 has non-const 'data()'
+        int fd = mkstemp(templ_data); // c11 requires this to be null-terminated
+        if(fd==-1) THROW("issues creating temp file "<<templ);
+        close(fd);
+        //std::string tmpfname = outDir+"/tmp_"+base+suffix;
+        // safer might be tmpfname = templ+"_"+base+suffix;
+        std::string tmpfname = outDir+"/tmp_"+base+suffix;
+        std::cout<<" tmpfile rename("<<templ<<","<<tmpfname<<") ..."<<std::endl;
+        int status = rename(templ.c_str(), tmpfname.c_str());
+        if(status) THROW("issues with rename("<<templ<<","<<tmpfname<<")");
+        std::cout<<" writing code to "<<tmpfname<<" ..."<<std::endl;
+        try{
+            std::ofstream ofs(tmpfname);
+            // TODO check stream fail bits etc
+            ofs<<code<<std::endl;
+            ofs.close();
+        }catch(...){
+            THROW("Problem creating "<<tmpfname<<" 'C'-code file)");
+        }
+#endif
+        this->ccode_tmpfile = tmpfname;
     }
 }
 

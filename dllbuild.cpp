@@ -366,16 +366,20 @@ std::unique_ptr<DllOpen> DllBuild::dllopen(){
     ret.libname = this->libname;
     cout<<"DllBuild::dllopen() calling dlopen... libname="<<libname<<endl; cout.flush();
     cout<<"DllBuild::dllopen() calling dlopen... fullpath="<<fullpath<<endl; cout.flush();
+#if JIT_DLFUNCS // but means a library has dependency on libdl
+    {
+        cout<<" debug... dlopen_rel + dl_dump..."<<endl;
+        void * dbg = dlopen_rel( fullpath.c_str(), RTLD_LAZY );
+        if(!dbg) THROW(" dlopen_rel failed!");
+        dl_dump(dbg);
+        cout<<" debug... back from dl_dump..."<<endl;
+        dlclose(dbg);
+    }
+#endif
 #if 0
     ret.libHandle = dlopen(fullpath.c_str(), RTLD_NOW);
     cout<<"DllBuild::dllopen() dlopen(fullpath, RTLD_NOW) OK"<<endl; cout.flush();
 #elif 1
-    cout<<" debug... dlopen_rel + dl_dump..."<<endl;
-    void * dbg = dlopen_rel( fullpath.c_str(), RTLD_LAZY );
-    if(!dbg) THROW(" dlopen_rel failed!");
-    dl_dump(dbg);
-    cout<<" debug... back from dl_dump..."<<endl;
-    dlclose(dbg);
     cout<<"now dlopen..."<<endl; cout.flush();
     ret.libHandle = dlopen(fullpath.c_str(), RTLD_LAZY);
     cout<<"DllBuild::dllopen() dlopen(fullpath, RTLD_LAZY) OK"<<endl; cout.flush();

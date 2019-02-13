@@ -91,6 +91,8 @@ extern "C" {
      */
     int strMconst(char *mconst, uint64_t const parm);
 
+#define JIT_DLFUNCS 0
+#if JIT_DLFUNCS
     /** safety-wrapper around dlopen, converting relpath to abspath
      * if necessary.
      * \p opt=RTLD_NOW or RTLD_LAZY
@@ -99,6 +101,7 @@ extern "C" {
 
     /** walk symbol table of dlopen handle \p handle, dumping to \c stdout. */
     void dl_dump(void * const handle);
+#endif
 
 #ifdef __cplusplus
 } // extern "C"

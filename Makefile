@@ -233,7 +233,7 @@ libjit1.a: asmfmt.o jitpage.o jit_data.o \
 jit_data.o: jit_data.c jit_data.h
 	$(CC) ${CFLAGS} -O2 -c $< -o $@
 jitpage.o: jitpage.c jitpage.h
-	$(CC) $(CXXFLAGS) -D_GNU_SOURCE -c $< -o $@
+	$(CC) $(CFLAGS) -D_GNU_SOURCE -c $< -o $@
 # C++ things...	
 asmfmt.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
 	$(CXX) ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@

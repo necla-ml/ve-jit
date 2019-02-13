@@ -4,6 +4,7 @@
  * Must compile with at least \c -std=c++11 (uses \c nullptr)
  */
 #include "pstreams-1.0.1/pstream.h"
+#include "throw.hpp"
 #include <sstream>
 #include <cstdio>   // tmpnam, tempnam?
 
@@ -132,12 +133,21 @@ struct HEXDUMPpipe : public PstreamPipe {
     //HEXDUMPpipe() : PstreamPipe("bash -c 'cat - > foo; hexdump -C foo'") {}
 };
 
+inline std::string my_tmpnam() {
+    std::string templ("tmpXXXXXX");
+    char * templ_data = const_cast<char*>(templ.data()); // c++17 for non-const 'data()'
+    int fd = mkstemp(templ_data); // c11 specifies zero-termination
+    if(fd==-1) THROW("issues creating temp file "<<templ);
+    close(fd);
+    return templ;
+}
+
 /** invoke a 'binary blob disassemble' pipe.
  * Interesting because it shows how several bash commands can be used,
  * as well as mktemp to avoid tmp file name clashes. */
 struct BLOBDISpipe : public PstreamPipe {
     BLOBDISpipe() : PstreamPipe(
-            multiReplace( "tmpBLOB", std::tmpnam(nullptr),
+            multiReplace( "tmpBLOB", my_tmpnam(),
                 "bash -c 'cat > tmpBLOB; "
                 "nobjdump -b binary -mve -D tmpBLOB; "
                 "rm -f tmpBLOB'" ))

@@ -272,6 +272,7 @@ int strMconst(char *mconst,uint64_t const parm){
     return 1;
 }
 
+#if JIT_DLFUNCS
 //--------------------- dl_dump stuff
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -600,6 +601,7 @@ void dl_dump(void * const handle){
 #endif
   return;
 }
+#endif // JIT_DLFUNCS
 
 #ifdef __cplusplus
 } // extern "C"
