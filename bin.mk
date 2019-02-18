@@ -7,10 +7,12 @@
 #
 #LDFLAGS?=
 $(LIBNAME): $(OBJECTS)
-	ncc -o $@ $(LDFLAGS) $(filter %-ve.o,$(OBJECTS))
-	nreadelf -h $@
-	nreadelf -d $@
-	nreadelf -s $@
+	echo "-------- Linking --------"
+	echo "LDFLAGS = $${LDFLAGS}"
+	ncc -o $@ $(LDFLAGS) -Wl,--verbose -Wl,--trace -Wl,--copy-dt-needed-entries $(filter %-ve.o,$(OBJECTS))
+	echo "-------- Linking DONE --------"
+	# This would assume VE library target !!! -nreadelf -hds $@
+	echo "-------- Library $(LIBNAME) created in `pwd`"
 # This file ONLY generates -ve.o object files or VE .bin binary blobs
 # 
 # Allow override of default compiler (maybe particular version is required)
@@ -49,6 +51,7 @@ CXXLANG_FLAGS:=-target ve -mllvm $(CXXLANG_FLAGS) $(CXXLANG_FLAGS)
 $(info Ending with CFLAGS        = $(CFLAGS))
 $(info Ending with CXXFLAGS      = $(CXXFLAGS))
 $(info Ending with CLANG_FLAGS   = $(CLANG_FLAGS))
+CXXLANG_FLAGS:=$(filter-out -std=c++11,$(CXXLANG_FLAGS))
 $(info Ending with CXXLANG_FLAGS = $(CXXLANG_FLAGS))
 #
 # We will distinguish C files requiring different types of VE compile
@@ -61,24 +64,29 @@ $(info Ending with CXXLANG_FLAGS = $(CXXLANG_FLAGS))
 # Begin by cancelling the default rule -- we REQUIRE a special suffix
 %.o: %.c
 %-ve.o: %-ncc.c
-	$(NCC) $(CFLAGS) -c $< -o $@
+	$(NCC) $(CFLAGS)       -S $< -o $*-ve.s
+	$(NCC) $(CFLAGS) -fPIC -c $< -o $@
 %-ve.o: %-clang.c
-	$(CLANG) $(CLANG_FLAGS) -c $< -o $@
+	$(CLANG) $(CLANG_FLAGS)       -c $< -o $*-clang.s
+	$(CLANG) $(CLANG_FLAGS) -fPIC -c $< -o $@
 # OK $(CLANG) -target ve -O3 -mllvm -show-spill-message-vec -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics -fPIC -o $@ -c $<
 # OK $(CLANG) -target ve -mllvm $(CLANG_VI_FLAGS) -fPIC -o $@ -c $<
 %-ve.o: %-vi.c
 	which $(CLANG)
 	$(CLANG) --version
-	#$(CLANG) $(CLANG_FLAGS) -o $@ -c $<
-	$(CLANG) $(CLANG_FLAGS) -o $(patsubst %-vi.c,%-vi.s,$<) -S $<
-	cat $(patsubst %-vi.c,%-vi.s,$<)
-	$(NCC) $(CFLAGS) -o $@ -c $(patsubst %-vi.c,%-vi.s,$<)
+	$(CLANG) $(filter-out -fPIC,$(CLANG_FLAGS)) -S $< -o $*-vi_bin.s
+	$(CLANG) $(CLANG_FLAGS) -S $< -o $*-vi.s
+	$(NCC) $(CFLAGS) -fPIC -o $@ -c $*-vi.s
 %-ve.o: %-ncc.cpp
-	$(NCXX) $(CXXFLAGS) -c $< -o $@
+	$(NCXX) $(CXXFLAGS) -fPIC -S $< -o $*-ncc_cpp.s
+	$(NCXX) $(CXXFLAGS) -fPIC -c $< -o $@
 %-ve.o: %-clang.cpp
-	$(CXXLANG) $(CXXLANG_FLAGS) -c $< -o $@
+	$(CXXLANG) $(CXXLANG_FLAGS)       -S $< -o $*-clang_cpp.s
+	$(CXXLANG) $(CXXLANG_FLAGS) -fPIC -c $< -o $@
 %-ve.o: %-vi.cpp
-	$(CXXLANG) $(CXXLANG_VFLAGS) -c $< -o $@
+	# this one might not be supported?
+	$(CXXLANG) $(CXXLANG_VFLAGS)       -S $< -o $*-vi_cpp.s
+	$(CXXLANG) $(CXXLANG_VFLAGS) -fPIC -c $< -o $@
 # Aurora assembler.S: cpp->.asm, ncc->.o, nobjcopy->.bin, .bin-->.dump
 ifeq ($(VERBOSE),0)
 %.bin: %.S

@@ -19,10 +19,11 @@ OBJDUMP:=objdump
 OBJDUMP:=objdump
 OBJCOPY:=objcopy
 SHELL:=/bin/bash
-CFLAGS:=-O2 -g2
+CFLAGS:=-O2 -g2 -pthread
 CXXFLAGS:=$(CFLAGS) -std=c++11
 LIBVELI_TARGETS:=libveli-x86.a
 LIBJIT1_TARGETS:=libjit1-x86.a libjit1-x86.so
+LDFLAGS+=-ldl
 else
 #
 # we may want to generate jit code on host OR ve
@@ -76,6 +77,19 @@ LIBJIT1_TARGETS:=libjit1.a libjit1-x86.a libjit1.so libjit1-x86.so
 endif
 TARGETS+=$(LIBJIT1_TARGETS) $(LIBVELI_TARGETS)
 
+FTRACE=NO
+OPENMP=NO
+LIBSUFFIX:=
+ifeq (${OPENMP},YES)
+	LIBSUFFIX:=${LIBSUFFIX}_omp
+endif
+ifeq (${FTRACE},YES)
+	LIBSUFFIX:=${LIBSUFFIX}_ft
+endif
+# libjit1 basename: pertains to vejit/lib/ 'make all-vejit-libs'
+LIBJIT:=jit1${LIBSUFFIX}
+LIBJITX86=${LIBJIT}-x86
+
 all: $(TARGETS) liblist
 SHELL:=LC_ALL=C /bin/bash
 .PHONY: liblist force
@@ -89,9 +103,9 @@ force: # force libs to be recompiled
 	$(MAKE) $(LIBVELI_TARGETS)
 
 VEJIT_SHARE:=cblock.cpp dltest1.cpp veli_loadreg.cpp dllbuild.cpp
-VEJIT_LIBS:=libjit1-x86.a libveli-x86.a libjit1-x86.so
+VEJIT_LIBS:=libjit1-x86.a libveli-x86.a libjit1-x86.so bin.mk-x86.lo
 ifeq ($(CC:ncc%=ncc),ncc)
-VEJIT_LIBS+=libjit1.a libveli.a libjit1.so
+VEJIT_LIBS+=libjit1.a libveli.a libjit1.so bin.mk-ve.lo
 endif
 .PHONY: all-vejit-libs
 all-vejit-libs:
@@ -100,7 +114,6 @@ vejit.tar.gz: jitpage.h jit_data.h throw.hpp \
 		asmfmt_fwd.hpp asmfmt.hpp codegenasm.hpp velogic.hpp \
 		cblock.hpp dllbuild.hpp \
 		asmfmt.cpp cblock.cpp dllbuild.cpp jitpage.c jit_data.c \
-		bin.mk-ve.lo \
 		jitpage.hpp jitpipe_fwd.hpp jitpipe.hpp cblock.hpp pstreams-1.0.1 bin_mk.c \
 		$(VEJIT_LIBS) $(VEJIT_SHARE)
 	rm -rf vejit
@@ -114,11 +127,12 @@ vejit.tar.gz: jitpage.h jit_data.h throw.hpp \
 	cp -av $(filter %.hpp,$^) $(filter %.h,$^) vejit/include/
 	cp -av pstreams-1.0.1 vejit/include/
 	#cp -av $(filter %.a,$^) $(filter %.so,$^) bin.mk-ve.lo vejit/lib/
-	cp -av $(filter libveli%,$^) bin.mk-ve.lo bin.mk-x86.lo vejit/lib/
+	cp -av $(filter libveli%,$^) $(filter bin.mk%,$^) vejit/lib/
 	cp -av $(filter %.cpp,$^) $(filter %.c,$^) vejit/share/vejit/src/
 	cp -av ${VEJIT_SHARE} vejit/share/vejit/
 	cp -av Makefile.share vejit/share/vejit/Makefile
 	tar czf $@ vejit
+	tar tvzf $@ vejit
 #
 # see vl-run.sh for running veli_loadreg tests
 # many tests only need veli_loadreg-x86
@@ -199,7 +213,7 @@ jitve0: jitve0.c bin.mk
 jitve_util.o: jitve_util.c jitve_util.h
 	$(CC) -O2 -c $< -o $@
 test_strMconst: test_strMconst.c jitpage.o
-	$(CC) $(CFLAGS) -O2 $^ -o $@
+	$(CC) $(CFLAGS) -O2 $^ -o $@ -ldl
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
 jitve_hello: jitve_hello.c jitpage.o
 	$(CC) $(CFLAGS) -O2 -E -dD $< >& $(patsubst %.c,%.i,$<)
@@ -235,7 +249,7 @@ libjit1.a: asmfmt.o jitpage.o jit_data.o \
 jit_data.o: jit_data.c jit_data.h
 	$(CC) ${CFLAGS} -O2 -c $< -o $@
 jitpage.o: jitpage.c jitpage.h
-	$(CC) $(CFLAGS) -D_GNU_SOURCE -c $< -o $@
+	$(CC) $(CFLAGS) -D_GNU_SOURCE -c $< -o $@ -ldl
 # C++ things...	
 asmfmt.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
 	$(CXX) ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
@@ -432,6 +446,10 @@ dlprt-ve: dlprt.c
 	nc++ -g2 $< -o $@ -ldl
 	{ ./$@ libm.so; echo "exit status $$?"; } >& dlprt-ve.log; \
 		echo "exit status $$?";
+#allsyms-x86: allsyms.cpp
+#	g++ -g2 -O2 -std=c++11 -D_GNU_SOURCE $< -o $@ -ldl
+#allsyms-ve: allsyms.cpp
+#	${CXX} -g2 -O2 -std=c++11 -D_GNU_SOURCE $< -o $@
 .PHONY: dlprt-x86.log dlprt-ve.log
 dlprt-ve.log: dlprt-ve libjit1.so
 	#./dlprt-ve libjit1.so; echo "exit status $$?"
@@ -498,7 +516,7 @@ msk: msk.cpp
 endif
 jitpp_loadreg: jitpp_loadreg.cpp asmfmt.o jitpage.o jit_data.o
 	-$(CXX) $(CXXFLAGS) -O2 -E -dD $< >& $(patsubst %.cpp,%.i,$<) && echo YAY || echo OHOH for jitpp_loadreg.i
-	$(CXX) $(CXXFLAGS) -O2 $^ -o $@
+	$(CXX) $(CXXFLAGS) -O2 $^ -o $@ $(LDFLAGS)
 	$(CXX) $(CXXFLAGS) -Wa,-adhln -c $^ >& $(patsubst %.cpp,%.asm,$<)
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
 %.asm: %.c
@@ -561,8 +579,8 @@ dllbuild.log:
 		echo ""; echo "TEST dllbuild ve ncc";     ./dllbuild-ve 7; \
 		echo ""; echo "TEST dllbuild ve clang";   ./dllbuild-ve 7 -clang.c; \
 		echo ""; echo "TEST dllbuild ve nc++";    ./dllbuild-ve 7 -ncc.cpp; \
-		echo ""; echo "TEST dllbuild ve clang++"; ./dllbuild-ve 7 -clang.cpp; \
 		echo ""; echo "TEST dllbuild ve clang C+intrinsics"; ./dllbuild-ve 7 -vi.c; \
+		echo ""; echo "TEST dllbuild ve clang++"; ./dllbuild-ve 7 -clang.cpp; \
 		} >& dllbuild.log && echo "dllbuild.log seems OK" || echo "dllbuild.log Huh?"
 	# NOTE -clang.cpp expected to fail becase clang++ does not understand "-std=c++11"
 dllvebug.log:
@@ -583,8 +601,14 @@ dllbuild-x86b: dllbuild.cpp libjit1-x86.so
 dllbuild-ve: dllbuild.cpp libjit1.a
 	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1.a -ldl
 	nreadelf -d $@
-dllbuild-veb: dllbuild.cpp libjit1.so
-	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1.so
+dllbuild-veb: dllbuild.cpp
+	if [ ! -f "vejit/lib/lib$(LIBJIT).so" ]; then $(MAKE) all-vejit-libs; fi
+	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -DDLLBUILD_MAIN $< \
+		-Lvejit/lib -Wl,-rpath,`pwd`/vejit/lib -l$(LIBJIT)
+	nreadelf -d $@
+# next test show how to dynamically *compile* and load a dll given/ fiail after subdir1/subdir2/ fwrite
+dllbuild-vec: dllbuild.cpp libjit1.so
+	$(CXX) -o $@ $(CXXFLAGS) -fPIC -pthread -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1.so
 	nreadelf -d $@
 # next test show how to dynamically *compile* and load a dll given
 # a std::string containing 'C' code.

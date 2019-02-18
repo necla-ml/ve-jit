@@ -215,7 +215,8 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
     ostringstream mkfile;
     mkfile<<"# Auto-generated Makefile for "<<libname;
     mkfile<<"\nLIBNAME:="<<libname
-        <<"\nLDFLAGS:=$(LDFLAGS) -shared -fPIC -Wl,-rpath="<<dir.abspath<<" -L"<<dir.abspath
+        //<<"\nLDFLAGS:=$(LDFLAGS) -shared -fPIC -Wl,-rpath="<<dir.abspath<<" -L"<<dir.abspath
+        <<"\nLDFLAGS:=-shared -fPIC -Wl,-rpath="<<dir.abspath<<" -L"<<dir.abspath<<" $(LDFLAGS)"
         <<"\nall: $(LIBNAME)\n";
     {
         ostringstream sources; sources<<"\nSOURCES:=";
@@ -272,6 +273,25 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
     }
     prepped = true;
 }
+void DllBuild::skip_prep(string basename, string subdir/*="."*/){
+    if(empty()){
+        cout<<" Nothing to do for dll "<<basename<<endl;
+        return;
+    }
+    this->dir      = SubDir(subdir);
+    this->basename = basename;
+    this->libname  = "lib"+this->basename+".so";
+    this->mkfname  = this->basename+".mk";
+    this->fullpath = dir.abspath+"/"+libname;
+    std::string absmkfile = dir.abspath+"/"+mkfname;
+    if(access(absmkfile.c_str(),R_OK)){
+        cout<<" Oh-oh. Cannot skip generating "<<mkfname;
+        this->prep(basename,subdir);
+    }else{
+        cout<<" Re-using "<<absmkfile<<endl;
+        prepped = true;
+    }
+}
 void DllBuild::make(std::string env){
     if(!prepped)
         THROW("Please prep(basename,dir) before make()");
@@ -310,10 +330,24 @@ void DllBuild::make(std::string env){
     cout<<string(40,'-')<<" stderr:"<<endl<<err<<endl;
     cout<<" Make error  = "<<error <<endl;
     cout<<" Make status = "<<status<<endl;
-    if(error) THROW(" Make failed! status="<<status<<" error="<<error);
+    if(error||status) THROW(" Make failed! status="<<status<<" error="<<error);
 #endif
     //system(("ls -l "+dir.abspath).c_str()); // <-- unsafe c_str usage
     cout<<" 'make' ran in: "<<dir.abspath<<endl;
+    made = true;
+}
+void DllBuild::skip_make(std::string env){
+    if(!prepped)
+        THROW("Please prep(basename,dir) before make()");
+    string mk = env+" make VERBOSE=1 -C "+dir.abspath+" -f "+mkfname;
+    cout<<" Make command: "<<mk<<endl; cout.flush();
+    if(access(this->fullpath.c_str(),R_OK)){
+        cout<<" Oh-oh. library "<<fullpath<<" is not there.  Attempting rebuild"<<endl;
+        cout.flush();
+        this->make(env);
+    }else{
+        cout<<" Re-using existingg library "<<fullpath<<endl;
+    }
     made = true;
 }
 DllOpen::DllOpen() : basename(), libHandle(nullptr), dlsyms(), libname(), files() {
@@ -366,16 +400,33 @@ std::unique_ptr<DllOpen> DllBuild::dllopen(){
     ret.libname = this->libname;
     cout<<"DllBuild::dllopen() calling dlopen... libname="<<libname<<endl; cout.flush();
     cout<<"DllBuild::dllopen() calling dlopen... fullpath="<<fullpath<<endl; cout.flush();
-#if JIT_DLFUNCS // but means a library has dependency on libdl
+    if(access(fullpath.c_str(),R_OK))
+        THROW(" Cannot read file "<<fullpath);
+    else { cout<<"Good, have read access to fullpath"<<endl; cout.flush(); }
+#if JIT_DLFUNCS // but means libjit1 has a dependency on libdl
     {
         cout<<" debug... dlopen_rel + dl_dump..."<<endl;
-        void * dbg = dlopen_rel( fullpath.c_str(), RTLD_LAZY );
-        if(!dbg) THROW(" dlopen_rel failed!");
+        //void * dbg = dlopen_rel( fullpath.c_str(), RTLD_LAZY );
+        void * dbg = dlopen( fullpath.c_str(), RTLD_LAZY );
+        if(!dbg) {
+#if !defined(__ve)
+            cout<<" x86 program won't be able to open a VE library"<<endl;
+#endif
+            THROW(" dlopen failed!");
+        }
         dl_dump(dbg);
         cout<<" debug... back from dl_dump..."<<endl;
         dlclose(dbg);
     }
 #endif
+
+    // TODO test dlopen machine architecture match
+#if !defined(__ve)
+    cout<<" DllBuild::dllopen cut short -- not running on VE "<<endl;
+    pRet.reset(nullptr);
+    return pRet;
+#endif
+
 #if 0
     ret.libHandle = dlopen(fullpath.c_str(), RTLD_NOW);
     cout<<"DllBuild::dllopen() dlopen(fullpath, RTLD_NOW) OK"<<endl; cout.flush();
@@ -686,10 +737,14 @@ int main(int argc,char**argv){
             }
         }
     }
-#if !defined(__ve)
-    cout<<" STOPPING EARLY: we are an x86 executable and should not load a VE .so"<<endl;
-#else
     unique_ptr<DllOpen> pLib = dllbuild.create();
+    if( !pLib ){
+#if !defined(__ve)
+        cout<<" STOPPING EARLY: we are an x86 executable and should not load a VE .so"<<endl;
+#else
+        THROW(" dllopen failed");
+#endif
+    }
     DllOpen& lib = *pLib;
     typedef int (*LuckyNumberFn)();
     void * luckySymbol = lib["myLuckyNumber"]; // create stores symbols as void*
@@ -697,7 +752,6 @@ int main(int argc,char**argv){
     cout<<" Calling symbol 'myLuckyNumber' ... cjit_fn @ "<<(void*)cjit_fn<<endl; cout.flush();
     int cjit_fn_ret = cjit_fn();
     cout<<" cjit_fn returned "<<cjit_fn_ret<<endl; cout.flush();
-#endif
 
 #if 0 // later ...
     typedef int (*JitFunc)();
