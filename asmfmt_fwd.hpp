@@ -103,7 +103,7 @@ class AsmFmtCols {
       AsmFmtCols& lcom(std::string const& comment);    ///< left <// comment>
       AsmFmtCols& com(std::string const& comment);     ///< mid <// comment>
       AsmFmtCols& rcom(std::string const& comment);    ///< right <# comment>
-      AsmFmtCols& lab(std::string const& label);       ///< <label:>
+      AsmFmtCols& lab(std::string const& label, std::string const& comment="");       ///< <label:>
       AsmFmtCols& ins();                               ///< blank line
       AsmFmtCols& ins(std::string const& instruction); ///< <    ><op       >[<args>]
       /** <    ><op          >[<args>]<      # <asmcomment> */

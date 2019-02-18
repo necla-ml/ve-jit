@@ -277,27 +277,31 @@ int strMconst(char *mconst,uint64_t const parm){
 
 ///////////////////////////////////////////////////////////////////////////////
 void * dlopen_rel(char const* const relpath, int opt){
-  // first try relpath "as is" (maybe it is libm.so from some known dir)
-  dlerror(); // clear error
-  void * ret = dlopen(relpath,opt);
-  if(!ret){ // if not, then maybe it is a file
-    const char * const abspath = realpath(relpath,NULL);
-    if(!abspath){
-      char const* err=dlerror();
-      printf(" %s not a relative path? %s\n",relpath,(err?err:"unknown error"));
-    }else{
-      printf(" relpath  : %s\n",relpath);
-      printf(" abspath  : %s\n",abspath);
-      dlerror(); // clear error
-      ret = dlopen(abspath,opt);
-      if(!ret){
+    // first try relpath "as is" (maybe it is libm.so from some known dir)
+    dlerror(); // clear error
+    printf(" dlopen(%s,opt) ", relpath); fflush(stdout);
+    void * ret = dlopen(relpath,opt);
+    if(ret){
+        printf(" succeeded\n", relpath); fflush(stdout);
+    }else{ // if not, then maybe it is a file
         char const* err=dlerror();
-        printf(" dlopen error: %s\n",(err?err:"unknown error"));
-      }
-      free((void*)abspath);
+        printf(" failed, error: %s\n", (err?err:"unknown error")); fflush(stdout);
+        const char * const abspath = realpath(relpath,NULL);
+        if(!abspath){
+            printf(" %s not a relative file path?\n",relpath);
+        }else{
+            printf(" relpath  : %s\n",relpath);
+            printf(" abspath  : %s\n",abspath);
+            dlerror(); // clear error
+            ret = dlopen(abspath,opt);
+            if(!ret){
+                char const* err=dlerror();
+                printf(" dlopen error: %s\n",(err?err:"unknown error"));
+            }
+            free((void*)abspath);
+        }
     }
-  }
-  return ret;
+    return ret;
 }
 
 /** use 0 to see full output */

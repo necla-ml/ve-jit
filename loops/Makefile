@@ -713,6 +713,8 @@ cfuse: cfuse.cpp
 	g++ -Wall -std=c++11 -I.. -O3 $< -o $@
 clean:
 	rm -f *.i *.o fuse2 fuse2lin repro a.out *.gch
+	rm a.s  cblock cfuse libgcc_lucky.so
+
 realclean: clean	
 	rm -f *.log
 #	

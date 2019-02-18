@@ -54,7 +54,7 @@ void test_strMconst(void){
   assert(nerr==0);
 }
 
-main()
+int main()
 {
   test_strMconst();      // recognize constants that can be written in (N)M bitstring format
   printf(__FILE__ "DONE: Goodbye!\n");

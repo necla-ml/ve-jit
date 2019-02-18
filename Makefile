@@ -89,6 +89,10 @@ force: # force libs to be recompiled
 	$(MAKE) $(LIBVELI_TARGETS)
 
 VEJIT_SHARE:=cblock.cpp dltest1.cpp veli_loadreg.cpp dllbuild.cpp
+VEJIT_LIBS:=libjit1-x86.a libveli-x86.a libjit1-x86.so
+ifeq ($(CC:ncc%=ncc),ncc)
+VEJIT_LIBS+=libjit1.a libveli.a libjit1.so
+endif
 .PHONY: all-vejit-libs
 all-vejit-libs:
 	./mklibs.sh >& mklibs.log	# writes libs into vejit/lib/
@@ -98,9 +102,7 @@ vejit.tar.gz: jitpage.h jit_data.h throw.hpp \
 		asmfmt.cpp cblock.cpp dllbuild.cpp jitpage.c jit_data.c \
 		bin.mk-ve.lo \
 		jitpage.hpp jitpipe_fwd.hpp jitpipe.hpp cblock.hpp pstreams-1.0.1 bin_mk.c \
-		libjit1.a libjit1-x86.a libveli.a libveli-x86.a \
-		libjit1.so libjit1-x86.so \
-		${VEJIT_SHARE}
+		$(VEJIT_LIBS) $(VEJIT_SHARE)
 	rm -rf vejit
 	mkdir vejit
 	mkdir vejit/include
@@ -422,8 +424,9 @@ endif
 dlprt-x86: dlprt.c
 	g++ -E $< -o $@.i
 	g++ -g2 $< -o $@ -ldl
-	{ ./$@ libm.so; echo "exit status $$?"; } >& dlprt-x86.log; \
-		echo "exit status $$?";
+	# x86 libm.so as is actually a link-script (text file), which shows that most
+	# of libm comes from libm.so.6 (with AS_NEEDED for some shared/non-shared vector libs)
+	{ ./$@ libm.so.6; echo "exit status $$?"; } >& dlprt-x86.log
 dlprt-ve: dlprt.c
 	nc++ -E $< -o $@.i
 	nc++ -g2 $< -o $@ -ldl
@@ -622,8 +625,7 @@ clean:
 	rm -f asmkern0.asm asmkern0.dis
 	for f in *.bin; do b=`basename $$f .bin`; rm -f $$b.asm $$b.o $$b.dis $$b.dump; done
 	for f in tmp_*.S; do b=`basename $$f .S`; rm -f $$b.asm $$b.dis $$b.dump; done
-	rm -f jitve_math.asm jitve_hello.asm jitve_hello.s jitve_hello.dis jitve*.dis \
-		jitpp_hello.asm
+	rm -f jitve_math.asm jitve_hello.asm jitve_hello.s jitve_hello.dis jitve*.dis jitpp_hello.asm
 	$(MAKE) -f bugN.mk clean
 realclean: clean
 	rm -f $(TARGETS)

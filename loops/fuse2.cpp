@@ -624,8 +624,18 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
 
         AsmFmtCols fd,fp,fi,fk,fl,fz;
 
+        // local labels:
+        string fusename;
+        {
+            std::ostringstream oss;
+            oss<<"fuse2_"<<vl<<"_"<<ii<<"_"<<jj;
+            fusename = oss.str();
+        }
         // immediate constants into registers.
         AsmScope block = {
+            {"BASE", "L_"+fusename+"_BASE"},
+            {"INDUCE", "L_"+fusename+"_INDUCE"},
+            {"KERNEL_BLOCK", "L_"+fusename+"_KERNEL_BLOCK"},
             {"vl0",  "%s0"},
             {"ii",   "%s1"},
             {"jj",   "%s2"},
@@ -681,7 +691,7 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
             fp.ins("or  vl, vl0,vl0", "vl = vl0");
         }
         if(SAVE_RESTORE_VLEN){
-            fp.ins("svl vl_save","save original VL --> vl_save");
+            fp.ins("svl vl_save","save original VL --> vl_save [opt]");
         }
         fp.ins("lvl vl0",                   "VL = vl0");
         if( have_sq ){
@@ -837,22 +847,25 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
             return oss.str();
 
         };
-        if(onceI){
-            tr+="rel addr(BASE:+base register";
-            fp.ins("sic base", "BASE -> register for relocatable branching");
-            fp.lab("BASE");
-            have_base_addr = true;
-        }
-        if(onceI && nloop > 1) {
-            fp.ins("b "+reladdr("KERNEL_BLOCK"), "goto KERNEL_BLOCK");
-        }
-        if(1 || nloop <= 1){ // comment
+        string alg_descr;
+        {
             std::ostringstream oss;
-            oss<<"vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop;
+            oss<<" Fuse2 alg: vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop;
             if(vl0%jj==0) oss<<" vl%jj==0";
             else if(jj%vl==0) oss<<" jj%vl==0";
             else if(positivePow2(jj)) oss<<" jj=2^"<<jj_shift;
-            fp.com(oss.str());
+            alg_descr = oss.str();
+        }
+        if(onceI){
+            tr+="rel addr(BASE:+base register";
+            fp.ins("sic base", "BASE -> register for relocatable branching [opt: move upward]");
+            fp.lab("BASE",alg_descr);
+            have_base_addr = true;
+        }else{
+            fp.lcom(alg_descr);
+        }
+        if(onceI && nloop > 1) {
+            fp.ins("b "+reladdr("KERNEL_BLOCK"), "goto KERNEL_BLOCK");
         }
         cout<<" fp.cnt="<<cnt;
         goto KERNEL_BLOCK;
@@ -1713,9 +1726,9 @@ enum Unroll unroll_suggest( int const vl, int const ii, int const jj, int const 
              for( ; *c != '\0'; ++c){
                  if(*c=='h'){
                      cout<<" fuse2lin [-h|t|l|u] VLEN H W"<<endl;
-                     cout<<"  -t    just test correctness"<<endl;
+                     cout<<"  -t    test correctness + VE asm code (no unroll)"<<endl;
                      cout<<"  -a    alt test correctness"<<endl;
-                     cout<<"  -l    [default] pseudo-asm-code for loops (+correctness)"<<endl;
+                     cout<<"  -l    pseudo-asm-code for loops (+correctness)"<<endl;
                      cout<<"  -u    [WIP] pseudo-asm-code for unrolled loops (+correctness)"<<endl;
                      cout<<"  -m    try for extended-range (a/d) ~ a*M>>N forms"<<endl;
                      cout<<"  -h    this help"<<endl;
@@ -1733,7 +1746,7 @@ enum Unroll unroll_suggest( int const vl, int const ii, int const jj, int const 
              }
          }
      }
-     cout<<" args: a = "<<a<<endl;
+     cout<<" args: a = "<<a<<" opt_t="<<opt_t<<" opt_u="<<opt_u<<" opt_l="<<opt_l<<" opt_m="<<opt_m<<endl;
      if(argc > a+1) vl = atof(argv[a+1]);
      if(argc > a+2) h  = atof(argv[a+2]);
      if(argc > a+3) w  = atof(argv[a+3]);

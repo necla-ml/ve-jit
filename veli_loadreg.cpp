@@ -533,7 +533,8 @@ int main(int argc,char** argv)
         if(opt_j>1){
             // here is one way to make the VE binary blob.
             // this also produces some other files (.asm,.o,.bin,.dump)
-            system("make -f bin.mk tmp_veli_loadreg_big.bin");
+            if(system("make -f bin.mk tmp_veli_loadreg_big.bin"))
+                THROW(" Trouble executing make -f bin.mk tmp_veli_loadreg_big.bin");
         }
         opt_a=1;
     }

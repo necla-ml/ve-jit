@@ -203,9 +203,11 @@ AsmFmtCols& AsmFmtCols::rcom(string const& comment){
     (*a) << setw(inwidth+opwidth+argwidth+3) << right << "// " << left << comment << endl;
     return *this;
 }
-AsmFmtCols& AsmFmtCols::lab(string const& label){
+AsmFmtCols& AsmFmtCols::lab(string const& label, std::string const& comment/*=""*/){
     throw_if_written(this,__FUNCTION__);
-    (*a) << label << ':' << endl;
+    (*a) << label << ':';
+    if(!comment.empty()) (*a) << " # " << comment;
+    (*a) << endl;
     return *this;
 }
 AsmFmtCols& AsmFmtCols::ins(){
@@ -445,7 +447,7 @@ AsmFmtCols& AsmFmtCols::ins(string const& instruction, string const& asmcomment)
 }
 string AsmFmtCols::fmt_def(std::string const& symbol, std::string const& subst, std::string const& name){
     std::ostringstream define;
-    define << setw(inwidth) << "#" << "define " << setw(10) << symbol << ' ' << subst;
+    define << "#define " << setw(10) << symbol << ' ' << subst;
     if( name.size() == 0 ){
         define << "\n";
     }else{

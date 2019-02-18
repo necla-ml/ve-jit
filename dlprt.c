@@ -24,7 +24,7 @@
 #endif
 
 /** use 0 to see full output */
-#define REMOVE_CODE 0
+#define REMOVE_CODE 8
 
 ///////////////////////////////////////////////////////////////////////////////
 #define BumpDyn(dyn,tag) do{ \
@@ -85,28 +85,33 @@ FindPtr(const ElfW(Addr) load_addr,
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
+// COPIED from jitpage.c
 static void * dlopen_rel(char const* const relpath, int opt){
-  // first try relpath "as is" (maybe it is libm.so from some known dir)
-  dlerror(); // clear error
-  void * ret = dlopen(relpath,opt);
-  if(!ret){ // if not, then maybe it is a file
-    const char * const abspath = realpath(relpath,NULL);
-    if(!abspath){
-      char const* err=dlerror();
-      printf(" %s not a path? %s\n",(err?err:"unknown error"));
-    }else{
-      printf(" relpath  : %s\n",relpath);
-      printf(" abspath  : %s\n",abspath);
-      dlerror(); // clear error
-      ret = dlopen(abspath,opt);
-      if(!ret){
+    // first try relpath "as is" (maybe it is libm.so from some known dir)
+    dlerror(); // clear error
+    printf(" dlopen(%s,opt) ", relpath); fflush(stdout);
+    void * ret = dlopen(relpath,opt);
+    if(ret){
+        printf(" succeeded\n"); fflush(stdout);
+    }else{ // if not, then maybe it is a file
         char const* err=dlerror();
-        printf(" dlopen error: %s\n",(err?err:"unknown error"));
-      }
-      free((void*)abspath);
+        printf(" failed, error: %s\n", (err?err:"unknown error")); fflush(stdout);
+        const char * const abspath = realpath(relpath,NULL);
+        if(!abspath){
+            printf(" %s not a relative file path?\n",relpath);
+        }else{
+            printf(" relpath  : %s\n",relpath);
+            printf(" abspath  : %s\n",abspath);
+            dlerror(); // clear error
+            ret = dlopen(abspath,opt);
+            if(!ret){
+                char const* err=dlerror();
+                printf(" dlopen error: %s\n",(err?err:"unknown error"));
+            }
+            free((void*)abspath);
+        }
     }
-  }
-  return ret;
+    return ret;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -353,8 +358,9 @@ void dl_dump(void * const handle){
 int main(const int argc, const char * const * const argv) {
   assert((argc == 2) && (argc == 2));
   const char * const lib = argv[1];
-  void * const handle = dlopen_rel(lib, RTLD_LAZY);
   printf("Program: %s %s",argv[0],argv[1]);
+  printf(" Attempting dlopen_rel(%s,RTLD_LAZY)\n",lib); fflush(stdout);
+  void * const handle = dlopen_rel(lib, RTLD_NOW);
   assert(handle != 0);
 #if REMOVE_CODE < 8
   dl_dump(handle);
