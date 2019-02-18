@@ -19,7 +19,7 @@ OBJDUMP:=objdump
 OBJDUMP:=objdump
 OBJCOPY:=objcopy
 SHELL:=/bin/bash
-CFLAGS:=-O2 -g2
+CFLAGS:=-O2 -g2 -pthread
 CXXFLAGS:=$(CFLAGS) -std=c++11
 LIBVELI_TARGETS:=libveli-x86.a
 LIBJIT1_TARGETS:=libjit1-x86.a libjit1-x86.so
@@ -75,6 +75,19 @@ LIBVELI_TARGETS:=libveli.a libveli-x86.a
 LIBJIT1_TARGETS:=libjit1.a libjit1-x86.a libjit1.so libjit1-x86.so
 endif
 TARGETS+=$(LIBJIT1_TARGETS) $(LIBVELI_TARGETS)
+
+FTRACE=NO
+OPENMP=NO
+LIBSUFFIX:=
+ifeq (${OPENMP},YES)
+	LIBSUFFIX:=${LIBSUFFIX}_omp
+endif
+ifeq (${FTRACE},YES)
+	LIBSUFFIX:=${LIBSUFFIX}_ft
+endif
+# libjit1 basename: pertains to vejit/lib/ 'make all-vejit-libs'
+LIBJIT:=jit1${LIBSUFFIX}
+LIBJITX86=${LIBJIT}-x86
 
 all: $(TARGETS) liblist
 SHELL:=LC_ALL=C /bin/bash
@@ -429,6 +442,10 @@ dlprt-ve: dlprt.c
 	nc++ -g2 $< -o $@ -ldl
 	{ ./$@ libm.so; echo "exit status $$?"; } >& dlprt-ve.log; \
 		echo "exit status $$?";
+#allsyms-x86: allsyms.cpp
+#	g++ -g2 -O2 -std=c++11 -D_GNU_SOURCE $< -o $@ -ldl
+#allsyms-ve: allsyms.cpp
+#	${CXX} -g2 -O2 -std=c++11 -D_GNU_SOURCE $< -o $@
 .PHONY: dlprt-x86.log dlprt-ve.log
 dlprt-ve.log: dlprt-ve libjit1.so
 	#./dlprt-ve libjit1.so; echo "exit status $$?"
@@ -558,8 +575,8 @@ dllbuild.log:
 		echo ""; echo "TEST dllbuild ve ncc";     ./dllbuild-ve 7; \
 		echo ""; echo "TEST dllbuild ve clang";   ./dllbuild-ve 7 -clang.c; \
 		echo ""; echo "TEST dllbuild ve nc++";    ./dllbuild-ve 7 -ncc.cpp; \
-		echo ""; echo "TEST dllbuild ve clang++"; ./dllbuild-ve 7 -clang.cpp; \
 		echo ""; echo "TEST dllbuild ve clang C+intrinsics"; ./dllbuild-ve 7 -vi.c; \
+		echo ""; echo "TEST dllbuild ve clang++"; ./dllbuild-ve 7 -clang.cpp; \
 		} >& dllbuild.log && echo "dllbuild.log seems OK" || echo "dllbuild.log Huh?"
 	# NOTE -clang.cpp expected to fail becase clang++ does not understand "-std=c++11"
 dllvebug.log:
@@ -580,8 +597,14 @@ dllbuild-x86b: dllbuild.cpp libjit1-x86.so
 dllbuild-ve: dllbuild.cpp libjit1.a
 	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1.a -ldl
 	nreadelf -d $@
-dllbuild-veb: dllbuild.cpp libjit1.so
-	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1.so
+dllbuild-veb: dllbuild.cpp
+	if [ ! -f "vejit/lib/lib$(LIBJIT).so" ]; then $(MAKE) all-vejit-libs; fi
+	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -DDLLBUILD_MAIN $< \
+		-Lvejit/lib -Wl,-rpath,`pwd`/vejit/lib -l$(LIBJIT)
+	nreadelf -d $@
+# next test show how to dynamically *compile* and load a dll given/ fiail after subdir1/subdir2/ fwrite
+dllbuild-vec: dllbuild.cpp libjit1.so
+	$(CXX) -o $@ $(CXXFLAGS) -fPIC -pthread -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1.so
 	nreadelf -d $@
 # next test show how to dynamically *compile* and load a dll given
 # a std::string containing 'C' code.

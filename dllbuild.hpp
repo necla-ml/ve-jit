@@ -95,16 +95,25 @@ struct DllBuild : std::vector<DllFile> {
     DllBuild() : std::vector<DllFile>(), prepped(false), made(false),
     dir(), basename(), libname(), mkfname(), fullpath()
     {}
-    /** For testing -- create build files (ok for host- or cross-compile).
+    /** Create source files and Makefile.
+     *  ok for host- or cross-compile
      * /post \c dir is left with all files necessary to build the library
-     *       via 'make', as well as a header with any known fwd decls.
+     *       via 'make', and (?) a header with any known fwd decls.
      * If cross-compiling, stop after 'prep' or 'make' stage, because you
      * can't run any dll code. */
     void prep(std::string basename, std::string dir=".");
-    /** For testing -- . \pre you have all the [cross-]compiling tools.
+    /** If possible, re-use existing Makefile of a previous \c prep. */
+    void skip_prep(std::string basename, std::string dir=".");
+
+    /** Run 'make'.
      * \c env is prefixed to the 'make' command, and could include things like
-     * CFLAGS='...' LDFLAGS='...'*/
+     * CFLAGS='...' LDFLAGS='...'
+     * \pre \c this->prepped and you have all the [cross-]compiling tools.
+     * \post \c libname exists as file at \c fullpath
+     */
     void make(std::string env="");
+    /** If \c fullpath jit library exists, skip the 'make'. */
+    void skip_make(std::string env="");
     /** open and load symbols, \throw if not \c prepped and \c made */
     std::unique_ptr<DllOpen> create(){ return dllopen(); }
     /** \c prep, \c make and load all public symbols (JIT scenario).
