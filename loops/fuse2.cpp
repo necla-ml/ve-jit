@@ -63,32 +63,137 @@ struct Vab{
 //   - suggested value (nloop,bcyc_regs,...)
 //   - any small unroll (e.g. 8)        // using some [fast?] induction formula
 enum Unroll {
-    UNR_NLOOP1,   ///< precalc, never unroll
-    UNR_VLMODJJ,  ///< no precalc, any small unroll
+    UNR_UNSET=0,        ///< uninitialized
+    UNR_NLOOP1,         ///< precalc, never unroll
+    UNR_VLMODJJ,        ///< no precalc, any small unroll
     // jj%vl == 0
-    UNR_JJMODVL_NORESET,  ///< no precalc, any small unroll
+    UNR_JJMODVL_NORESET, ///< no precalc, any small unroll
     UNR_JJMODVL_RESET,  ///< XXX check for bcyc_regs or nloop XXX
     // isPositivePow2(jj)
-    UNR_JJPOW2_NLOOP, ///< no precalc, unroll by nloop (full unrol)
-    UNR_JJPOW2_CYC,   ///< precalc b[] (and a[] for a+=const?) [partial?] unroll by bcyc_regs
-    UNR_JJPOW2_BIG,   ///< no precalc, any small unroll
-    UNR_NLOOP,        ///< precalc, full unroll is small
-    UNR_CYC,          ///< precalc, [partial?] unroll by cyclic for b[] (and a?)
+    UNR_JJPOW2_NLOOP,   ///< no precalc, unroll by nloop (full unrol)
+    UNR_JJPOW2_CYC,     ///< precalc b[] (and a[] for a+=const?) [partial?] unroll by bcyc_regs
+    UNR_JJPOW2_BIG,     ///< no precalc, any small unroll
+    UNR_NLOOP,          ///< precalc, full unroll is small
+    UNR_CYC,            ///< precalc, [partial?] unroll by cyclic for b[] (and a?)
     // generic div-mod
-    UNR_DIVMOD        ///< no precalc, any small unroll
+    UNR_DIVMOD          ///< no precalc, any small unroll
 };
-struct Unroll_data {
-    /** where did we come from? */
+struct UnrollSuggest {
+    /** where did we come from? \p vl ~ vector length. \p ii,jj ~ nested loop limits. */
     int vl, ii, jj, b_period_max;
+
+    // Suggested strategy.
     /** what class of unrolling is suggested? */
     enum Unroll suggested;
-
+    /** Vector Length Lower (may give a more efficient induction step).
+     * \c unroll_suggest looks in range 100%--90% of original \c vl for
+     * an alternative that might be better. */
+    int vll;
     /** \c nloop is a multiple of \c unroll for partial unroll cases,
      * equal for full unroll,
      * but is untied for <em>any small unroll</em> case. */
     int nloop;
     /** explicit unrolling factor may be given, possibly < nloop. */
     int unroll;
+    UnrollSuggest()
+        : vl(0),ii(0),jj(0),b_period_max(0),suggested(UNR_UNSET),
+        vll(0),nloop(0),unroll(0)
+    {}
+    UnrollSuggest(int const vl, int const ii, int const jj, int const b_period_max=8)
+        : vl(vl), ii(ii), jj(jj), b_period_max(b_period_max),suggested(UNR_UNSET),
+        vll(0), nloop((int)( ((int64_t)ii*jj+vl -1) / vl )), unroll(0)
+    {}
+};
+UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int const b_period_max,
+        int const verbose = 1);
+UnrollSuggest unroll_suggest( UnrollSuggest & u, int vl_min=0 );
+
+static char const* unrollSuggestNames[] = {
+    "UNR_UNSET",
+    "UNR_NLOOP1",
+    "UNR_VLMODJJ",
+    "UNR_JJMODVL_NORESET",
+    "UNR_JJMODVL_RESET",
+    "UNR_JJPOW2_NLOOP",
+    "UNR_JJPOW2_CYC",
+    "UNR_JJPOW2_BIG",
+    "UNR_NLOOP",
+    "UNR_CYC",
+    "UNR_DIVMOD" };
+static int const nNames = sizeof(unrollSuggestNames) / sizeof(char const*);
+static char const* unrollSuggestDescr[] = {
+    "uninitialized",
+    "no loop [precalc, never unroll]",
+    "trivial vl%jj==0 update [no precalc, any small unroll]",
+    "trivial jj%vl==0 update [no precalc, any small unroll]",
+    "trivial jj%vl==0 update w/ reset [no precalc, any small unroll] XXX check for bcyc_regs or nloop XXX",
+    "jj=2^N [precalc, full unroll by nloop]",
+    "jj=2^N [precalc, [partial?] cyclic unroll]",
+    "jj=2^N large period [easy updated, no precalc, any small unroll)",
+    "full precalc [induce via mov+mov] full unroll",
+    "precalc b[] [and a?], [partial?] cyclic unroll [induce by mov+add]",
+    "no precalc, any small unroll [induce via divmod (slowest)]" };
+static_assert( sizeof(unrollSuggestDescr) == sizeof(unrollSuggestNames), "mismatched array sizes");
+char const* name( enum Unroll const unr ){
+    assert( (int)unr >= 0 && (int)unr < nNames );
+    return unrollSuggestNames[unr];
+}
+char const* desc( enum Unroll const unr ){
+    assert( (int)unr >= 0 && (int)unr < nNames );
+    return unrollSuggestDescr[unr];
+}
+std::ostream& operator<<(std::ostream& os, enum Unroll unr){
+    return os<<name(unr)<<"("<<(int)unr<<"){"<<desc(unr)<<"}";
+}
+std::string str(UnrollSuggest const& u, std::string const& pfx=""){
+    std::ostringstream oss;
+    if(!pfx.empty()) oss<<" "<<pfx<<" ";
+    int64_t const iijj = u.ii * u.jj;
+    int vl = u.vl;              // but we might suggest a lower vector length:
+    if( u.vll != 0 ){
+        assert( u.vll > 0 );
+        assert( u.vll <= vl );
+        vl = u.vll;
+    }
+    oss<<"vl,ii,jj="<<u.vl<<","<<u.ii<<","<<u.jj<<" "<<u.suggested;
+    if(u.vl>0 && u.ii>0 && u.jj>0 && u.suggested!=UNR_UNSET && u.b_period_max>0){
+        int const nloop = (iijj+vl-1) / vl;    // div_round_up(iijj,vl)
+        int const lcm_vljj = lcm(vl,u.jj);
+        int const b_period = lcm_vljj / vl;
+        int const bcyc_regs = (nloop<b_period? nloop: b_period);
+
+        oss<<" nloop="<<u.nloop;
+        oss<<" b_period="<<b_period;
+        int const unroll_any = min(nloop,u.b_period_max);
+        int unroll_cyc = bcyc_regs;
+        // but push cyclic up towards b_period_max
+        if(unroll_cyc>0) while(unroll_cyc < u.b_period_max) unroll_cyc+=bcyc_regs;
+        // if specific unroll factors are needed, print them.
+        switch(u.suggested){
+          case(UNR_UNSET): break;
+          case(UNR_NLOOP1): oss<<" no loop"; break;
+          case(UNR_VLMODJJ): oss<<" unroll("<<unroll_any<<")"; break;
+                             // jj%vl == 0
+          case(UNR_JJMODVL_NORESET): oss<<" unroll("<<unroll_any<<")"; break;
+          case(UNR_JJMODVL_RESET): oss<<" unroll("<<unroll_any<<")"; break;
+                                   // isPositivePow2(jj)
+          case(UNR_JJPOW2_NLOOP): oss<<" unroll("<<nloop<<")"; assert(u.unroll==nloop); break;
+          case(UNR_JJPOW2_CYC): oss<<" unroll("<<unroll_cyc<<")"; assert(u.unroll==bcyc_regs); break;
+          case(UNR_JJPOW2_BIG): oss<<" unroll("<<unroll_any<<")"; break;
+          case(UNR_NLOOP): oss<<" unroll by "<<nloop; assert(u.unroll==nloop); break;
+          case(UNR_CYC): oss<<" unroll("<<unroll_cyc<<")"; assert(u.unroll==bcyc_regs); break;
+                         // generic div-mod
+          case(UNR_DIVMOD): oss<<" unroll("<<unroll_any<<")"; break;
+        }
+    }
+    oss<<"\n";
+    return oss.str();
+}
+std::ostream& operator<<(std::ostream& os, UnrollSuggest const& u){
+    return os<<str(u);
+}
+
+struct UnrollData : public UnrollSuggest {
     /** precalculated data vectors.
      * - if !pre[].empty()
      *   - pre.size() == 1             (init-phase uses vpre[0], any unroll/nloop)
@@ -245,8 +350,6 @@ void fastdiv_make(struct fastdiv *d, u32 divisor) {
     }
 }
 
-enum Unroll unroll_suggest( int const vl, int const ii, int const jj, int const nloop, int const b_period_max );
-
 void other_fastdiv_methods(int const jj);
 
 // NOTE: we do a ">>C", which we can't just elide on Aurora, even if C==16
@@ -358,7 +461,13 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
 
     int const b_period_max = 8; // how many regs can you spare?
     //int const b_period = unroll_suggest( vl, jj, b_period_max );
-    unroll_suggest( vl,ii,jj, nloop, b_period_max );
+    auto u = unroll_suggest( vl,ii,jj, b_period_max );
+    // This is pinned at [max] vl, even if it may be "inefficient".
+    //auto uAlt =
+    unroll_suggest(u);
+
+    cout<<" Using "<<u.suggested<<"("<<(int)u.suggested<<") for vl,ii,jj="
+        <<vl<<","<<ii<<","<<jj<<endl;
 
     register uint64_t cnt = 0UL;
     for( ; cnt < iijj; cnt += vl )
@@ -535,6 +644,16 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
         assert( vl0 > 0 );
         assert( ii > 0 );
         assert( jj > 0 );
+
+        int const b_period_max = 8; // how many regs can you spare?
+        //int const b_period = unroll_suggest( vl, jj, b_period_max );
+        auto u = unroll_suggest( vl,ii,jj, b_period_max );
+        // This is pinned at [max] vl, even if it may be "inefficient".
+        //auto uAlt =
+        unroll_suggest(u);
+
+        cout<<" Using "<<u.suggested<<"("<<(int)u.suggested<<") for vl,ii,jj="
+            <<vl<<","<<ii<<","<<jj<<endl;
 
         //cout<<"Verify-------"<<endl;
         // generate reference index outputs
@@ -739,10 +858,10 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
         // are we doing any b_period or nloop precalc?
         int const b_period_max = 8; // how many regs can you spare?
         //int const b_period = unroll_suggest( vl, jj, b_period_max );
-        auto const suggest = unroll_suggest( vl,ii,jj, nloop, b_period_max );
+        auto const suggest = unroll_suggest( vl,ii,jj, b_period_max );
 
 #if 0    // later ...
-        // use \c suggestion to create Unroll_data
+        // use \c suggestion to create UnrollData
         auto const unr = mkUnroll_data( vl, ii, jj, b_period_max );
 #else // for now...
         // TODO : precal for low b_periods XXX
@@ -1451,9 +1570,14 @@ void other_fastdiv_methods(int const jj){
  * complete with precalculated data vectors
  * and maybe some precalc constants (ex. magic values, special shifts).
  */
-enum Unroll unroll_suggest( int const vl, int const ii, int const jj, int const nloop, int const b_period_max ){
-    enum Unroll ret = UNR_DIVMOD;
+UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int const b_period_max,
+        int const v/*verbose=0*/ ){
+    int64_t const iijj = ii * jj;
+    int const nloop = (iijj+vl-1) / vl;    // div_round_up(iijj,vl)
+    enum Unroll strategy = UNR_DIVMOD;
+    UnrollSuggest ret(vl,ii,jj,b_period_max);
 
+    if(v)cout<<"\nUNROLL_SUGGEST\n";
     bool const jj_pow2 = positivePow2(jj);
     int const jj_shift = positivePow2Shift((uint32_t)jj);
     // Note: I began with a simple cyclic case, jj%vl==0.
@@ -1506,57 +1630,76 @@ enum Unroll unroll_suggest( int const vl, int const ii, int const jj, int const 
     //    - have jj%vl==0
     // Precalc for a jj_pow2 case may or may not be good.
     if( nloop == 1 ){
-        ret = UNR_NLOOP1;
-        cout<<" A.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop
+        strategy = UNR_NLOOP1;
+        if(v)cout<<" A.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
+            <<strategy<<"\n\t"
             <<", b_period="<<b_period<<b_period_pow2<<" no loop [precalc, no unroll]"<<endl;
+        ret.suggested = strategy;
+        //ret.vll = 0; // unchanged
+        //ret.nloop = // unchanged
+        //ret.unroll = 0; // unchanged (0 = "any" unroll is ok, so maybe b_period_max is a good choice)
     }else if( vl%jj == 0 ){
-        ret = UNR_VLMODJJ;
-        cout<<" B.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop
+        strategy = UNR_VLMODJJ;
+        if(v)cout<<" B.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
+            <<strategy<<"\n\t"
             <<", b_period="<<b_period
             <<" has a trivial vl%jj==0 update [no precalc, any small unroll]"
             <<endl;
         //assert( !have_b_period );
-    }else if( nloop > 1 && jj%vl == 0 ){
-        //ret = UNR_JJMODVL_NORESET; // XXX FIXME fastest case
-        ret = UNR_JJMODVL_RESET; // XXX FIXME
-        cout<<" C.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop
+        ret.suggested = strategy;
+    }else if( jj%vl == 0 ){
+        //unroll = UNR_JJMODVL_NORESET; // XXX FIXME fastest case
+        strategy = UNR_JJMODVL_RESET; // XXX FIXME
+        if(v)cout<<" C.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
+            <<strategy<<"\n\t"
             <<", b_period="<<b_period<<b_period_pow2
             <<" has a trivial jj%vl==0 update [no precalc, any small unroll]"
             <<endl;
         //assert( !have_b_period );
         //assert("Never got case B"==nullptr);
+        ret.suggested = strategy;
     }else if( jj_pow2 ){
         if(nloop < b_period_max){
-            ret = UNR_JJPOW2_NLOOP;
-            cout<<" D.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop
+            strategy = UNR_JJPOW2_NLOOP;
+            if(v)cout<<" D.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
+                <<strategy<<"\n\t"
                 <<", b_period="<<b_period<<b_period_pow2<<", bcyc_regs="<<bcyc_regs
                 <<" has jj=2^"<<jj_shift<<" with precalc unroll(nloop="<<nloop<<")"
                 <<endl;
         }else if(bcyc_regs < b_period_max){
-            ret = UNR_JJPOW2_CYC;
-            cout<<" E.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop
+            strategy = UNR_JJPOW2_CYC;
+            if(v)cout<<" E.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
+                <<strategy<<"\n\t"
                 <<", b_period="<<b_period<<b_period_pow2<<", bcyc_regs="<<bcyc_regs
                 <<" has jj=2^"<<jj_shift<<" with precalc unroll(bcyc_regs="<<bcyc_regs<<")"
                 <<endl;
             //assert( have_b_period );
+            ret.suggested = strategy;
+            ret.unroll = nloop;
         }else{
-            ret = UNR_JJPOW2_BIG;
-            cout<<" F.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop
+            strategy = UNR_JJPOW2_BIG;
+            if(v)cout<<" F.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
+                <<strategy<<"\n\t"
                 <<", b_period="<<b_period<<b_period_pow2<<", bcyc_regs="<<bcyc_regs
                 <<" has jj=2^"<<jj_shift<<" easy update, but large period [no precalc, any small unroll]"
                 <<endl;
+            ret.suggested = strategy;
         }
     }else if( nloop < b_period_max ){ // small nloop, any b_period
-        ret = UNR_NLOOP;
-        cout<<" G.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop
+        strategy = UNR_NLOOP;
+        if(v)cout<<" G.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
+            <<strategy<<"\n\t"
             <<", b_period="<<b_period<<b_period_pow2
             <<" suggest full precalc unroll(nloop="<<nloop<<")\n"
             <<"     Then a[]-b[] induction is 2 ops total, mov/mov from precalc regs to working"
             <<endl;
+        ret.suggested = strategy;
+        ret.unroll = nloop;
         // no. also ok for non-cyclic and low nloop ... assert( have_b_period );
     }else if( bcyc_regs < b_period_max ){ // small b_period, high nloop
-        ret = UNR_CYC;
-        cout<<" H.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop
+        strategy = UNR_CYC;
+        if(v)cout<<" H.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
+            <<strategy<<"\n\t"
             <<", b_period="<<b_period<<b_period_pow2
             <<" suggest partial precalc unroll(b_period="<<b_period<<")\n"
             <<"   b[] and a[]-INCREMENT cycle through precalc values\n"
@@ -1564,12 +1707,16 @@ enum Unroll unroll_suggest( int const vl, int const ii, int const jj, int const 
             <<endl;
         // no...assert( have_b_period );
         //assert(" never get to H"==nullptr);
+        ret.suggested = strategy;
+        ret.unroll = b_period; // XXX or maybe b_period * N < b_period_max ??? XXX
     }else{ // nloop and b_period both high OR this is a simpler case
-        ret = UNR_DIVMOD;
-        cout<<" I.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop
+        strategy = UNR_DIVMOD;
+        if(v)cout<<" I.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
+            <<strategy<<"\n\t"
             <<", b_period="<<b_period<<b_period_pow2<<" both high:"
             <<" full unroll(nloop="<<nloop<<") [no precalc] still possible"
             <<endl;
+        ret.suggested = strategy;
         assert( !have_b_period );
     }
 #endif
@@ -1617,6 +1764,150 @@ enum Unroll unroll_suggest( int const vl, int const ii, int const jj, int const 
     }
 #endif
     return ret;
+}
+/** Scan vl (or vl-1) to \c vl_min for an efficient loop induction.
+ * - Usage:
+ *   - first call \c unroll_suggest(vl,ii,jj,b_period_max)
+ *   - optionally call this function with above result for
+ *     [potentially] an alternate reduced-vl strategy.
+ * - If \c u.suggest == UNR_UNSET (default-constructed), then
+ *   scan from \c vl downwards; otherwise scan from vl-1 downwards.
+ * - If \c vl_min is not in range [1,\c u.vl], then
+ *   set vl_min at max(0.90*vl,1);
+ * \return unroll suggestion at an efficient, possibly reduced, vector length.
+ * \post if a nicer alt is found, \c u.vll records this reduce \c u.vl
+ */
+UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
+    assert( u.suggested != UNR_UNSET );
+    double const f=0.90;
+    int const vl = u.vl;
+    int const vl_max = max(1,vl-1);
+    if( vl_min < 1 || vl_min > vl ){ // vl_min default (or out-of-range)?
+        vl_min = max( 1, (int)(f*vl) );
+    }
+    cout<<" checking [ "<<vl_max<<" to "<<vl_min<<" ] ..."<<endl;
+    //
+    auto const sugg = u.suggested; // induction strategy
+    bool const jj_pow2 = positivePow2(u.jj);
+    if( sugg != UNR_NLOOP1 && sugg!=UNR_VLMODJJ && sugg!=UNR_JJMODVL_RESET && !jj_pow2 ){
+        // quick check for very easy cases (just print msg)
+        // (always print, even for a vll < vl_min)
+        int const jj = u.jj;
+        if( jj < vl ){
+            int const vll = vl/jj*jj;
+            cout<<"   Note: vl/jj*jj = "<<vll<<" is an exact multiple of jj"
+                " (vl reduced by "<<(vl-vll)<<" or "<<int((vl-vll)*1000.0/vl)*0.1<<"%)"
+                <<endl;
+        }else if( jj > vl && jj%vl!=0){
+            // can we make jj an exact mult of vll?
+            int const nup = (jj+vl-1)/vl;
+            if( jj%nup == 0 ){
+                int const vll = jj/nup;
+                cout<<"   Note: vl = "<<jj/nup<<" would make jj an exact mult of vl"
+                    " (vl reduced by "<<(vl-vll)<<" or "<<int((vl-vll)*1000.0/vl)*0.1<<"%)"
+                    <<endl;
+            }
+        }
+    }
+    // "Efficient" list:
+    //          UNR_NLOOP1              UNR_VLMODJJ
+    //          UNR_JJMODVL_NORESET     UNR_JJMODVL_RESET
+    //          UNR_JJPOW2_{NLOOP,CYC,BIG}
+    //          UNR_CYC         (and maybe UNR_NLOOP)
+    // leaving "inefficient" as:
+    //          UNR_DIVMOD      (and maybe UNR_NLOOP)
+    //
+    // If u.vl is already "efficient", still try for a decent low-vl alternate
+    UnrollSuggest ret = UnrollSuggest(); // If no good alt, ret is 'empty'
+    u.vll = 0;                           //             and u.vll is zero
+    cout<<"Checking vll "; cout.flush();
+    for( int vll = vl_max; vll >= vl_min; --vll){
+        cout<<" "<<vl; cout.flush();
+        UnrollSuggest us = unroll_suggest(vll, u.ii, u.jj, u.b_period_max, 0/*verbose*/);
+        if( us.suggested != UNR_DIVMOD ){
+            ret = us;    // return the nice alt
+            cout<<"\nALTERNATE strategy at vll="<<vll<<" ("
+                <<int(vll*1000./vl)*0.1<<"% of vl)\n  "<<ret<<endl;
+            u.vll = vll; // also record existence-of-alt into u
+            break;
+        }
+    }
+    cout<<endl;
+    return ret;
+}
+
+int main(int argc,char**argv){
+    int vl = 8;
+    int h=20, w=3;
+    int opt_t=1, opt_u=0, opt_l=0, opt_h=0, opt_m=0;
+    int a=0;
+#if 0
+    cout<<"jitimm ...";
+    cout<<"jitimm(0) = "<<jitimm(0)<<endl;
+    cout<<"jitimm(1) = "<<jitimm(1)<<endl;
+    cout<<"jitimm(-1) = "<<jitimm(-1)<<endl;
+    cout<<"popcount(0) = "<<popcount(0)<<endl;
+    cout<<"popcount(1) = "<<popcount(1)<<endl;
+    cout<<"popcount(-1) = "<<popcount(-1)<<endl;
+    cout<<std::hex;
+    for(uint64_t i=1,j=1; i<64; j+=j, ++i){
+        cout<<" jitimm("<< j-1    <<") = "<<jitimm(j-1)<<endl;
+        cout<<" jitimm("<< ~(j-1) <<") = "<<jitimm(~(j-1))<<endl;
+    }
+    cout<<std::dec;
+#endif
+
+    if(argc > 1){
+        // actually only the last -[tlu] option is used
+        for( ; a+1<argc && argv[a+1][0]=='-'; ++a){
+            char *c = &argv[1][1];
+            for( ; *c != '\0'; ++c){
+                if(*c=='h'){
+                    cout<<" fuse2lin [-h|t|l|u] VLEN H W"<<endl;
+                    cout<<"  -t    test correctness + VE asm code (no unroll)"<<endl;
+                    cout<<"  -a    alt test correctness"<<endl;
+                    cout<<"  -l    pseudo-asm-code for loops (+correctness)"<<endl;
+                    cout<<"  -u    [WIP] pseudo-asm-code for unrolled loops (+correctness)"<<endl;
+                    cout<<"  -m    try for extended-range (a/d) ~ a*M>>N forms"<<endl;
+                    cout<<"  -h    this help"<<endl;
+                    cout<<"   VLEN = vector length"<<endl;
+                    cout<<"   I    = 1st loop a=0..i-1"<<endl;
+                    cout<<"   J    = 2nd loop b=0..j-1"<<endl;
+                    cout<<" double loop --> loop over vector registers a[VLEN], b[VLEN]"<<endl;
+                    opt_h = 1;
+                }else if(*c=='t'){ opt_t=2; opt_l=0; opt_u=0;
+                }else if(*c=='a'){ opt_t=1; opt_l=0; opt_u=0;
+                }else if(*c=='l'){ opt_t=0; opt_l=1; opt_u=0;
+                }else if(*c=='u'){ opt_t=0; opt_l=0; opt_u=1;
+                }else if(*c=='m'){ opt_m=1;
+                }
+            }
+        }
+    }
+    cout<<" args: a = "<<a<<" opt_t="<<opt_t<<" opt_u="<<opt_u<<" opt_l="<<opt_l<<" opt_m="<<opt_m<<endl;
+    if(argc > a+1) vl = atof(argv[a+1]);
+    if(argc > a+2) h  = atof(argv[a+2]);
+    if(argc > a+3) w  = atof(argv[a+3]);
+    cout<<"vlen="<<vl<<", h="<<h<<", w="<<w<<endl;
+
+    if(opt_m){
+        // removed test_mod_inverse<uint32_t>();
+        //test_mod_inverse<uint64_t>();
+        cout<<" (mod_inverse OK)";
+        exit(0);
+    }
+
+    // INCORRECT verify1();
+    //cout<<" verify1 OK"<<endl;
+
+    if(opt_h == 0){
+        if(opt_t==1) test_vloop2(vl,h,w);
+        else if(opt_t==2) test_vloop2_no_unrollX(vl,h,w);
+        if(opt_u) test_vloop2_unroll(vl,h,w);
+        if(opt_l) test_vloop2_no_unroll(vl,h,w); // C++ code more like asm generic loop
+    }
+    cout<<"\nGoodbye"<<endl;
+    return 0;
 }
 /** \fn unroll_suggest
  *
@@ -1689,86 +1980,12 @@ enum Unroll unroll_suggest( int const vl, int const ii, int const jj, int const 
  *   sampled values 0..jj in the b[] vector, so no single-vector Aurora VMV suffices.
  * - You can \b only do rotate method easily if \f$Vcyc = (vl/b_period)*b_period + b_period\f$
  *   can EXACTLY equal 256 in a SINGLE Aurora VMV, though.
- *   - but this happens for vl > jj only for jj already a power of two [already fast]
- *   - and implies jj is a power of two,
- *     - so we already have a fast update : vl%jj==0 or otherwise
- *
- * Conclusion: Aurora does not allow a fast vlen ~ MVL rotation method
- *
- */
+*   - but this happens for vl > jj only for jj already a power of two [already fast]
+*   - and implies jj is a power of two,
+    *     - so we already have a fast update : vl%jj==0 or otherwise
+    *
+    * Conclusion: Aurora does not allow a fast vlen ~ MVL rotation method
+    *
+    */
 
-
- int main(int argc,char**argv){
-     int vl = 8;
-     int h=20, w=3;
-     int opt_t=1, opt_u=0, opt_l=0, opt_h=0, opt_m=0;
-     int a=0;
-#if 0
-     cout<<"jitimm ...";
-     cout<<"jitimm(0) = "<<jitimm(0)<<endl;
-     cout<<"jitimm(1) = "<<jitimm(1)<<endl;
-     cout<<"jitimm(-1) = "<<jitimm(-1)<<endl;
-     cout<<"popcount(0) = "<<popcount(0)<<endl;
-     cout<<"popcount(1) = "<<popcount(1)<<endl;
-     cout<<"popcount(-1) = "<<popcount(-1)<<endl;
-     cout<<std::hex;
-     for(uint64_t i=1,j=1; i<64; j+=j, ++i){
-         cout<<" jitimm("<< j-1    <<") = "<<jitimm(j-1)<<endl;
-         cout<<" jitimm("<< ~(j-1) <<") = "<<jitimm(~(j-1))<<endl;
-     }
-     cout<<std::dec;
-#endif
-
-     if(argc > 1){
-         // actually only the last -[tlu] option is used
-         for( ; a+1<argc && argv[a+1][0]=='-'; ++a){
-             char *c = &argv[1][1];
-             for( ; *c != '\0'; ++c){
-                 if(*c=='h'){
-                     cout<<" fuse2lin [-h|t|l|u] VLEN H W"<<endl;
-                     cout<<"  -t    test correctness + VE asm code (no unroll)"<<endl;
-                     cout<<"  -a    alt test correctness"<<endl;
-                     cout<<"  -l    pseudo-asm-code for loops (+correctness)"<<endl;
-                     cout<<"  -u    [WIP] pseudo-asm-code for unrolled loops (+correctness)"<<endl;
-                     cout<<"  -m    try for extended-range (a/d) ~ a*M>>N forms"<<endl;
-                     cout<<"  -h    this help"<<endl;
-                     cout<<"   VLEN = vector length"<<endl;
-                     cout<<"   I    = 1st loop a=0..i-1"<<endl;
-                     cout<<"   J    = 2nd loop b=0..j-1"<<endl;
-                     cout<<" double loop --> loop over vector registers a[VLEN], b[VLEN]"<<endl;
-                     opt_h = 1;
-                 }else if(*c=='t'){ opt_t=2; opt_l=0; opt_u=0;
-                 }else if(*c=='a'){ opt_t=1; opt_l=0; opt_u=0;
-                 }else if(*c=='l'){ opt_t=0; opt_l=1; opt_u=0;
-                 }else if(*c=='u'){ opt_t=0; opt_l=0; opt_u=1;
-                 }else if(*c=='m'){ opt_m=1;
-                 }
-             }
-         }
-     }
-     cout<<" args: a = "<<a<<" opt_t="<<opt_t<<" opt_u="<<opt_u<<" opt_l="<<opt_l<<" opt_m="<<opt_m<<endl;
-     if(argc > a+1) vl = atof(argv[a+1]);
-     if(argc > a+2) h  = atof(argv[a+2]);
-     if(argc > a+3) w  = atof(argv[a+3]);
-     cout<<"vlen="<<vl<<", h="<<h<<", w="<<w<<endl;
-
-     if(opt_m){
-         // removed test_mod_inverse<uint32_t>();
-         //test_mod_inverse<uint64_t>();
-         cout<<" (mod_inverse OK)";
-         exit(0);
-     }
-
-     // INCORRECT verify1();
-     //cout<<" verify1 OK"<<endl;
-
-     if(opt_h == 0){
-         if(opt_t==1) test_vloop2(vl,h,w);
-         else if(opt_t==2) test_vloop2_no_unrollX(vl,h,w);
-         if(opt_u) test_vloop2_unroll(vl,h,w);
-         if(opt_l) test_vloop2_no_unroll(vl,h,w); // C++ code more like asm generic loop
-     }
-     cout<<"\nGoodbye"<<endl;
-     return 0;
- }
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break

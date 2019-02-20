@@ -273,7 +273,10 @@ struct CodeGenAsm
       };
       struct TmpReg tmp() { return TmpReg(this); }
 
-      /** return asm string to load \c value into scalar register \c reg. */
+      /** return asm string to load \c value into scalar register \c reg.
+       * \todo There is tested code that covers all reasonable optimizations,
+       *       and it should be used to load constants into scalar registers!!!
+       */
       std::string load( std::string const reg, uint64_t value ){
           std::ostringstream oss;
           if( (int64_t)value >= -64 && (int64_t)value <= 63 ){

@@ -253,7 +253,7 @@ std::string reduce(const std::string& str,
 AsmFmtCols::AsmLine AsmFmtCols::parts(std::string const& instruction){
     // made this a STATIC function
     //throw_if_written(this,__FUNCTION__);
-    int const v=1;
+    int const v=0;
     AsmLine ret;
     if(v)cout<<"parts.."<<instruction<<endl;
 #if 0

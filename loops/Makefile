@@ -20,8 +20,14 @@ force-lib:
 	rm -f ../*-x86.a ../*-x86.o
 	$(MAKE) -C .. libjit1-x86.a
 
+LDFLAGS?=
+LDLIBS?=
+ifneq ($(CC:ncc%=ncc),ncc)
+LDLIBS+=-ldl
+endif
+
 fuse2: fuse2.cpp ../libjit1-x86.a
-	g++ -Wall -std=c++11 -ggdb -O3 $^ -o $@
+	g++ -Wall -std=c++11 -ggdb -O3 $^ -o $@ ${LDFLAGS} ${LDLIBS}
 .PHONY: mega1
 # Instead of randomly trying a bunch of tf2-FOO.log targets,
 # we now record and execution hash of program flow to create
@@ -707,13 +713,13 @@ tf2-0.log: fuse2 Makefile tf2-3.log
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
 cfuse: cfuse.cpp
-	g++ -Wall -std=c++11 -I.. -O3 $< -o $@ -ldl
+	g++ -Wall -std=c++11 -I.. -O3 $< -o $@ ${LDFLAGS} ${LDLIBS}
 %: %.cpp
 	g++ -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
 	g++ -Wall -std=c++11 -I.. -O3 $< -o $@
 clean:
 	rm -f *.i *.o fuse2 fuse2lin repro a.out *.gch
-	rm a.s  cblock cfuse libgcc_lucky.so
+	rm -f a.s  cblock cfuse libgcc_lucky.so
 
 realclean: clean	
 	rm -f *.log
