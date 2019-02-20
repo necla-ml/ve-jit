@@ -85,7 +85,7 @@ int main(int,char**){
     uf12 z = x + y;
     assert( z.u32() == 130U );
     assert( (uf12(2U) - uf12(5U)).u32() == uint32_t(-3) ); // underflow as expected
-    assert( (uf12(2047U) - uf12(2047U).u32()) == 2047U*2047U );
+    assert( (uf12(2047U) - uf12(2047U)).u32() == 0U );
     cout<<"\nGoodbye"<<endl;
     return 0;
 }

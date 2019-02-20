@@ -22,12 +22,17 @@ force-lib:
 
 LDFLAGS?=
 LDLIBS?=
+X86FLAGS:=
+X86LIBS:=
+X86LIBS+=-ldl
 ifneq ($(CC:ncc%=ncc),ncc)
-LDLIBS+=-ldl
+LDLIBS+=${X86LIBS}
 endif
 
 fuse2: fuse2.cpp ../libjit1-x86.a
-	g++ -Wall -std=c++11 -ggdb -O3 $^ -o $@ ${LDFLAGS} ${LDLIBS}
+	echo "CC=${CC}"
+	echo "LDLIBS=${LDLIBS}"
+	g++ -Wall -std=c++11 -ggdb -O3 $^ -o $@ ${X86FLAGS} ${X86LIBS}
 .PHONY: mega1
 # Instead of randomly trying a bunch of tf2-FOO.log targets,
 # we now record and execution hash of program flow to create
