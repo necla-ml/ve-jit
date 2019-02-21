@@ -73,13 +73,16 @@ FindPtr(const ElfW(Addr) load_addr,
   const void *ret = NULL;
   BumpDyn(dyn,tag);
   // note: x86 stores actual pointer value, VE stores relative value?
-  if( dyn->d_tag == tag )
-#if !defined(__ve)
-    ret = (const void*)dyn->d_un.d_ptr;
-#else
+  if( dyn->d_tag == tag ){
+#if defined(__ve) && __NEC_VERSION__ < 20000 // non-glibc
     ret = (const void*)(load_addr + dyn->d_un.d_ptr);
+#else // x86 or ncc >= 2.0.0
+    ret = (const void*)dyn->d_un.d_ptr;
+    //printf(" tag %d Ptr @ %p\n",(int)tag,ret);
 #endif
-  else printf(" error: tag %d not found\n",(int)tag); // avoid assert in helpers
+  }else{
+    printf(" error: tag %d not found\n",(int)tag); // avoid assert in helpers
+  }
   return ret;
 }
 #endif

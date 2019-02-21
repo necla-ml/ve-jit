@@ -725,7 +725,7 @@ cfuse: cfuse.cpp
 clean:
 	rm -f *.i *.o fuse2 fuse2lin repro a.out *.gch
 	rm -f a.s  cblock cfuse libgcc_lucky.so
-
+	rm -f *.exe *.exe.stackdump
 realclean: clean	
 	rm -f *.log
 #	

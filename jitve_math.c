@@ -275,11 +275,13 @@ void test_kernel_math(char const* const cmd, unsigned long const parm, int const
     //
     // uniquely name the kernel, in case we wanted several variants
     //                           and to later inspect each kernel
+    if(access("tmp",W_OK)){
     system("mkdir tmp") || printf(" (tmp/ may already exist, good)\n");
     if( tmpdir[0] != '\0' ){
         char mkdir_cmd[80];
         snprintf(mkdir_cmd,80,"mkdir %s%c",tmpdir,'\0');
         system(mkdir_cmd) || printf(" (%s tmp directory may already exist, good!)\n",tmpdir);
+    }
     }
 
     char kernel_name[80];
