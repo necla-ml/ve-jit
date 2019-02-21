@@ -4,9 +4,16 @@ all: Hello bug0 bug1 bug2
 	bug0.cpp hdrs0.cpp libvehdrs0.so hdrs0.o \
 	bug1.cpp hdrs1.cpp libvehdrs1.so hdrs1.o  \
 	bug1.cpp hdrs2.cpp libvehdrs2.so hdrs2.o 
-CXXFLAGS:=-g2
+CXXFLAGS:=
 ifeq ($(CC:ncc%=ncc),ncc)
-CXXFLAGS+=-no-proginf
+CXXFLAGS+=-std=c++11 -no-proginf
+LDFLAGS:=
+
+#LDFLAGS+=-Wl,--enable-new-dtags
+#LDFLAGS+=-Wl,-rpath,/opt/nec/ve/lib
+#LDFLAGS+=-Wl,--spare-dynamic-tags,500
+#LDFLAGS+=-lrt -lpthread
+
 NM:=nnm
 else
 NM:=nm
@@ -20,10 +27,10 @@ hdrs%.o: hdrs%.cpp
 	$(CXX) -o $@ ${CXXFLAGS} -fPIC -O2 -c $<
 	$(NM) -C $@
 libvehdrs%.so: hdrs%.o
-	$(CXX) -o $@ -shared $^
+	$(CXX) -o $@ -shared $^ $(LDFLAGS)
 #bug%: bug0.cpp libvenobug.so libvehdrs%.so
 bug%: bug0.cpp libvehdrs%.so
-	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -L. -Wl,-rpath=`pwd` $^
+	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -L. -Wl,-rpath,`pwd` $^ $(LDFLAGS)
 	./$@ 7 && echo "Exit status $$?" || echo "OHOH Exit status $$?"
 	@echo "Without library..."
 	$(CXX) $(CXXFLAGS) -fPIC -Wall $< && ./a.out && echo YAHOO

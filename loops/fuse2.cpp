@@ -402,15 +402,16 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
 #define FOR(I,VL) for(int I=0;I<VL;++I)
 
     // various misc precalculated consts and declarations.
-    VVlpi a(vl), b(vl);                 // calculated loop index vectors
-    VVlpi bA(vl), bD(vl), sq(vl);       // internal vectors
+    VVlpi a(vl), b(vl), bA(vl), bM(vl), bD(vl), aA(vl), sq(vl);
+    VVlpi a0(vl), b0(vl), x(vl), y(vl);
+    int iloop = 0; // mostly for debug checks, now;
+    Ulpi jj_mod_inverse_lpi   = mod_inverse((Ulpi)jj);
+    Uvlpi jj_mod_inverse_Vlpi = mod_inverse((Uvlpi)jj);
     // bA and bD are used when:
     //   iijj > vl && jj%vl!=0
     // sq is used when:
     //   iloop==0:   jj>1 && vl>=jj
     //   iloop >0:   jj%vl==0 && (special: iloop can be >= (jj/vl))
-    int iloop = 0;
-    assert( nloop >= 1 );
     uint64_t const jj_M = computeM_uB(jj); // for fastdiv_uB method
     cout<<" jj="<<jj;
     int jj_shift=0;
@@ -573,11 +574,24 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
                 FOR(i,vl) a [i] = a[i] + bD[i]; // aA = a + bD; add_vvv
                 ++cnt_bA_bD; ++cnt_jj_shift; assert( have_bA_bD );
             }else{ // div-mod ---------------------6 vec ops: add (mul,shr) (mul,sub) add
+                assert( jj+vl < (1<<21) );
                 if(verbose){cout<<" i";cout.flush();}
-                FOR(i,vl) bA[i] = vl0 + b[i];            // add_vsv
+#if 0
+                FOR(i,vl) bA[i] = vl0 + b[i];           // add_vsv
                 FOR(i,vl) bD[i] = ((jj_M*bA[i]) >> C);  // fastdiv_uB   : mul_vvs, shr_vs
                 FOR(i,vl) b [i] = bA[i] - bD[i]*jj;     // long-hand    : mul_vvs, sub_vvv
                 FOR(i,vl) a [i] = a[i] + bD[i];         // add_vvv
+#else // as VE alementary ops
+                // Note:
+                // Can ">>32" can be avoided for some jj if we do a u32*u32 multiply.
+                // (Current libdivide and fastdiv suggests not,  check dev code, though)
+                FOR(i,vl) b[i] = vl + b[i];
+                FOR(i,vl) bD[i] = jj_M * b[i]; // dep -1 simul if bD ?=? bD_prev + jj_M*vl, but would an extra op later
+                FOR(i,vl) bD[i] = bD[i] >> C;  // dep -1
+                FOR(i,vl) y[i] = bD[i]*jj;     // dep -1
+                FOR(i,vl) a[i] = a[i] + bD[i]; // dep -2
+                FOR(i,vl) b[i] = b[i] - y[i];  // dep -2
+#endif
                 ++cnt_bA_bD; ++cnt_jj_M;
                 assert(have_bA_bD); assert(have_sq==(jj>1&&jj<vl)); assert(!have_jj_shift);
                 assert(!have_vl_over_jj); assert( jj+vl < (int)SAFEMAX );

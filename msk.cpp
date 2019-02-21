@@ -429,6 +429,8 @@ struct Msk512 {
             int x=bb>>1; if((bb&1)) a.clr_(x); else b.clr_(x); }}
 };
 
+using namespace std;
+
 ostream& operator<<(ostream&os, Msk256 const& m256){
     for(int i=0; i<256; ++i){
         int s=i/64, r=63-i%64;
@@ -459,8 +461,6 @@ ostream& operator<<(ostream&os, Msk512 const& m512){
 #endif
 	return os;
 }
-
-using namespace std;
 
 bool constexpr isPow2(uint32_t const x){
    return ((x & ~(x-1))==x)? x : 0;

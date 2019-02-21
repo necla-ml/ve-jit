@@ -54,16 +54,16 @@ TARGETS=asmkern0.asm libjit1.a libjit1-x86.a asmfmt-ve\
 	dlprt-x86 dlprt-ve
 # slow!
 #TARGETS+=test_naspipe test_vejitpage_sh
-CC?=ncc-1.5.1
-CXX?=nc++-1.5.1
-CC:=ncc-1.5.1
-CXX:=nc++-1.5.1
-CC:=ncc-1.2.4
-CXX:=nc++-1.2.4
-CC:=ncc-1.5.2
-CXX:=nc++-1.5.2
-CC:=ncc-1.6.0
-CXX:=nc++-1.6.0
+#CC?=ncc-1.5.1
+#CXX?=nc++-1.5.1
+#CC:=ncc-1.5.1
+#CXX:=nc++-1.5.1
+#CC:=ncc-1.2.4
+#CXX:=nc++-1.2.4
+#CC:=ncc-1.5.2
+#CXX:=nc++-1.5.2
+#CC:=ncc-1.6.0
+#CXX:=nc++-1.6.0
 
 #CC:=ncc
 #CXX:=nc++
@@ -74,7 +74,10 @@ OBJDUMP:=nobjdump
 OBJCOPY:=nobjcopy
 LIBVELI_TARGETS:=libveli.a libveli-x86.a
 LIBJIT1_TARGETS:=libjit1.a libjit1-x86.a libjit1.so libjit1-x86.so
+# for ncc-2.x, we should add -ldl (as for x86)
+LDFLAGS+=-ldl
 endif
+
 TARGETS+=$(LIBJIT1_TARGETS) $(LIBVELI_TARGETS)
 
 FTRACE=NO
@@ -140,7 +143,7 @@ vejit.tar.gz: jitpage.h jit_data.h throw.hpp \
 # thousand optimized VE assembler test cases).
 WORKING?=6
 veli_loadreg: veli_loadreg.cpp libveli.a libjit1.a
-	$(CXX) $(CXXFLAGS) -DWORKING=${WORKING} -g -O2 -o $@ $^
+	$(CXX) $(CXXFLAGS) -DWORKING=${WORKING} -g -O2 -o $@ $^ $(LDFLAGS)
 	@echo "veli_loadreg runs VE Logic for Instructions tests on VE"
 	@echo "(veli_loadreg-x86 will do same VE logic tests on x86)"
 veli_loadreg-x86: veli_loadreg.cpp libveli-x86.a libjit1-x86.a
@@ -217,12 +220,13 @@ test_strMconst: test_strMconst.c jitpage.o
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
 jitve_hello: jitve_hello.c jitpage.o
 	$(CC) $(CFLAGS) -O2 -E -dD $< >& $(patsubst %.c,%.i,$<)
-	$(CC) $(CFLAGS) -O2 $^ -o $@
+	$(CC) $(CFLAGS) -O2 $^ -o $@ -ldl
 	$(CC) $(CFLAGS) -Wa,-adhln -c $< >& $(patsubst %.c,%.asm,$<)
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
+.PRECIOUS: jitve_math
 jitve_math: jitve_math.c jitpage.o
 	$(CC) $(CFLAGS) -O2 -E -dD $< >& $(patsubst %.c,%.i,$<)
-	$(CC) $(CFLAGS) -O2 $^ -o $@
+	$(CC) $(CFLAGS) -O2 $^ -o $@ -ldl
 	$(CC) $(CFLAGS) -Wa,-adhln -c $< >& $(patsubst %.c,%.asm,$<)
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
 #
@@ -259,7 +263,7 @@ dllbuild-ve.o: dllbuild.cpp
 	$(CXX) -o $@ $(CXXFLAGS) -Wall -Werror -c $<
 libjit1.so: jitpage.lo jit_data.lo bin.mk-ve.lo \
 	asmfmt.lo cblock-ve.lo dllbuild-ve.lo # C++ things
-	$(CXX) -o $@ -shared $^ #-ldl #-lnc++
+	$(CXX) -o $@ -shared -Wl,-trace -wL,-verbose $^ #-ldl #-lnc++
 	readelf -h $@
 	readelf -d $@
 jit_data.lo: jit_data.c jit_data.h
@@ -485,16 +489,17 @@ asmfmt-x86: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp jitpage.o
 asmfmt-ve: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp jitpage.o
 	$(CXX) $(CXXFLAGS) -O2 -E -dD $< >& $(patsubst %,%.i,$@)
 	#$(CXX) $(CXXFLAGS) -O2 -D_MAIN $(filter-out %.hpp,$^) -o $@
-	$(CXX) ${CXXFLAGS} -D_MAIN -Wall asmfmt.cpp jitpage.c -o $@
+	$(CXX) ${CXXFLAGS} -D_MAIN -Wall asmfmt.cpp jitpage.c -o $@ -ldl
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
 #
 # C++ version of jitve_hello.
 # This one is more complicated. Besides printing hello world,
 # it also returns a very lucky value (7).
 #
+.PRECIOUS: jitpp_hello
 jitpp_hello: jitpp_hello.cpp asmfmt.o jitpage.o
 	$(CXX) $(CFLAGS) -O2 -E -dD $< >& $(patsubst %.cpp,%.i,$<)
-	$(CXX) $(CFLAGS) -O2 $^ -o $@
+	$(CXX) $(CFLAGS) -O2 $^ -o $@ $(LDFLAGS)
 	$(CXX) $(CFLAGS) -Wa,-adhln -c $^ >& $(patsubst %.cpp,%.asm,$<)
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
 ifeq (0,1)	
@@ -649,13 +654,17 @@ clean:
 	rm -f asmkern0.asm asmkern0.dis
 	for f in *.bin; do b=`basename $$f .bin`; rm -f $$b.asm $$b.o $$b.dis $$b.dump; done
 	for f in tmp_*.S; do b=`basename $$f .S`; rm -f $$b.asm $$b.dis $$b.dump; done
+	rm -rf tmp
 	rm -f jitve_math.asm jitve_hello.asm jitve_hello.s jitve_hello.dis jitve*.dis jitpp_hello.asm
 	$(MAKE) -f bugN.mk clean
 realclean: clean
 	rm -f $(TARGETS)
+	rm -f ftostring a.exe 2
 	rm -f msk msk0 msk1 msk2 msk3 msk4 syscall_hello smir jitve0
 	rm -f bld.log asmfmt.log jitpp_hello.log mk*.log bld*.log
 	rm -f tmp_*.S *.bin
 	rm -rf CMakeCache.txt CMakeFiles asmfmt asmfmt-x86 asmfmt.txt jitve_hello.s
 	$(MAKE) -f bugN.mk realclean
+	$(MAKE) -C loops realclean
+	$(MAKE) -C loops2 realclean
 #
