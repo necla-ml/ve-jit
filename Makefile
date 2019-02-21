@@ -136,6 +136,9 @@ vejit.tar.gz: jitpage.h jit_data.h throw.hpp \
 	cp -av Makefile.share vejit/share/vejit/Makefile
 	tar czf $@ vejit
 	tar tvzf $@ vejit
+ifneq ($(CC:ncc%=ncc),ncc)
+	mv $@ vejit-x86.tar.gz
+endif
 #
 # see vl-run.sh for running veli_loadreg tests
 # many tests only need veli_loadreg-x86
