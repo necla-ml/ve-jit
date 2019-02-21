@@ -1,11 +1,195 @@
-all: fuse2 fuse2lin tf2-1.log tf2-2.log tf2-3.log tf2-4.log tf2-0.log tf2-5.log tf2-m.log
+SHELL=/bin/bash	
+.PHONY: all more force force-lib mega1-sample.log mega1
+all: fuse2 fuse2lin mega1-sample.log
 	@echo 'ALL DONE with make all'
+	@echo ' extra targets:'
+	@echo '    more  force-lib ../libjit1[-x86].a'
+	@echo '    mega1 mega1.log mega2 mega2.log'
+more: all tf2-1.log tf2-2.log tf2-3.log tf2-4.log tf2-0.log tf2-5.log tf2-m.log tf2-sample.log
 
-fuse2: fuse2.cpp
-	g++ -Wall -std=c++11 -O3 $< -o $@
+# This may be somewhat lengthy
+force: force-lib
+	rm -f tf2-1.log tf2-2.log tf2-3.log tf2-4.log tf2-0.log tf2-5.log tf2-m.log
+	$(MAKE) 2>&1 | tee tf2-force.log
+.PHONY: ../libjit1-x86.a
+../libjit1-x86.a:
+	#$(MAKE) -C .. $(patsubst ../%,%,$@)
+	rm -f $@ ../*-x86.o
+	$(MAKE) -C .. $(patsubst ../%,%,$@)
+force-lib:
+	rm -f ../*-x86.a ../*-x86.o
+	$(MAKE) -C .. libjit1-x86.a
+
+LDFLAGS?=
+LDLIBS?=
+X86FLAGS:=
+X86LIBS:=
+X86LIBS+=-ldl
+ifneq ($(CC:ncc%=ncc),ncc)
+LDLIBS+=${X86LIBS}
+endif
+
+fuse2: fuse2.cpp ../libjit1-x86.a
+	echo "CC=${CC}"
+	echo "LDLIBS=${LDLIBS}"
+	g++ -Wall -std=c++11 -ggdb -O3 $^ -o $@ ${X86FLAGS} ${X86LIBS}
+.PHONY: mega1
+# Instead of randomly trying a bunch of tf2-FOO.log targets,
+# we now record and execution hash of program flow to create
+# a set of "interesting" test cases.
+# 1. 'make mega1' to rebuild mega1-uniqs.log (several minutes)
+# 2. update the mega1-sample.log target in this Makefile
+# 3. rerun 'make mega1-sample.log' to cover a large variety of execution paths
+mega1: Makefile fuse2
+	# for VE, concentrate on example codes at VL=256 or 255.
+	rm -f $@.log; \
+	( \
+	for vlen in 256 255 254 16 8 9 15 13 12 11 10 7 6 5 4 3 24 48 127 128 253 2 1; do \
+	for jj in 3 4 5 6 7 8 9 10 11 12 13 14 16 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 36 40 41 42 43 48 60 63 64 72 84 85 86 128 160 192 224 255 256 257 384 511 512 513 640 768 896 992 1023 1024 1025 1152 1280 2 1; do \
+	for ii in `seq 1 16`; do \
+	echo "vl,ii,jj= $$vlen $$ii $$jj"; \
+	./fuse2 -t $$vlen $$ii $$jj; \
+	done; done; done; \
+	) >& $@.log;
+	grep 'ExecHash' $@.log > $@-hash.log;
+	# oh.  I want --unique FIRST ENCOUNTERED
+	sort -k2,3 --unique --stable $@-hash.log > $@-uniq.log
+	sort -r -n -k5 -k7 --stable $@-uniq.log > $@-uniqs.log
+mega1.log mega1-hash.log mega1-uniq.log mega1-uniqs.log:
+	if [ ! -f "$@" ]; then $(MAKE) mega1; fi
+mega2: Makefile fuse2
+	rm -f $@.log; \
+	( \
+	for vlen in 256 8 1 2 3 4 5 24 120 127 255 256; do \
+	for jj in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 23 24 48 59 60 61 62 63 64 65 256 1024 1023; do \
+	for ii in `seq 1 16`; do \
+	echo "vl,ii,jj= $$vlen $$ii $$jj"; \
+	./fuse2 -t $$vlen $$ii $$jj; \
+	done; done; done; \
+	) >> $@.log;
+	grep 'ExecHash' $@.log >> $@-hash.log; \
+	sort -k2,3 --unique $@-hash.log > $@-hash-unique.log
+mega1-sample.log: Makefile fuse2
+	# all code paths from mega1-uniqs.log,
+	#    stressing VL=256 and Vl=255
+	#    some code paths still have smaller VL examples
+	( echo "$@" \
+	&& ./fuse2 -t 256 2 1024 \
+	&& ./fuse2 -t 256 1 1024 \
+	&& ./fuse2 -t 256 3 1024 \
+	&& ./fuse2 -t 256 4 1024 \
+	&& ./fuse2 -t 256 4 768 \
+	&& ./fuse2 -t 256 2 768 \
+	&& ./fuse2 -t 256 3 768 \
+	&& ./fuse2 -t 256 3 512 \
+	&& ./fuse2 -t 256 1 512 \
+	&& ./fuse2 -t 256 2 512 \
+	&& ./fuse2 -t 256 4 512 \
+	&& ./fuse2 -t 256 4 384 \
+	&& ./fuse2 -t 256 1 257 \
+	&& ./fuse2 -t 256 3 257 \
+	&& ./fuse2 -t 256 2 257 \
+	&& ./fuse2 -t 256 4 256 \
+	&& ./fuse2 -t 256 2 256 \
+	&& ./fuse2 -t 256 3 256 \
+	&& ./fuse2 -t 256 8 160 \
+	&& ./fuse2 -t 256 12 64 \
+	&& ./fuse2 -t 256 13 64 \
+	&& ./fuse2 -t 256 9 64 \
+	&& ./fuse2 -t 256 16 64 \
+	&& ./fuse2 -t 256 13 60 \
+	&& ./fuse2 -t 256 16 48 \
+	&& ./fuse2 -t 256 16 33 \
+	&& ./fuse2 -t 256 16 32 \
+	&& ./fuse2 -t 256 9 32 \
+	&& ./fuse2 -t 256 13 20 \
+	&& ./fuse2 -t 256 2 4 \
+	&& ./fuse2 -t 256 1 3 \
+	&& ./fuse2 -t 256 2 3 \
+	&& ./fuse2 -t 256 1 1 \
+	&& ./fuse2 -t 255 1 256 \
+	&& ./fuse2 -t 255 3 256 \
+	&& ./fuse2 -t 255 12 85 \
+	&& ./fuse2 -t 255 10 85 \
+	&& ./fuse2 -t 255 6 85 \
+	&& ./fuse2 -t 255 4 85 \
+	&& ./fuse2 -t 255 12 64 \
+	&& ./fuse2 -t 255 15 34 \
+	&& ./fuse2 -t 255 16 16 \
+	&& ./fuse2 -t 9 9 16 \
+	&& ./fuse2 -t 9 9 4 \
+	&& ./fuse2 -t 9 9 2 \
+	&& ./fuse2 -t 8 9 1 \
+	&& ./fuse2 -t 8 16 1 \
+	&& ./fuse2 -t 7 15 1 \
+	&& ./fuse2 -t 5 16 1 \
+	&& ./fuse2 -t 5 15 1 \
+	&& ./fuse2 -t 4 16 1 \
+		&& echo "EVERYTHING LOOKS GOOD" \
+		) 2>&1 | tee $@
+sample1.log: fuse2 Makefile
+	# This runs the first-encountered ExecHash paths of mega1-hash-unique.log
+	# to give a sampling of "different" code output strategies.
+	( echo "$@" \
+	&& ./fuse2 -t 8 2 24 \
+	&& ./fuse2 -t 8 2 32 \
+	&& ./fuse2 -t 1 1 25 \
+	&& ./fuse2 -t 4 3 4 \
+	&& ./fuse2 -t 1 1 9 \
+	&& ./fuse2 -t 4 2 2 \
+	&& ./fuse2 -t 8 4 16 \
+	&& ./fuse2 -t 8 1 24 \
+	&& ./fuse2 -t 8 2 8 \
+	&& ./fuse2 -t 8 3 16 \
+	&& ./fuse2 -t 8 3 24 \
+	&& ./fuse2 -t 4 7 4 \
+	&& ./fuse2 -t 8 2 12 \
+	&& ./fuse2 -t 8 1 32 \
+	&& ./fuse2 -t 6 2 3 \
+	&& ./fuse2 -t 1 1 17 \
+	&& ./fuse2 -t 1 1 1 \
+	&& ./fuse2 -t 8 1 16 \
+	&& ./fuse2 -t 8 3 8 \
+	&& ./fuse2 -t 8 2 16 \
+	&& ./fuse2 -t 2 1 2 \
+	&& ./fuse2 -t 4 5 4 \
+		&& echo "EVERYTHING LOOKS GOOD" \
+		) 2>&1 | tee $@
+
 tf2-m.log: fuse2 Makefile
 	( echo "$@" \
-		&& ./fuse2 -m  8  1  1 \
+		&& ./fuse2 -m  8 1 1 \
+		&& ./fuse2 -t  256 1024  1 \
+		&& ./fuse2 -t  256 1500  1 \
+		&& ./fuse2 -t  256 512  2 \
+		&& ./fuse2 -t  256 16  64 \
+		&& ./fuse2 -t  256 21  64 \
+		&& ./fuse2 -t  256 1 256 \
+		&& ./fuse2 -t  256 2 256 \
+		&& ./fuse2 -t  256 3 256 \
+		&& ./fuse2 -t  256 4 256 \
+		&& ./fuse2 -t  256 1 512 \
+		&& ./fuse2 -t  256 4 512 \
+		&& ./fuse2 -t  256 3 1024 \
+		&& ./fuse2 -t  256 256 3 \
+		&& ./fuse2 -t  255 256 3 \
+		&& ./fuse2 -t  255 170 3 \
+		&& ./fuse2 -t  255 120 3 \
+		&& ./fuse2 -t  255 85 3 \
+		&& ./fuse2 -t  255 60 3 \
+		&& ./fuse2 -t  255 5 510 \
+		&& ./fuse2 -t  255 5 500 \
+		&& ./fuse2 -t  255 5 500 \
+		&& ./fuse2 -t  256 5 384 \
+		&& ./fuse2 -t  256 13 13 \
+		&& ./fuse2 -t  256 26 13 \
+		&& ./fuse2 -t  256 5 256 \
+		&& ./fuse2 -t  256 2 512 \
+		&& ./fuse2 -t  255 1 255 \
+		&& ./fuse2 -t  255 2 255 \
+		&& ./fuse2 -t  255 3 255 \
+		&& ./fuse2 -t  255 4 255 \
+		&& ./fuse2 -t  255 2 510 \
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
 
@@ -37,6 +221,9 @@ tf2-1.log: fuse2 Makefile # vl%jj == 0 (case 1)
 		&& ./fuse2 -t  8 97  2 \
 		&& ./fuse2 -t  8  1  3 \
 		&& ./fuse2 -t  8  2  3 \
+		&& ./fuse2 -t  8  3  3 \
+		&& ./fuse2 -t  8  4  3 \
+		&& ./fuse2 -t  8  5  3 \
 		&& ./fuse2 -t  8  1  4 \
 		&& ./fuse2 -t  8  2  4 \
 		&& ./fuse2 -t  8  3  4 \
@@ -72,6 +259,16 @@ tf2-1.log: fuse2 Makefile # vl%jj == 0 (case 1)
 		&& ./fuse2 -t  8 33  8 \
 		&& ./fuse2 -t  8 96  8 \
 		&& ./fuse2 -t  8 97  8 \
+		&& ./fuse2 -t  7  1  3 \
+		&& ./fuse2 -t  7  2  3 \
+		&& ./fuse2 -t  7  3  3 \
+		&& ./fuse2 -t  7  4  3 \
+		&& ./fuse2 -t  7  5  3 \
+		&& ./fuse2 -t  9  1  3 \
+		&& ./fuse2 -t  9  2  3 \
+		&& ./fuse2 -t  9  3  3 \
+		&& ./fuse2 -t  9  4  3 \
+		&& ./fuse2 -t  9  5  3 \
 		&& ./fuse2 -t 15  1  2 \
 		&& ./fuse2 -t 15  2  2 \
 		&& ./fuse2 -t 15  3  2 \
@@ -110,6 +307,18 @@ tf2-1.log: fuse2 Makefile # vl%jj == 0 (case 1)
 		) 2>&1 | tee $@
 tf2-2.log: fuse2 Makefile # jj > vl && jj%vl == 0 (case 2)
 	( echo "$@" \
+		&& ./fuse2 -t  3  1 27 \
+		&& ./fuse2 -t  3  2 27 \
+		&& ./fuse2 -t  3  3 27 \
+		&& ./fuse2 -t  3  4 27 \
+		&& ./fuse2 -t  3 13 27 \
+		&& ./fuse2 -t  3 24 27 \
+		&& ./fuse2 -t  3 96 27 \
+		&& ./fuse2 -t  3 97 27 \
+		&& ./fuse2 -t  9  1 90 \
+		&& ./fuse2 -t  9  2 90 \
+		&& ./fuse2 -t  9  3 90 \
+		&& ./fuse2 -t  9  4 90 \
 		&& ./fuse2 -t  8  1 16 \
 		&& ./fuse2 -t  8  2 16 \
 		&& ./fuse2 -t  8  3 16 \
@@ -130,6 +339,9 @@ tf2-2.log: fuse2 Makefile # jj > vl && jj%vl == 0 (case 2)
 		&& ./fuse2 -t  8 24 56 \
 		&& ./fuse2 -t  8 96 56 \
 		&& ./fuse2 -t  8 97 56 \
+		&& ./fuse2 -t  7  1 14 \
+		&& ./fuse2 -t  7  2 14 \
+		&& ./fuse2 -t  7  3 14 \
 		&& ./fuse2 -t  7  4 14 \
 		&& ./fuse2 -t  7 13 14 \
 		&& ./fuse2 -t  7 24 14 \
@@ -490,12 +702,30 @@ tf2-0.log: fuse2 Makefile tf2-3.log
 		&& ./fuse2 -t  6 13 8 \
 		&& ./fuse2 -t  6 13 9 \
 		&& ./fuse2 -t  9 13 6 \
+		&& ./fuse2 -t  1  1 2 \
+		&& ./fuse2 -t  1  2 2 \
+		&& ./fuse2 -t  1  3 2 \
+		&& ./fuse2 -t  1  4 2 \
+		&& ./fuse2 -t  1  2 4 \
+		&& ./fuse2 -t  1  6 3 \
+		&& ./fuse2 -t  1  3 6 \
+		&& ./fuse2 -t  1 18 6 \
+		&& ./fuse2 -t  2 18 6 \
+		&& ./fuse2 -t  3 18 6 \
+		&& ./fuse2 -t 64 40 36 \
+		&& ./fuse2 -t 256 40 144 \
+		&& ./fuse2 -t 64 40 12 \
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
+cfuse: cfuse.cpp
+	g++ -Wall -std=c++11 -I.. -O3 $< -o $@ ${LDFLAGS} ${LDLIBS}
 %: %.cpp
-	g++ -Wall -std=c++11 -O3 -E $< -o $@.i
-	g++ -Wall -std=c++11 -O3 $< -o $@
+	g++ -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
+	g++ -Wall -std=c++11 -I.. -O3 $< -o $@
 clean:
-	rm -f *.i *.o fuse2 fuse2lin repro *.log
+	rm -f *.i *.o fuse2 fuse2lin repro a.out *.gch
+	rm -f a.s  cblock cfuse libgcc_lucky.so
+
 realclean: clean	
+	rm -f *.log
 #	

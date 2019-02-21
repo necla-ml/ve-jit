@@ -3,8 +3,9 @@
 /** \file
  * injective SymId-->RegId map.
  */
-#include "throw.hpp"
+#include "../throw.hpp"
 #include "reg-base.hpp"
+#include "reg-aurora.hpp" // only for asmname? (really?)
 
 #include <unordered_map>
 #include <unordered_set>
@@ -35,7 +36,7 @@
  * - weak-assigned   RegId <--> multiple symbol
  * - stale/empty     RegId empty
  *
- * This data structure does nothing for \e allocation of registers,
+ * This data structure does \b nothing for \e allocation of registers,
  * for which a user may have several [non-overlapping] pools active.
  *
  * Instead, this can monitor any global pool of RegId values, making
@@ -51,7 +52,9 @@
  * Symbols get added.  Typically the symbol is first set \e strong,
  * then bumped out to \e weak, and finally becomes unmapped.  Symbols
  * are never completely forgotten. Even when unmapped, symbols remember
- * which register (if any) they came from [not sure if useful].
+ * which register (if any) they came from.  The intent is to allow
+ * a future symbol to re-use [if unmapped?] the same register for the
+ * same symbol name (to make asm code maybe more understandable.
  *
  * header-only.
  */

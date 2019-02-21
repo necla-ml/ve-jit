@@ -1,7 +1,7 @@
 
 #include "spillable-base.hpp"
 #include "old/spill-impl.hpp"
-#include "throw.hpp"
+#include "../throw.hpp"
 #include <cassert>
 #include <iostream>
 #include <map>

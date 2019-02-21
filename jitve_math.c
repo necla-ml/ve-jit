@@ -27,7 +27,8 @@
  *     (ex. load some big constant via mul IMM,K or other arithmetic ops,
  *      but such constants are likely pretty infrequent.)
  */
-#include "jitve_util.h"
+//#include "jitve_util.h" // deprecated
+#include "jitpage.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -42,6 +43,10 @@
 #define LAB(s...) STR0(s\n)
 #define COMM(s...) "\t# " #s "\n"
 #define TTR(s...) "\t" #s "\n"
+
+/** This test creates a \b lot of files */
+static char* tmpdir="tmp/";
+
 void jit_parm_opt1( unsigned long parm, char *jit_parm, size_t const jsz ){
     printf("optimized JIT kernel to load constant value %lu\n",parm); fflush(stdout);
     {
@@ -125,6 +130,7 @@ void jit_parm_opt2( unsigned long const parm, char * const jit_parm, size_t cons
                 // and also by instructions such as addu.l, which covers
                 // a few more constants
                 // I don't think the cases covered will by particularly common
+                // NOTE: Better is to use add %out, [-63,64], Mconst !!!
                 if( strMconst(mconst, parm/2) && parm/2*2 == parm ){
                     JOUT(COMM(Imm * 2) "\tmulu.l %%s2, 2, %s\n", mconst);
                 }else if( strMconst(mconst, lparm/(-20)) && lparm/(-20)*(-20) == lparm ){
@@ -179,7 +185,7 @@ void jit_parm_opt2( unsigned long const parm, char * const jit_parm, size_t cons
 #undef JOUT
 }
 /** call with register ABI, get 2 return values. \return 0,1 or 2 error count. */
-int call_addsub( Jitpage *page, unsigned long arg, unsigned long parm ){        
+int call_addsub( JitPage *page, unsigned long arg, unsigned long parm ){        
     int nerr = 0;
     unsigned long ret1, ret2;
     //
@@ -194,7 +200,7 @@ int call_addsub( Jitpage *page, unsigned long arg, unsigned long parm ){
             "\tor %[ret1], 0,%s1\n" /* retrieve kernel compute results */
             "\tor %[ret2], 0,%s2\n"
             :[ret1]"=r"(ret1), [ret2]"=r"(ret2)
-            :[arg]"r"(arg), [page]"r"(page->addr)
+            :[arg]"r"(arg), [page]"r"(page->mem)
             :"%s0","%s1", "%s2", "%s12"
        );
     // Check for errors in our kernel outputs:
@@ -269,26 +275,36 @@ void test_kernel_math(char const* const cmd, unsigned long const parm, int const
     //
     // uniquely name the kernel, in case we wanted several variants
     //                           and to later inspect each kernel
+    system("mkdir tmp") || printf(" (tmp/ may already exist, good)\n");
+    if( tmpdir[0] != '\0' ){
+        char mkdir_cmd[80];
+        snprintf(mkdir_cmd,80,"mkdir %s%c",tmpdir,'\0');
+        system(mkdir_cmd) || printf(" (%s tmp directory may already exist, good!)\n",tmpdir);
+    }
+
     char kernel_name[80];
     if( parm < 1000000 )
-        snprintf(kernel_name,80,"tmp_kernel_addsub_%lu_opt%d\0",parm,opt_level);
+        snprintf(kernel_name,80,"%stmp_kernel_addsub_%lu_opt%d%c",tmpdir,parm,opt_level,'\0');
     else
-        snprintf(kernel_name,80,"tmp_kernel_addsub_0x%lx_opt%d\0",parm,opt_level);
+        snprintf(kernel_name,80,"%stmp_kernel_addsub_0x%lx_opt%d%c",tmpdir,parm,opt_level,'\0');
     printf(" test_kernel_math(%lx) --> JIT code %s.S:\n%s",parm,kernel_name,kernel_math); fflush(stdout);
 
     // create .bin file
-    asm2bin(kernel_name, kernel_math);  // creates .S and .bin file
+    asm2bin(kernel_name, kernel_math, 2/*verbose*/);  // creates .S and .bin file
+    printf(" back from asm2bin(\"%s\",kernel_math)\n",kernel_name);
     // show it
     char line[80];
-    snprintf(line,80,"nobjdump -b binary -mve -D %s.bin\0", kernel_name);
-    system(line);
+    snprintf(line,80,"nobjdump -b binary -mve -D %s.bin%c", kernel_name,'\0');
+    if(system(line)) printf(" Possible issues with nobjdump [ignored]\n");
 
     // load the blob into an executable code page
+    printf(" calling bin2jitpage(\"%s\", &page, verbosity)\n",kernel_name);
     char const* basename = &kernel_name[0];
-    Jitpage page = bin2jitpage( basename );
+    JitPage page;
+    bin2jitpage( basename, &page, 10/*verbose*/ );
 
     int nerr=0;
-    if(page.addr==NULL){
+    if(page.mem==NULL){
         printf("Oops trying to get the executable code page!\n");
         ++nerr;
     }else{
@@ -312,7 +328,7 @@ void test_kernel_math(char const* const cmd, unsigned long const parm, int const
     jitpage_free(&page);
 }
 
-main()
+int main()
 {
     printf(" I think that -13UL is %ld\n", -13UL);
     printf(" I think that -(13UL) is %ld\n", -(13UL));
@@ -322,12 +338,13 @@ main()
     printf(" I think that negat is %ld\n", (signed long)negat);
     // DOIT supplies the actual function call as a string to the
     // function being called (as the first function argument)
-#define DOIT(function,...) do{ \
-    printf("Function, Args: %s\n", #function ", " #__VA_ARGS__); \
-    function( #function "(char*," #__VA_ARGS__ ")", \
-              __VA_ARGS__ ); \
-}while(0)
     for(int opt_level=0; opt_level<3; ++opt_level){
+#define DOIT(function,...) do \
+        { \
+            printf("Function, Args: %s\n", #function ", " #__VA_ARGS__); \
+            function( #function "(char*," #__VA_ARGS__ ")", \
+                    __VA_ARGS__ ); \
+        }while(0)
         DOIT(test_kernel_math,0U,opt_level);
         DOIT(test_kernel_math,1U,opt_level);
         DOIT(test_kernel_math,57,opt_level);
@@ -350,10 +367,18 @@ main()
         DOIT(test_kernel_math,negat, opt_level);
         printf("-(17UL)\n");
         DOIT(test_kernel_math,-(17UL),opt_level);  // -13UL is really -60  (mistaken hex?)
-    }
 #undef DOIT
-    system("ls -l tmp_kernel_addsub_*.S");
-    system("ls -l tmp_kernel_addsub_*.bin");
+    }
+    {
+        char ls_cmd[80];
+        snprintf(ls_cmd,80,"ls -l %stmp_kernel_addsub_*.S%c",tmpdir,'\0');
+        int const x = system(ls_cmd);  printf(" ls returned %d\n",x);
+    }
+    {
+        char ls_cmd[80];
+        snprintf(ls_cmd,80,"ls -l %stmp_kernel_addsub_*.bin%c",tmpdir,'\0');
+        int const x = system(ls_cmd);  printf(" ls returned %d\n",x);
+    }
     printf("\n");
 }
-/* vim: set ts=4 sw=4 et: */
+// vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break

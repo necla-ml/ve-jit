@@ -12,6 +12,7 @@
  *   - any args must be passed in registers only
  *   - code must be fully relocatble and need no external symbols
  */
+#include "jitpage.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -54,6 +55,44 @@ LAB(strend:)
 TTR(.align 3	# well, if we wanted more code...)
 ;
 
+/** load a .bin file into page[4k] buffer.
+ * assert .bin in <= 4k bytes first.
+ * return */
+static size_t bin2page(char const* basename, char const* page){
+    size_t nread = 0U;
+    assert(strlen(basename)<80);
+    assert(strlen(basename)>0);
+    {
+        char ls[100];
+        //snprintf(&mk_cmd[0],100,"VERBOSE=0 make -f bin.mk %s.bin\0",basename);
+        snprintf(&ls[0],100,"ls -ld %s.bin",basename);
+        printf("running <%s>\n",ls); fflush(stdout);
+        system(ls);
+    }
+    char file_bin[100];
+    snprintf(&file_bin[0],100,"%s.bin\0",basename);
+    printf("opening %s\n",file_bin); fflush(stdout);
+    FILE* f_bin = fopen(file_bin,"rb");
+    if( f_bin==NULL ){
+        printf(" bin2page(\"%s\",page): Missing file %s\n",basename,file_bin);
+    }else{
+        fseek(f_bin,0,SEEK_END);
+        long fsize = ftell(f_bin);
+        printf(" %s has %ld bytes\n",file_bin,fsize);
+        if( fsize==0 || fsize > 4096 ){
+            printf(" bin2page(\"%s\",page): %s bad file size %ld\n",basename,file_bin,fsize);
+        }else{
+            printf("reading %s\n",file_bin); fflush(stdout);
+            fseek(f_bin,0,SEEK_SET); // rewind(f_bin)
+            nread = fread((void*)page, (size_t)sizeof(char), (size_t)fsize, f_bin);
+            printf(" bin2page read %lu bytes from %s\n",nread,file_bin); fflush(stdout);
+            //assert( nread == (size_t)fsize );
+            nread = (size_t)fsize;
+        }
+    }
+    return nread;
+}
+
 void test_kernel_hello(){  
   printf("\nTest: load and execute a jit \"hello world\" page\n");
   printf("\n      The blob comes from assembling a C string of assembler code\n");
@@ -63,7 +102,7 @@ void test_kernel_hello(){
   printf("      and execute instructions directly from the blob via its\n");
   printf("      simple register-only calling convention\n\n");
   fflush(stdout);
-  asm2bin("tmp_kernel_hello", kernel_hello);     // creates tmp_kernel_hello.S and tmp_kernel_hello.bin
+  asm2bin("tmp_kernel_hello", kernel_hello, 2/*verbose*/);     // creates tmp_kernel_hello.S and tmp_kernel_hello.bin
   system("nobjdump -b binary -mve -D tmp_kernel_hello.bin");
   system("hexdump -C tmp_kernel_hello.bin");
   //char page[4096];
@@ -246,58 +285,43 @@ void test_kernel_math(unsigned long parm){
   snprintf(kernel_name,80,"tmp_kernel_addsub%lu\0",parm);
   printf(" test_kernel_math(%lx) --> JIT code %s.S:\n%s",parm,kernel_name,kernel_math); fflush(stdout);
   // create .bin file
-  asm2bin(kernel_name, kernel_math);  // creates .S and .bin file
+  asm2bin(kernel_name, kernel_math, 2/*verbose*/);  // creates .S and .bin file
 
   char line[80];
   snprintf(line,80,"nobjdump -b binary -mve -D %s.bin\0", kernel_name);
   system(line);
-#if 0
-  ssize_t page_size = sysconf(_SC_PAGE_SIZE);
-  size_t min_bytes = page_size; //= 4096U;
-  size_t page_len = (min_bytes + page_size-1)/page_size*page_size;
-  char *page = mmap(
-      NULL,             // address
-      page_len,         // size
-      PROT_READ | PROT_WRITE | PROT_EXEC,
-      MAP_PRIVATE | MAP_ANONYMOUS,
-      -1,               // fd (not used here)
-      0);               // offset (not used here)
-  if(page == MAP_FAILED){
-    printf("mmap executable page len=%lu FAILED\n",(long unsigned)page_len); fflush(stdout);
-    page_len = 0;
-    exit(1);
-  }
-  //for(int i=0; i<4096; ++i) page[i] = '\0';
-  size_t sz = bin2page(kernel_name,page);
-  printf(" JIT kernel loaded into page @ %p size %lu\n",page,(long unsigned)sz);
-#else // try easier API ...
-  char const* page = bin2jitpage( kernel_name );
-#endif
+
   int nerr=0;
-  for(unsigned long arg=1U; arg>0UL; arg<<=4){
-    unsigned long ret1, ret2;
-    //
-    // Here is how to pass in an argument,
-    // call the kernel
-    // and retrieve return values from output registers
-    //
-    asm(//"\tlea %s0,0x666\n"   /*help find this place in asm*/
-        "\tlea %s0,  (,%[arg])\n"
-        "\tlea %s12, (,%[page])\n"  /* lea + "r" this time, instead of ld + "m" */
-        "\tbsic %lr,(,%s12)\n"
-        "\tor %[ret1], 0,%s1\n" /* retrieve kernel compute results */
-        "\tor %[ret2], 0,%s2\n"
-        :[ret1]"=r"(ret1), [ret2]"=r"(ret2)
-        :[arg]"r"(arg), [page]"r"(page)
-        :"%s0","%s1", "%s2", "%s12"
-       );
-    printf("kernel(%016lx) --> ret1=%016lx, ret2=%016lx\n",arg,ret1,ret2);
-    // Check for errors in our kernel outputs:
-    if( ret1 != arg+parm ) ++nerr;
-    if( ret2 != arg-parm ) ++nerr;
-    fflush(stdout);
+  JitPage jp;
+  if(bin2jitpage( kernel_name, &jp, 2/*verbose*/) == NULL){
+    ++nerr;
+  }else{
+    for(unsigned long arg=1U; arg>0UL; arg<<=4){
+      unsigned long ret1, ret2;
+      //
+      // Here is how to pass in an argument,
+      // call the kernel
+      // and retrieve return values from output registers
+      //
+      asm(//"\tlea %s0,0x666\n"   /*help find this place in asm*/
+          "\tlea %s0,  (,%[arg])\n"
+          "\tlea %s12, (,%[page])\n"  /* lea + "r" this time, instead of ld + "m" */
+          "\tbsic %lr,(,%s12)\n"
+          "\tor %[ret1], 0,%s1\n" /* retrieve kernel compute results */
+          "\tor %[ret2], 0,%s2\n"
+          :[ret1]"=r"(ret1), [ret2]"=r"(ret2)
+          :[arg]"r"(arg), [page]"r"(jp.mem)
+          :"%s0","%s1", "%s2", "%s12"
+         );
+      printf("kernel(%016lx) --> ret1=%016lx, ret2=%016lx\n",arg,ret1,ret2);
+      // Check for errors in our kernel outputs:
+      if( ret1 != arg+parm ) ++nerr;
+      if( ret2 != arg-parm ) ++nerr;
+      fflush(stdout);
+    }
   }
   printf("Done test_kernel_math(%lu) with %u errors\n",(unsigned long)parm, nerr); fflush(stdout);
+  jitpage_free(&jp);
   assert(nerr == 0);
 }
 

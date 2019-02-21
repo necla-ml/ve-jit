@@ -6,7 +6,7 @@
 #include "spill.hpp"
 
 //#include "symbStates.hpp"
-#include "throw.hpp"
+#include "../../throw.hpp"
 #include <cassert>
 
 #include <algorithm>

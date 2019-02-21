@@ -13,7 +13,7 @@
  * w/ mkChipRegisters to set up basic register state,
  */
 
-#include "throw.hpp"
+#include "../throw.hpp"
 #include <unordered_set>
 #include <unordered_map>
 #include <map>

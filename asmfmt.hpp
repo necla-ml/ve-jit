@@ -3,13 +3,15 @@
 #include "asmfmt_fwd.hpp"
 #include <sstream>
 #include <deque>
+#include <iostream>
 
+#if ASMFMTREMOVE < 1
 inline std::string AsmFmtCols::str() const {
     return (*a).str();
 }
 
 template<typename PAIRCONTAINER> inline
-unsigned AsmFmtCols::scope( PAIRCONTAINER const& pairs, std::string block_name ){
+std::size_t AsmFmtCols::scope( PAIRCONTAINER const& pairs, std::string block_name ){
     std::deque<std::string> un;
     {
         bool name_out = false;
@@ -19,10 +21,10 @@ unsigned AsmFmtCols::scope( PAIRCONTAINER const& pairs, std::string block_name )
         auto       iter = pairs.begin();
         for( ; iter != iend; ++iter ){
             if( !name_out ){
-                this->def(iter->first, iter->second, comment);
+                (*a) << this->fmt_def(iter->first, iter->second, comment);
                 name_out = true;
             }else{
-                this->def(iter->first, iter->second);
+                (*a) << this->fmt_def(iter->first, iter->second);
             }
             un.push_back(iter->first);
         }
@@ -50,7 +52,10 @@ unsigned AsmFmtCols::scope( PAIRCONTAINER const& pairs, std::string block_name )
     }
     // move the undefs string [a bunch of #undef lines] onto our scope-stack
     stack_undefs.push(undefs.flush());
+    //std::cout<<"\nscope-->undefs:\n"<<stack_undefs.top()<<std::endl;
+    return un.size();
 }
+#endif //ASMFMTREMOVE < 1
 
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
 #endif // ASMFMT_HPP

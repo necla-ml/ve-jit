@@ -9,7 +9,7 @@
 #endif
 
 //#include "symbStates.hpp"
-#include "throw.hpp"
+#include "../throw.hpp"
 #include <cassert>
 
 #include <algorithm>
