@@ -142,6 +142,10 @@ int cmpltu(int x, int y, int) {return (unsigned)(x) < (unsigned)(y);}
 int cmoveq(int x, int y, int z) {return /*x=*/ y == 0 ? x : z;}
 int cmovgt(int x, int y, int z) {return /*x=*/ y > 0 ? x : z;}
 int cmovlt(int x, int y, int z) {return y < 0 ? x : z;}
+//aurora...
+// no int cpysign(int x) {return x<0? -1: 0;} // CPS with Cx=0 broadcasts the sign bit of hi-32
+int max(int x, int y) {return x>y? x: y;}
+int min(int x, int y) {return x<y? x: y;}
 
 int seleq(int x, int y, int z) {return x == 0 ? y : z;}
 int sellt(int x, int y, int z) {return x < 0 ? y : z;}
@@ -168,6 +172,8 @@ struct {
    {add,    2, 1, {RX,  2,  0}, -1, "add",   "(",    " + "  },  // Add.
    {sub,    2, 0, { 2,  2,  0}, -1, "sub",   "(",    " - "  },  // Subtract.
    {mul,    2, 1, {RX,  3,  0}, -1, "mul",   "(",    "*"    },  // Multiply.
+   {max,    2, 1, {RX,  0,  0}, -1, "max",   "max(", ", "   },  // Max.
+   {min,    2, 1, {RX,  0,  0}, -1, "max",   "max(", ", "   },  // Min.
 // {div,    2, 0, { 1,  3,  0}, -1, "div",   "(",    "/"    },  // Divide signed.
 // {divu,   2, 0, { 1,  1,  0}, -1, "divu",  "(",    " /u " },  // Divide unsigned.
    {_and,   2, 1, {RX,  2,  0}, -1, "and",   "(",    " & "  },  // AND.

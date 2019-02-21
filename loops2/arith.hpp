@@ -37,7 +37,7 @@ char const* type_string() {
 		:"void";
 }
 
-typedef enum:uint32_t {DEFAULT=0, CONST=1, NONCONST=2, PARENS=4} Property;
+typedef enum:uint32_t {DEFAULT=0, CONST=1, NONCONST=2, PARENS=4, CCONST=8} Property;
 // Arith<VAL>  ~ expression (rhs)
 // Define<VAL> ~ TYPE var; var=Arith<VAL> ???
 /** This is OK for simple expressions, but is not good wrt number of parentheses.
@@ -68,9 +68,16 @@ public:
         chk();
     }
 
-    Arith( C const& src, Property const p=DEFAULT ) : c(src.c), name(src.name), expression(src.expression), parens(p&PARENS? true: src.parens),
-    isVar(src.isVar),
-    isExpr(src.isExpr), isConst(p&CONST? true: p&NONCONST? false: src.isConst) {
+    Arith( C const& src, Property const p=DEFAULT ):
+        c(src.c),
+        name(src.name),
+        expression(src.expression),
+        parens(p&PARENS? true: src.parens),
+        isVar   (src.isVar),
+        isExpr  (src.isExpr),
+        isConst (p&CCONST? true : p&CONST? true : p&NONCONST? false: src.isConst),
+        isCConst(p&CCONST? true : p&CONST? false: p&NONCONST? false: src.isCConst)
+    {
         if(isConst && !isExpr) { /*std::cout<<" n"<<name<<"->v";*/ name = vstr(); }
         if(verbose>=1){std::cout<<"<C"<<name<<","<<c<<","<<expression<<">"<<flags(); std::cout.flush();}
         //assert(!(p&CONST)); assert(!(p&NONCONST));
@@ -268,6 +275,7 @@ private:
     bool isVar;
     bool isExpr;
     bool isConst;
+    bool isCConst;
 };
 
 typedef Arith<int64_t> I64;
