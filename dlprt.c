@@ -24,7 +24,7 @@
 #endif
 
 /** use 0 to see full output */
-#define REMOVE_CODE 8
+#define REMOVE_CODE 0
 
 ///////////////////////////////////////////////////////////////////////////////
 #define BumpDyn(dyn,tag) do{ \
