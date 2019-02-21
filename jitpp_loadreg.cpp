@@ -196,7 +196,7 @@ void test_loadreg(char const* const cmd, unsigned long const parm, int const opt
                     if(v)cout<<" ival =0x"<<hex<<ival <<dec<<" = "<<ival<<endl;
                     if(v)cout<<" mval =0x"<<hex<<mval <<dec<<" = "<<mval<<endl;
                     assert( parm == (ival | mval) );
-                    log+="\n @or "+reg+",0x"+jithex(ival)+","+jitimm(mval)+"# load: or(I,M)";
+                    log+="\n @or "+reg+","+jithex(ival)+","+jitimm(mval)+"# load: or(I,M)";
                     assert( isMval(parm^sext7) ); // is xor the only case we need?
                 }
                 if(isMval(parm & ~0x3f)){ // can we OR some lsbs? (lo7 sign test not needed)
@@ -209,7 +209,7 @@ void test_loadreg(char const* const cmd, unsigned long const parm, int const opt
                     if(v)cout<<" ival =0x"<<hex<<ival <<dec<<" = "<<ival<<endl;
                     if(v)cout<<" mval =0x"<<hex<<mval <<dec<<" = "<<mval<<endl;
                     assert( parm == (ival | mval) );
-                    log+="\n $or "+reg+",0x"+jithex(lo7)+","+jitimm(parm&~0x3f)+"# load: or(I>0,M)";
+                    log+="\n $or "+reg+","+jithex(lo7)+","+jitimm(parm&~0x3f)+"# load: or(I>0,M)";
                     assert( isMval(parm^sext7) ); // is xor the only case we need?
                 }
                 // B----------------------------
@@ -227,7 +227,7 @@ void test_loadreg(char const* const cmd, unsigned long const parm, int const opt
                     if(v)cout<<" ival =0x"<<hex<<ival <<dec<<" = "<<ival<<endl;
                     if(v)cout<<" mval =0x"<<hex<<mval <<dec<<" = "<<mval<<endl;
                     assert( parm == (ival ^ mval) );
-                    log+="\n ^xor "+reg+",0x"+jithex(ival)+","+jitimm(mval)+"# load: xor(I,M)";
+                    log+="\n ^xor "+reg+","+jithex(ival)+","+jitimm(mval)+"# load: xor(I,M)";
                     // NO! assert( isMval(parm & ~0x3f) ); SEPARATE CASE
                     assert( isMval(parm^sext7) ); // is xor the only case we need?
                 }
@@ -612,6 +612,7 @@ int main(int,char**)
     // generate a set of target around exact formula values
     std::unordered_set<uint64_t> targ; // target for various Mval,Ival PairS
     for(int64_t ival = -64; ival<=63; ++ival){
+        cout<<" "<<ival; cout.flush();
         uint64_t const i = (uint64_t)ival;
         for(auto const m: mvals){
             std::array<uint64_t,8> exact =
@@ -624,6 +625,7 @@ int main(int,char**)
             }
         }
     }
+    cout<<endl;
     cout<<" generated "<<targ.size()<<" nice targets"<<endl;
     // generate all [1,2]-bit patterns and complements
     for(int i=0; i<64; ++i){
