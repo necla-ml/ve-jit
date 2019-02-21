@@ -654,6 +654,7 @@ clean:
 	rm -f asmkern0.asm asmkern0.dis
 	for f in *.bin; do b=`basename $$f .bin`; rm -f $$b.asm $$b.o $$b.dis $$b.dump; done
 	for f in tmp_*.S; do b=`basename $$f .S`; rm -f $$b.asm $$b.dis $$b.dump; done
+	rm -f tmp*lucky*
 	rm -rf tmp
 	rm -f jitve_math.asm jitve_hello.asm jitve_hello.s jitve_hello.dis jitve*.dis jitpp_hello.asm
 	$(MAKE) -f bugN.mk clean
