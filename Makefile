@@ -644,6 +644,8 @@ endif
 #libnclang_lucky.so  this code(can be ncc) and jist code from clang -target ve-linux on VE
 dltest1: dltest1.cpp jitpipe.hpp Makefile
 	$(CXX) $(CXXFLAGS) -o $@ -Wall -Werror $< 
+# Note: following binaries run on x86 so g++ is OK,
+#       but the JIT portion uses different compilers
 dltest1-x86: dltest1.cpp jitpipe.hpp Makefile
 	g++ $(CXXFLAGS) -o $@ -Wall -Werror $< -ldl
 dltest1-clang: dltest1.cpp jitpipe.hpp Makefile

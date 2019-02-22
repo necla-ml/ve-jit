@@ -29,6 +29,8 @@
 #include <cstddef>
 #include <cassert>
 
+#define FOR(I,VL) for(int I=0;I<VL;++I)
+
 using namespace std;
 
 typedef int Lpi; // Loop-index type
@@ -45,14 +47,123 @@ typedef make_unsigned<Vlpi>::type Uvlpi;
 /** scope init for AsmFmtCols */
 typedef std::list<std::pair<std::string,std::string>> AsmScope;
 
+/** I don't want to rely on headers for optimized versions */
+std::string ve_load64_opt0(std::string s, uint64_t v){
+    uint32_t const vlo = uint32_t(v);
+    uint32_t const vhi = uint32_t(uint32_t(v>>32) + ((int32_t)v<0? 1: 0));
+    ostringstream oss;
+    bool const is31bit = ( (v&(uint64_t)0x000000007fffFFFFULL) == v );
+    char const * comment=" sign-extended ";
+    if( is31bit                                 // 31-bit v>=0 is OK for lea
+            || ( (int)vlo<0 && (int)vhi==-1 ))  // if v<0 sign-extended int32_t, also happy
+    {
+        if( is31bit ) comment=" ";
+        oss <<"\tlea    "<<s<<", "<<jithex(vlo)<<"\n";
+    }else{
+        oss <<"\tlea    "<<s<<", "<<jithex(vlo)<<"\n"
+            <<"\tor     "<<s<<", 0, (32)0\n"
+            <<"\tlea.sl "<<s<<", "<<jithex(vhi)<<"(,"<<s<<")";
+        comment=" ve_load64_opt0 ";
+    }
+    oss<<" #"<<comment<<s<<" = "<<jithex(v);
+    return oss.str();
+}
 /** Reference values for correct index outputs */
 struct Vab{
     Vab( VVlpi const& asrc, VVlpi const& bsrc, int vl )
-        : a(asrc), b(bsrc), vl(vl) {}
+        : a(asrc), b(bsrc), vl(vl), hash(0) {
+        assert( asrc.size() >= (size_t)vl );
+        assert( bsrc.size() >= (size_t)vl );
+        }
     VVlpi a;
     VVlpi b;
     int vl;    // 0 < Vabs.back().vl < vlen
+    uint64_t hash;
+    /** fold \c a[vl] and \c b[vl] with a prev [or seed] \c hash. \return new hash value. */
+    static uint64_t rehash(VVlpi const& a, VVlpi const& b, int const vl, uint64_t hash);
+    /** fold a[] and b[] into this->hash. \return updated this->hash */
+    uint64_t rehash() { return hash = rehash(a, b, vl, hash); }
 };
+/** - va and vb are read-only.
+ * - We assume va and vb are small values that might be repeated,
+ * - so we first distribute them widely in an i-dependent manner
+ *   by adding them to a pseudorandom vseq.
+ * - Then we add two bit-scramblings (REHASH_A and REHASH_B) of these to produce a single vector,
+ * - all of whose elements are XOR'ed together to make the final hash.
+ *
+ * - Programming model:
+ *   - Init in some parent scope:
+ *     - init hash register with seed value [0]
+ *     - const vector and scalar registers
+ *   - Calc:
+ *     - using scratch regs, by some asm convention for any "no-call" code block
+ */
+inline uint64_t Vab::rehash(VVlpi const& va, VVlpi const& vb, int const vl, uint64_t hash){
+    // Init:
+    //   randomization constants
+    #define REHASH_A 7664345821815920749ULL
+    #define REHASH_B 1181783497276652981ULL
+    #define REHASH_C 3202034522624059733ULL
+    VVlpi vs(vl); // actually could re-use another mem area for all vl<256
+    {
+        uint64_t const r1 = REHASH_A;
+        FOR(i,vl) vs[i] = r1 * i;                   // vs = r1 * i (const data)
+    }
+    uint64_t const r2 = REHASH_B;
+    uint64_t const r3 = REHASH_C;
+
+    // Calc:
+    //   scratch vectors
+    VVlpi vx(vl), vy(vl);
+    //   dynamic values...
+    FOR(i,vl) vx[i] = r2*(va[i] + vs[i]);       // vx = r2 * (va + vs)
+    FOR(i,vl) vy[i] = r3*(vb[i] + vs[i]);       // vy = r3 * (vb + vs)
+    FOR(i,vl) vx[i] = vx[i] + vy[i];            // vx = vx + vy
+    FOR(i,vl) hash ^= vx[i];                    // hash = vx[0]^vx[1]^...^vx[vl-1]
+    return hash;
+}
+//#define REHASH_A 1181783497276652981ULL
+//#define REHASH_B 7664345821815920749ULL
+//#define REHASH_C 3202034522624059733ULL
+/** calculate scalar \c hash from vectors \c va and \c vb, tmp vector regs \c vx and \c vy and sequence register \c vs.
+ * \pre \c hash is set (0 or a previous return value), and vl is set as desired.
+ * \post \c a \c b unmodified, \c hash is calculated, and \c vx, \c vy and \c vs are trashed.
+ * \return \c hash scalar register.
+ *
+ * - Faster would:
+ *   - allocate in parent scope: hash and scratch regs vs and r0,r1,r2
+ *   - init    %hash to zero
+ *   - preload const %vs
+ *   - preload const 742938285, 1181783497276652981ULL, 7664345821815920749ULL into scalar regs
+ */
+std::string rehash_Vab_asm(std::string va, std::string vb, std::string hash ){
+    AsmFmtCols a;
+    a.lcom("rehash_Vab_asm BEGINS",
+            "  In: "+va+", "+vb,
+            "  InOut: "+hash+" (scalar reg)",
+            "  Const: vs[,r2,r3]",
+            "  Scratch: vx,vy,r"
+            );
+    AsmScope const block = {{"r","%s41"},{"vx","%v63"},{"vy","%v62"},{"vs","%v61"}};
+    a.scope(block,"rehash_Vab_asm");
+    a.ins(ve_load64_opt0("r", REHASH_A));
+    a.ins("vseq     vs");
+    a.ins("vmulu.l  vs, "+hash+", vs",                  "vs = REHASH_A * i");
+    a.ins(ve_load64_opt0("r", REHASH_B));   // ins(string) will strip comments: can use 'raw'
+    a.ins("vaddu.l   vx, "+va+", vs");
+    a.ins("vmulu.l   vx, r, vx",                        "vx = REHASH_B * (va+vs)");
+    a.ins(ve_load64_opt0("r", REHASH_C));
+    a.ins("vaddu.l   vy, "+vb+", vs");
+    a.ins("vmulu.l   vy, r, vy",                        "vy = REHASH_C * (vb+vs)");
+    a.com("reduce vx and vy...");
+    a.ins("vaddu.l   vx, vx, vy",                       "vx = vx + vy");
+    a.ins("vrxor     vy, vx",                           "vy[0] = vx[0]^vx[1]^...^vx[vl-1]");
+    a.ins("lvs       r, vx(0)",                         "r <-- vy[0]");
+    a.ins("xor       "+hash+", "+hash+", r",            " hash ^= r");
+    a.pop_scope();
+    a.lcom("rehash_Vab_asm DONE","");
+    return a.str();
+}
 
 // - precalc may save ops when done outside some external enclosing loops
 //   - no precalc: induction always via formula
@@ -237,6 +348,7 @@ std::vector<Vab> ref_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
             a[v] = i; b[v] = j;
             if( ++v >= vlen ){
                 vabs.emplace_back( a, b, v );
+                vabs.back().rehash();
                 v = 0;
             } 
         }
@@ -245,6 +357,7 @@ std::vector<Vab> ref_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
     if( v > 0 ){ // partial final vector
         for(int i=v; i<vlen; ++i) { a[i] = b[i] = 0; }
         vabs.emplace_back( a, b, v );
+        vabs.back().rehash();
     }
 
     if(verbose){ // print ref result
@@ -399,14 +512,12 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
 
     if(verbose>=1) other_fastdiv_methods(jj);
 
-#define FOR(I,VL) for(int I=0;I<VL;++I)
-
     // various misc precalculated consts and declarations.
     VVlpi a(vl), b(vl), bA(vl), bM(vl), bD(vl), aA(vl), sq(vl);
     VVlpi a0(vl), b0(vl), x(vl), y(vl);
     int iloop = 0; // mostly for debug checks, now;
-    Ulpi jj_mod_inverse_lpi   = mod_inverse((Ulpi)jj);
-    Uvlpi jj_mod_inverse_Vlpi = mod_inverse((Uvlpi)jj);
+    //Ulpi jj_mod_inverse_lpi   = mod_inverse((Ulpi)jj);
+    //Uvlpi jj_mod_inverse_Vlpi = mod_inverse((Uvlpi)jj);
     // bA and bD are used when:
     //   iijj > vl && jj%vl!=0
     // sq is used when:
@@ -633,8 +744,12 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
             cout<<"b["<<vl<<"]="<<vecprt(n,wide,b,vl)<<endl;
         }
 
+        assert( vl == vabs[iloop].vl );
         FOR(i,vl) assert( a[i] == vabs[iloop].a[i] );
         FOR(i,vl) assert( b[i] == vabs[iloop].b[i] );
+        // Alt. is a hash-value test:
+        assert( Vab::rehash(a,b,vl,0) == vabs[iloop].hash );
+
         ++iloop; // just for above debug assertions
         //cout<<" next loop??? cnt+vl="<<cnt+vl<<" iijj="<<iijj<<endl;
 #undef FOR
@@ -787,6 +902,8 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
             {"jj",   "%s2"},
             {"base", "%s7"},
         };
+#define HASH_KERNEL 1
+        if(HASH_KERNEL) block.push_back({"reg_hash","%s33"});
 
         if(nloop>1){
             block.push_back({"cnt",  "%s3"});
@@ -838,6 +955,9 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
         }
         if(SAVE_RESTORE_VLEN){
             fp.ins("svl vl_save","save original VL --> vl_save [opt]");
+        }
+        if(HASH_KERNEL){
+            fp.ins("lea reg_hash, 0");
         }
         fp.ins("lvl vl0",                   "VL = vl0");
         if( have_sq ){
@@ -1202,13 +1322,21 @@ INDUCE:
                     //local regs: bA,vx,bD,vy    input/output regs: a, b
                     //AsmScope const block = {{"tmp2","%s41"}};
                     //fi.scope(block,"generic fastdiv induction");
-                    fi.ins("vaddu bA,vl0,b",               "bA[i] = b[i] + vl0")
-                        .ins("vmulu.l   vx,bA,jj_M")
-                        .ins("vsrl.l.zx bD,vx,"+jitdec(C), "bD[i]= bA[i]/[jj="+jitdec(jj)+"] fastdiv")
-                        .ins("vmulu.l   vy,jj,bD")
-                        .ins("vaddu.l   a, a,bD",          "a[i] += bD[i]")
-                        .ins("vsubu.l   b, bA,vy",         "b[i] -= bD[i]*jj");
-                    //fi.pop_scope();
+                    if(0){//plain: output reg != input reg
+                        fi.ins("vaddu bA,vl0,b",               "bA[i] = b[i] + vl0")
+                            .ins("vmulu.l   vx,bA,jj_M")
+                            .ins("vsrl.l.zx bD,vx,"+jitdec(C), "bD[i]= bA[i]/[jj="+jitdec(jj)+"] fastdiv")
+                            .ins("vmulu.l   vy,jj,bD")
+                            .ins("vaddu.l   a, a,bD",          "a[i] += bD[i]")
+                            .ins("vsubu.l   b, bA,vy",         "b[i] -= bD[i]*jj");
+                    }else{//re-use regs
+                        fi.ins("vaddu b ,vl0,b",               "b[i] = b[i] + vl0")
+                            .ins("vmulu.l   bD,b ,jj_M")
+                            .ins("vsrl.l.zx bD,bD,"+jitdec(C), "bD[i]= bA[i]/[jj="+jitdec(jj)+"] fastdiv")
+                            .ins("vmulu.l   vy,jj,bD")
+                            .ins("vaddu.l   a, a,bD",          "a[i] += bD[i]")
+                            .ins("vsubu.l   b, b ,vy",         "b[i] -= bD[i]*jj");
+                    }
                 }
             }
         }
@@ -1261,6 +1389,9 @@ KERNEL_BLOCK:
             //        (perhaps a significant saving)
             // Ex 2:  sq register can be hoisted (AND combined with our sq?)
             //        instead of being recalculated
+            if( HASH_KERNEL ){
+                fk.raw(rehash_Vab_asm("a","b","reg_hash")); 
+            }
         }
 
         // KERNEL-BLOCK
@@ -1274,8 +1405,12 @@ KERNEL_BLOCK:
             cout<<"b["<<vl<<"]="<<vecprt(n,wide,b,vl)<<endl;
         }
         // check correctness
+        assert( vl == vabs[iloop].vl );
         FOR(i,vl) assert( a[i] == vabs[iloop].a[i] );
         FOR(i,vl) assert( b[i] == vabs[iloop].b[i] );
+        // Alt. is a hash-value test:
+        assert( Vab::rehash(a,b,vl,0) == vabs[iloop].hash );
+
         onceK = false;
 
         // DONE_CHECK

@@ -79,6 +79,14 @@ a.out
 bug0.cpp
 empty.cpp
 hdrs.cpp
+hdrs0.c
+hdrs0.cpp
+hdrs0.nm
+hdrs1.c
+hdrs1.cpp
+hdrs2.c
+hdrs2.cpp
+libvehdrs*.so
 dllok[0-9]
 dllbuild.veb
 dllbuild.x86b

@@ -99,7 +99,7 @@ class AsmFmtCols {
 
       AsmFmtCols& def(std::string const& symbol, std::string const& subst, std::string const& name=""); ///< #define symbol subst
       AsmFmtCols& undef(std::string const& symbol, std::string const& name="");    ///< might \em uncover a previous definition
-      AsmFmtCols& raw(std::string const& anything);    ///< use this for stuff like cpp macros
+      AsmFmtCols& raw(std::string const& anything);    ///< use this for stuff like cpp macros or output from other AsmFmtCols 'kernels'
       AsmFmtCols& lcom(std::string const& comment);    ///< left <// comment>
       AsmFmtCols& com(std::string const& comment);     ///< mid <// comment>
       AsmFmtCols& rcom(std::string const& comment);    ///< right <# comment>
