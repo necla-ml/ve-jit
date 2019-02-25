@@ -84,7 +84,7 @@ char const* const    AsmFmtCols::indent = "    ";
 int const            AsmFmtCols::inwidth = 4;
 int const            AsmFmtCols::opwidth = 12;
 //std::streampos const AsmFmtCols::argwidth = 24;
-int const            AsmFmtCols::argwidth = 24;
+int const            AsmFmtCols::argwidth = 44;
 
 AsmFmtCols::AsmFmtCols()
     : a(new ostringstream()), written(false), of(nullptr)
@@ -448,11 +448,15 @@ AsmFmtCols& AsmFmtCols::ins(string const& instruction, string const& asmcomment)
 string AsmFmtCols::fmt_def(std::string const& symbol, std::string const& subst, std::string const& name){
     std::ostringstream define;
     define << "#define " << setw(10) << symbol << ' ' << subst;
+    //         ---8 ---
     if( name.size() == 0 ){
         define << "\n";
     }else{
-        auto const col = inwidth + 7 + std::max(symbol.size(),10UL) + 1 + subst.size();
-        auto const wnt = inwidth + opwidth + argwidth;
+        //auto const wnt = inwidth + opwidth + argwidth - 9;
+        //undef << "#undef  " << left << setw(wnt-8) << macroname << "/* " << name << " */\n";
+        auto const col = 8 + std::max(symbol.size(),10UL) + 1 + subst.size();
+        //auto const wnt = inwidth + opwidth + argwidth;
+        auto const wnt = inwidth + opwidth + argwidth - 9;
         //cout<<"col="<<col<<" cf "<<wnt<<endl;
 
         if(col < wnt){

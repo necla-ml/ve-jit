@@ -9,6 +9,7 @@
  * \sa xxx.cpp for VE assembler output, introducing other header deps.
  */
 #include "exechash.hpp"
+#include "vechash.hpp"
 #include "../asmfmt.hpp"
 #include "../throw.hpp" // THROW(stuff to right of cout<<), adding fn and line number
 #include "../codegenasm.hpp"
@@ -29,7 +30,9 @@
 #include <cstddef>
 #include <cassert>
 
+#ifndef FOR
 #define FOR(I,VL) for(int I=0;I<VL;++I)
+#endif
 
 using namespace std;
 
@@ -47,27 +50,6 @@ typedef make_unsigned<Vlpi>::type Uvlpi;
 /** scope init for AsmFmtCols */
 typedef std::list<std::pair<std::string,std::string>> AsmScope;
 
-/** I don't want to rely on headers for optimized versions */
-std::string ve_load64_opt0(std::string s, uint64_t v){
-    uint32_t const vlo = uint32_t(v);
-    uint32_t const vhi = uint32_t(uint32_t(v>>32) + ((int32_t)v<0? 1: 0));
-    ostringstream oss;
-    bool const is31bit = ( (v&(uint64_t)0x000000007fffFFFFULL) == v );
-    char const * comment=" sign-extended ";
-    if( is31bit                                 // 31-bit v>=0 is OK for lea
-            || ( (int)vlo<0 && (int)vhi==-1 ))  // if v<0 sign-extended int32_t, also happy
-    {
-        if( is31bit ) comment=" ";
-        oss <<"\tlea    "<<s<<", "<<jithex(vlo)<<"\n";
-    }else{
-        oss <<"\tlea    "<<s<<", "<<jithex(vlo)<<"\n"
-            <<"\tor     "<<s<<", 0, (32)0\n"
-            <<"\tlea.sl "<<s<<", "<<jithex(vhi)<<"(,"<<s<<")";
-        comment=" ve_load64_opt0 ";
-    }
-    oss<<" #"<<comment<<s<<" = "<<jithex(v);
-    return oss.str();
-}
 /** Reference values for correct index outputs */
 struct Vab{
     Vab( VVlpi const& asrc, VVlpi const& bsrc, int vl )
@@ -79,11 +61,16 @@ struct Vab{
     VVlpi b;
     int vl;    // 0 < Vabs.back().vl < vlen
     uint64_t hash;
+#if 0
+    // THIS APPROACHED IS FLAWED.  I really want hash to be independent of any
+    // particular choice for the simd lengths, vl.
     /** fold \c a[vl] and \c b[vl] with a prev [or seed] \c hash. \return new hash value. */
     static uint64_t rehash(VVlpi const& a, VVlpi const& b, int const vl, uint64_t hash);
     /** fold a[] and b[] into this->hash. \return updated this->hash */
     uint64_t rehash() { return hash = rehash(a, b, vl, hash); }
+#endif
 };
+#if 0
 /** - va and vb are read-only.
  * - We assume va and vb are small values that might be repeated,
  * - so we first distribute them widely in an i-dependent manner
@@ -97,6 +84,16 @@ struct Vab{
  *     - const vector and scalar registers
  *   - Calc:
  *     - using scratch regs, by some asm convention for any "no-call" code block
+ *
+ * Since we accept a pair of same-size vectors, we use different multiplicative randomizers
+ * for each, and add before xoring.
+ *
+ * \b Warning: this hash depends on the choices you make for \c vl.  It is \b not a hash
+ * purely representing the data of sequences \c a[] and \c b[].
+ *
+ * This is no problem if the purpose is to compare to a reference calculation that is supposed
+ * to have exactly the same \c vl choices.  But in general it is more useful to NOT depend on
+ * the choices made for \c vl.
  */
 inline uint64_t Vab::rehash(VVlpi const& va, VVlpi const& vb, int const vl, uint64_t hash){
     // Init:
@@ -164,6 +161,7 @@ std::string rehash_Vab_asm(std::string va, std::string vb, std::string hash ){
     a.lcom("rehash_Vab_asm DONE","");
     return a.str();
 }
+#endif
 
 // - precalc may save ops when done outside some external enclosing loops
 //   - no precalc: induction always via formula
@@ -339,6 +337,7 @@ std::vector<Vab> ref_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
         int const verbose=1)
 {
     std::vector<Vab> vabs; // fully unrolled set of reference pairs of a,b vector register
+    VecHash2 vhash(vlen);
 
     VVlpi a(vlen), b(vlen);
     int v=0; // 0..vlen counter
@@ -348,7 +347,8 @@ std::vector<Vab> ref_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
             a[v] = i; b[v] = j;
             if( ++v >= vlen ){
                 vabs.emplace_back( a, b, v );
-                vabs.back().rehash();
+                vhash.hash_combine( a.data(), b.data(), vlen );
+                vabs.back().hash =  vhash.u64();
                 v = 0;
             } 
         }
@@ -357,7 +357,8 @@ std::vector<Vab> ref_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
     if( v > 0 ){ // partial final vector
         for(int i=v; i<vlen; ++i) { a[i] = b[i] = 0; }
         vabs.emplace_back( a, b, v );
-        vabs.back().rehash();
+        vhash.hash_combine( a.data(), b.data(), v );
+        vabs.back().hash =  vhash.u64();
     }
 
     if(verbose){ // print ref result
@@ -372,7 +373,7 @@ std::vector<Vab> ref_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
             auto const& vl = vabs[l].vl;
             cout<<"__"<<l<<endl;
             cout<<"a_"<<l<<"["<<vl<<"]="<<vecprt(n,wide,a,vl)<<endl;
-            cout<<"b_"<<l<<"["<<vl<<"]="<<vecprt(n,wide,b,vl)<<endl;
+            cout<<"b_"<<l<<"["<<vl<<"]="<<vecprt(n,wide,b,vl)<<" hash"<<vabs[l].hash<<endl;
         }
     }
     return vabs;
@@ -480,6 +481,7 @@ void other_fastdiv_methods(int const jj);
  * ? or maybe double-length 2*vlen of i/u32 (is this possible?)
  */
 void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){ for c in [0,w] {...}}
+    VecHash2 vhash(vlen);
     int const verbose=1;
     assert( vlen > 0 );
     register uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
@@ -748,7 +750,9 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
         FOR(i,vl) assert( a[i] == vabs[iloop].a[i] );
         FOR(i,vl) assert( b[i] == vabs[iloop].b[i] );
         // Alt. is a hash-value test:
-        assert( Vab::rehash(a,b,vl,0) == vabs[iloop].hash );
+        //assert( Vab::rehash(a,b,vl,0) == vabs[iloop].hash );
+        //assert( Vab::rehash(a,b,vl) == vabs[iloop].hash );
+        assert( vhash.hash_combine(a.data(),b.data(),vl) == vabs[iloop].hash );
 
         ++iloop; // just for above debug assertions
         //cout<<" next loop??? cnt+vl="<<cnt+vl<<" iijj="<<iijj<<endl;
@@ -771,6 +775,7 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
     ExecHash tr;
     CodeGenAsm cg;
     {
+        VecHash2 vhash(vlen);
         int verbose=1;
         assert( vlen > 0 );
         register uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
@@ -1000,6 +1005,12 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
                 assert( !have_jj_M && !have_vl_over_jj );
             }
         }
+
+        if(have_sq)
+            VecHash2::kern_asm_begin(fp, "%v6");
+        else
+            VecHash2::kern_asm_begin(fp); // it'll grab %v40 or such and hold it
+        // TODO: a way for subkernel to request state registers from caller.
 
 #if 0
         // are we doing any b_period or nloop precalc?
@@ -1390,7 +1401,7 @@ KERNEL_BLOCK:
             // Ex 2:  sq register can be hoisted (AND combined with our sq?)
             //        instead of being recalculated
             if( HASH_KERNEL ){
-                fk.raw(rehash_Vab_asm("a","b","reg_hash")); 
+                VecHash2::kern_asm(fk,"a","b","vl","reg_hash"); 
             }
         }
 
@@ -1409,7 +1420,10 @@ KERNEL_BLOCK:
         FOR(i,vl) assert( a[i] == vabs[iloop].a[i] );
         FOR(i,vl) assert( b[i] == vabs[iloop].b[i] );
         // Alt. is a hash-value test:
-        assert( Vab::rehash(a,b,vl,0) == vabs[iloop].hash );
+        vhash.hash_combine(a.data(),b.data(),vl);
+        //cout<<"iloop="<<iloop<<" vl="<<vl<<" vhash "<<vhash.u64()
+        //    <<"\n ref hash "<<vabs[iloop].hash<<endl;
+        assert( vhash.u64() == vabs[iloop].hash );
 
         onceK = false;
 
@@ -1492,6 +1506,7 @@ KERNEL_BLOCK:
         fk.write();
         fl.write();
         fz.write();
+        VecHash2::kern_asm_end(fd);
         fd.pop_scope();
         // XXX multiple scope write/destroy has issues! (missing #undefs for fd right now)
         //fd.pop_scope();     // TODO: destructors should auto-pop any AsmFmtCols scopes!!!
