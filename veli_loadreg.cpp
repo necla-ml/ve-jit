@@ -156,7 +156,7 @@ std::string getBigTest(SET const& tvals){
         .def("OTHER","%s4",         "other output")
         .def("T0","%s40",           "tmp reg");
 #ifndef WORKING
-#define WORKING 6 // OK, after ? incremental steps I think the bugs were fixed :(
+#define WORKING 0 // OK, after ? incremental steps I think the bugs were fixed :(
 #endif
 #if WORKING==0
     // debug: return ERR=OUT=666 always

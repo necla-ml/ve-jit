@@ -173,7 +173,7 @@ struct {
    {sub,    2, 0, { 2,  2,  0}, -1, "sub",   "(",    " - "  },  // Subtract.
    {mul,    2, 1, {RX,  3,  0}, -1, "mul",   "(",    "*"    },  // Multiply.
    {max,    2, 1, {RX,  0,  0}, -1, "max",   "max(", ", "   },  // Max.
-   {min,    2, 1, {RX,  0,  0}, -1, "max",   "max(", ", "   },  // Min.
+   {min,    2, 1, {RX,  0,  0}, -1, "min",   "min(", ", "   },  // Min.
 // {div,    2, 0, { 1,  3,  0}, -1, "div",   "(",    "/"    },  // Divide signed.
 // {divu,   2, 0, { 1,  1,  0}, -1, "divu",  "(",    " /u " },  // Divide unsigned.
    {_and,   2, 1, {RX,  2,  0}, -1, "and",   "(",    " & "  },  // AND.

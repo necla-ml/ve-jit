@@ -9,16 +9,12 @@ return a 32-bit int quantity. */
 const int debug = 1;            // 0 or 1; debugging printouts if 1.
 const int counters = 1;         // 0 or 1; count number of evaluations.
 #if NARGS == 1
-uint_least32_t userfun(uint_least32_t x){
-    x=x+1;
-    if(x>=3) x=0;
-    return x;
+int userfun(int x){
+    return x==0? 2: x-1;
 }
 #else
 uint_least32_t userfun(uint_least32_t x, uint_least32_t /*xprev*/) {
-    x=x+1;
-    if(x>=3) x=0;
-    return x;
+    return x==0? 2: x-1;
 }
 #endif
 
