@@ -80,7 +80,7 @@ namespace detail {
  * \b Derived objects will add some sort of \em state tracking,
  * \e adding some sort of <TT>symbol id --> symbol state tracking.
  *
- * - Active scopes form a stack representing nested scopes.
+ * - Active scopes form a \b stack representing nested scopes.
  *   - Basic ops:
  *     - unsigned scopeId = \c begin_scope(),
  *     - \c end_scope() moves the scope to a stale list.
