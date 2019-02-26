@@ -174,6 +174,53 @@ class AsmFmt : protected AsmFmtCols {
  * Could be a static member fn? */
 std::string uncomment_asm( std::string asmcode );
 
+/// \group VE assembler helpers
+//@{
+/** I don't want to rely on headers/libs for optimized versions */
+std::string ve_load64_opt0(std::string s, uint64_t v);
+
+/** This helper is unlike a kernel, because a base pointer remains valid
+ * forever onward, perhaps even into data stored after the code area.
+ * \p a assembler output container.
+ * \p bp assembler register (Ex. %s33)
+ * \p name of func (Ex. foo)*/
+void ve_set_base_pointer( AsmFmtCols & a, std::string bp="%s34", std::string name="foo" ){
+    a.def("STR0(...)", "#__VA_ARGS__")
+        .def("STR(...)",  "STR0(__VA_ARGS__)")
+        .def("CAT(X,Y)", "X##Y")
+        .def("FN",name)             // func name (characters)
+        .def("FNS", "\""+name+"\"") // quoted-string func name
+        .def("L(X)", "CAT("+name+"_,X)")
+        .def("BP",bp,            "base pointer register")
+        ;
+        // macros for relocatable branching
+    a.def("REL(YOURLABEL)", "L(YOURLABEL)-L(BASE)(,BP)", "relocatable address of 'here' data")
+        ;
+        // The following is needed if you use branches
+    a.ins("sic   BP","%s1 is *_BASE, used as base ptr")
+        .lab("L(BASE)")     // this label is reserved
+        .rcom("Now a relative jump looks like:")
+        .rcom("   ins(\"b.l REL(JumpAddr)\")")
+        .rcom("   lab(\"L(JumpAddr)\")")
+        ;
+}
+/* dispatch table based on 0 <= %s0 < nCases.
+ * - Register Usage example:
+ *   - CASE     %s0
+ *   - CASE_ERR %s1
+ * - %s0 out-of-range returns CASE_ERR = +/- 1; normally CASE_ERR is 0
+ *
+ * TODO return a vector of code entry points, where client can inject arbitrary
+ *      assembler implementations.
+ *
+ * We need a ProgNode tree structure to make this easier!
+ *
+ * - i.e. something like a regs/progTree.hpp,
+ * - or its path-based 'C' version in cblock.hpp)
+ */
+
+//@}
+
 #endif //CODEREMOVE < 1
 
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break

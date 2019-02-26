@@ -16,9 +16,6 @@ namespace scramble64 {
     extern uint64_t const r3;          //< REHASH_C [opt]
 }
 
-/** I don't want to rely on headers/libs for optimized versions */
-std::string ve_load64_opt0(std::string s, uint64_t v);
-
 /** Hash a sequence of vectors \c v_i[0..vl[i]-1].
  * - Properties:
  *   - The accumulating hash will depend on:
@@ -72,17 +69,23 @@ class VecHash {
         FOR(i,vl) vz[i] = j + vs[i];
         FOR(i,vl) vy[i] = r2 * v[i];            // hash v[]
         FOR(i,vl) vz[i] = r1 * vz[i];           // hash vs[]=j..j+vl-1
-        FOR(i,vl) vx[i] = vx[i] + vy[i];        // add hash_v[]
-        FOR(i,vl) vx[i] = vx[i] + vz[i];        // add hash_vs[]
-        // for add hash_*[], we xor-reduce needs to be done right now :(
+        FOR(i,vl) vx[i] = vy[i] + vy[i];        // add hash_v[] and hash_vs[]
+        // Note: for vector state would want to VMV be vl if vl<MVL, I think
+        // But for now I will reduce every vx[] right away.
         r = 0;
         FOR(i,vl) r ^= vx[i];
         hashVal ^= r;                           // hashVal ^= vx[0]^vx[1]^...^vx[vl-1]
         j += vl;
     }
+    static void kern_asm_begin( AsmFmtCols &a, char const* client_vs=nullptr,
+            uint32_t const seed=0 );
+    static void kern_asm( AsmFmtCols &parent,
+            std::string va, std::string vl, std::string hash );
+    static void kern_asm_end( AsmFmtCols &a );
   private:
     void init(){
         FOR(i,mvl) vs[i] = i;
+        FOR(i,mvl) vx[i] = 0;
     }
     uint64_t *mem;      // to simulate vector registers
     uint64_t hashVal;   // accumulating sequence hash value
@@ -224,10 +227,11 @@ class VecVlHash{
  * We use VMV and masked ops for occasional \c hash_combine calls with reduced vector length.
  */
 class VecHashMvl {
+    static int const mvl = 256;
     /** \p mvl is the usual [and limiting] vector length for incoming data.
      */
-    VecHashMvl( int const mvl, uint32_t const seed=0 )
-        : mvl(mvl), mem(new uint64_t[mvl*4])
+    VecHashMvl( uint32_t const seed=0 )
+        : mvl(VecHashMvl_MVL), mem(new uint64_t[mvl*4])
           , hashVal(scramble64::r2), j((uint64_t)seed<<32) //, j0(j)
           // vs,vx,vy simulate vector registers
           // (better if the memory is on separate cache pages)
@@ -241,39 +245,37 @@ class VecHashMvl {
     }
     ~VecHashMvl(){ delete[](mem); }
     int const mvl;
-    void hash_combine( uint64_t const* v ){
-        FOR(i,mvl) vx[i] = vx[i] + v[i];         // vx += v
-        FOR(i,mvl) vy[i] = scramble64::r1 * vs[i];           // hash of vs[]=j..j+mvl-1
-        j += mvl;
-        FOR(i,mvl) vx[i] = scramble64::r2 * vx[i];           // vx *= r2
-        FOR(i,mvl) vx[i] = vx[i] ^ vy[i];        // vx ^= hash_vs[]
-        FOR(i,mvl) vs[i] += j;
-    }
     /** If only a few times you need lower vector length,
      * OR if mvl is 256 and you have a VMV vector rotate [by 256]. */
     void hash_combine( uint64_t const* v, int const vl ){
         assert( vl > 0 && vl <= mvl ); // vl==0 OK, but wasted work.
         using namespace scramble64;
         if( vl==mvl ) this->hash_combine(v);
-        FOR(i,vl) vz[i] = i;
-        FOR(i,vl) vx[i] = vx[i] + v[i];     // vx += v, masked
         FOR(i,vl) vy[i] = r1 * vs[i];       // hash of vs[]=j..j+vl-1
         FOR(i,vl) vx[i] = r2 * vx[i];       // vx *= r1
-        FOR(i,vl) vx[i] = vx[i] ^ vy[i];    // vx ^= hash_vs[]
-        //j += vl;
+        FOR(i,vl) vy[i] = vy[i] ^ vx[i];    // vx ^= hash_vs[]
+        // stop now.  Full Merkle-Damgard would also:
+        //      FOR(i,vl) vy[i] = r3 * vy[i];
+        //      FOR(i,vl) vy[i] = vy[i] ^ vx[i]
+        //
         // Idea: the xor-reduction could be replaced by vector rotate.
+        //    State registers become vs[] and vx[]
         uint64_t sy = vl;
         // svl old_vl
         // lvl 256 -- this might increase latency a bit.
         FOR(i,mvl) vz[i] = vx[ (sy+i)%mvl ];    // vmv vz,sy,vx [requires vz!=vx]
         // if mvl!=256, above rotation is more involved (VMV, mask, VCP)
+        //
+        // Note: when fully ramped up. save/restore VL becomes "just another scope"
+        // save vl
         FOR(i,mvl) vx[i] = vz[i];
         FOR(i,mvl) vs[i] += vl/*j*/;
+        // pop vl
         // lvl old_vl
         // But now we are maybe just as complicated as xor-reduction!
     }
     /// return current hash value (non-memoized xor-reduction of \c vx)
-    uint64_t u64() const {
+    uint64_t u64() const {      // non-trivial finalizer
         uint64_t r = 0;
         FOR(i,mvl) r ^= vx[i];
         return r;
@@ -282,6 +284,7 @@ class VecHashMvl {
     void init(uint64_t const seed){
         FOR(i,mvl) vx[i] = i;
         FOR(i,mvl) vs[i] = seed + vx[i];
+        FOR(i,mvl) vx[i] = 0;
     }
     uint64_t *mem;      // to simulate vector registers
     uint64_t hashVal;   // accumulating sequence hash value

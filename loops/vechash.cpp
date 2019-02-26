@@ -33,6 +33,73 @@ std::string ve_load64_opt0(std::string s, uint64_t v){
     return oss.str();
 }
 
+#if 0
+    void hash_combine( uint64_t const* v, int const vl ){
+        assert( vl > 0 && vl <= mvl ); // vl==0 OK, but wasted work.
+        using namespace scramble64;  // r1, r2, r3 scramblers
+        //FOR(i,vl) vs[i] = i;
+        FOR(i,vl) vz[i] = j + vs[i];
+        FOR(i,vl) vx[i] = r2 * v[i];            // hash v[]
+        FOR(i,vl) vz[i] = r1 * vz[i];           // hash vs[]=j..j+vl-1
+        FOR(i,vl) vx[i] = vx[i] + vy[i];        // add hash_v[]
+        FOR(i,vl) vx[i] = vx[i] + vz[i];        // add hash_vs[]
+        // for add hash_*[], we xor-reduce needs to be done right now :(
+        r = 0;
+        FOR(i,vl) r ^= vx[i];
+        hashVal ^= r;                           // hashVal ^= vx[0]^vx[1]^...^vx[vl-1]
+        j += vl;
+    }
+#endif
+void VecHash::kern_asm_begin( AsmFmtCols &a, char const* client_vs/*=nullptr*/,
+        uint32_t const seed/*=0*/ ){
+    typedef std::list<std::pair<std::string,std::string>> AsmScope;
+    char const* vs_register = (client_vs? client_vs: "%v40");
+    AsmScope const block = {//{"hashval","%s40"},
+        {"vh_j","%s40"}
+        ,{"vh_r1","%s41"},{"vh_r2","%s42"}
+        ,{"vh_vs",vs_register}
+    };
+    a.scope(block,"VecHash::kern_asm registers");
+    // const regs
+    a.ins(ve_load64_opt0("vh_r1", scramble64::r1));
+    a.ins(ve_load64_opt0("vh_r2", scramble64::r2));
+    a.ins("vh_vseq     vh_vs");       // const, vs={0,1,2,...mvl}
+    // state (R/W regs)
+    a.ins(ve_load64_opt0("vh_j", (uint64_t)seed<<32));
+    a.ins("vbrd vh_x,0");
+    a.com("VecHash : init done");
+}
+void VecHash::kern_asm( AsmFmtCols &a,
+        std::string va, std::string vl, std::string hash ){
+    a.lcom("VecHash : kernel begins",
+            "  in: "+va+", "+vl,
+            "  inout: "+hash+" (scalar reg)",
+            "  state: vh_j",
+            "  const: vh_r1, vh_r2, vh_vs",
+            "  scratch: vh_r, vh_vx, vh_vy, vh_vz"
+          );
+    typedef std::list<std::pair<std::string,std::string>> AsmScope;
+    // TODO: resolve any conflicts of scope regs with ANY 
+    AsmScope const block = {{"vh_r","%s63"}
+        ,{"vh_vx","%v63"},{"vh_vy","%v62"}//,{"vh_vz","%v63"}
+    };
+    a.scope(block,"vechash2::kern_asm");
+    a.ins("vaddu.l  vh_vy, vh_j, vh_vs");
+    a.ins("vmulu.l  vh_vy, vh_r1, vh_vz",           "scramble64::r1 * (j+vs[])");
+    a.ins("vmulu.l  vh_vx, vh_r2, /**/"+va,         "scramble64::r2 * "+va+"[]");
+    a.ins("vaddu.l  vh_vx, vh_vx, vh_vz",           "sum");
+    a.ins("vrxor    vh_vy, vh_vx");
+    a.ins("lvs      vh_r, vh_vy(0)",                "r = xor-reduction(vx)");
+    a.ins("addu.l   vh_j, vh_j, vl",                "state j += vl");
+    a.com("output: modified hash value "+hash);
+    a.ins("xor      /**/"+hash+", "+hash+", vh_r",  hash+" ^= r");
+    a.pop_scope();
+    a.lcom("VecHash : kernel done");
+}
+void VecHash::kern_asm_end( AsmFmtCols &a ){
+    a.pop_scope();
+}
+
 /** init registers for VecHash2 assembler kernel.
  * Current vector length \b MUST be the maximum vector length of this hash_combiner.
  * \p seed an optional seed value.

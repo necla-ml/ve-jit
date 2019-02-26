@@ -16,17 +16,22 @@
  * have a program tree, the code snippets can be moved up and down
  * to adapt to total register pressure.
  */
+#include "../throw.hpp"
 #include <string>
 #include <map>
 #include <vector>
+#include <list>
 #include <assert.h>
 
 namespace regTree {
     struct ProgNode;
     struct Root;
 
-    /** \em Virtual Register Id.  Mapped to a real Register Id later. */
+    /** \em Virtual Register Id.  Mapped to a real Register Id later. XXX borrow a better impl. */
     typedef int VRegId;
+
+    /** Real Register Ids. XXX borrow a better defn. */
+    typedef int RegId;
 
     /** Registers have various generic use types. */
     enum Usage {
@@ -43,6 +48,15 @@ namespace regTree {
         SCALAR=0, VECTOR, MASK, NTYPE
         //INT, FLOAT, VECTOR_FLOAT, VECTOR_INT
         };
+    /** code production types */
+    enum Emit {
+        INIT, SPILL, LOAD, DONE };
+    struct EmissionItem {
+        ProgNode*  who;
+        enum Emit  what;
+    };
+    typedef std::list<EmissionItem> EmissionInfo;
+
 
     /** A ProgNode can represent a scope doing some calculation using:
      *
@@ -53,9 +67,15 @@ namespace regTree {
      * - global state memory
      *
      * No memory need be used if Root can hand out the regs for global date+state.
+     *
+     * Code productions are done by \em deriving a class and overriding the
+     * \c set_regs function to set up code string productions and cost guesses.
      */
     struct RegCode {
-        enum Usage usage;
+        /** RegCode are always associated with some ProgNode.  So adding this member
+         * might simplify some things (and allow validity assertions). */
+        ProgNode *owner;
+        enum Usage usage;           ///< ex. TMP, CONST, STATE, ...
         std::string init();         ///< code to load register
         std::string spill();        ///< code to save register to memory (boilerplate?)
         std::string load();         ///< code load from memory to register
@@ -70,6 +90,7 @@ namespace regTree {
     };
 
     struct ProgNode {
+        friend class Root;
         /** Simple kernels objects begin and end in scope of direct-parent.
          * \pre parent is a valid ProgNode.
          * \post path[0]->isRoot() and  */
@@ -85,6 +106,7 @@ namespace regTree {
             }
             path[i] = parent;
             assert( path[0]->isRoot() );
+            set_regs();
         }
         /** More complicated kernels may begin and end in some higher object scope.
          * \pre \c scopeNode is on path to \c Root.
@@ -118,16 +140,56 @@ namespace regTree {
             path[i] = parent;
             assert(scope_ok);
             assert( path[0]->isRoot() );
+            set_regs();
         }
         ~ProgNode();
-        bool isRoot() const {return path.empty();}
-
-
-
-        /// \group ProgNode track their own required registers
-        //@{
     private:
-        std::map<VRegId,RegCode> regs;
+        std::string name;
+        std::vector<ProgNode*> path;    ///< path to Root node
+        ProgNode * scopeNode;
+    public:
+        bool isRoot() const {return path.empty();}
+        ProgNode& scope() const { if(!scopeNode) THROW("scope unset?");
+            return *scopeNode;
+        }
+        ProgNode *parent() const {if(path.empty()) THROW("Root ProgNode has no parent");
+            return path.back();
+        }
+
+        /// \group ProgNode internal info
+        //@{
+        /** increment execution counter */
+        void incExec(int count=0) { execCount += count; }
+        /** get execution counter */
+        int getExec() const { return execCount; }
+
+        /** look up RegCode info for this kernel */
+        RegCode& rc( VRegId const vr ) const {
+            assert( regs != nullptr );
+            return regs->at(vr);
+        }
+
+#if 0
+        // maybe have the allocator produce a "mirror" tree for Root, containing
+        // the complicated data structure manouvering that goes on during register
+        // allocation.
+
+        /** Code emission needs to know what code snippets get produced in which
+         * \b parent ProgNodes. Map \e our VRegId to \e parent (or this) EmissionInfo */
+        std::map< VRegId, EmissionInfo > emissions;
+
+        /** The inverse of \c vr_emit tells us for which child \c ProgInfo must
+         * we perform code output.  When outputing, for each pair \c (child,vr),
+         * we execute the code-string method of child->rc(vr).init()|spill()|... */
+        std::vector< ProgInfo * /*child*/, VRegId > child_work;
+#endif
+
+    private:
+        /** construction is only complete once \c this->regs and \c this->code is set up.
+         * It looks like I might want something like 'cblock.hpp' for asm code too. */
+        virtual void set_regs() {}
+        /** This map is const info once this prognode is constructed in \c set_regs(). */
+        std::map<VRegId,RegCode> *regs;
 
         int execCount;
         //@}
@@ -165,6 +227,7 @@ namespace regTree {
          * located/generated within the child node.
          */
         //@{
+#if 0
     public:
         VRegId allocate( ProgNode* child, RegCode &regCode );
     private:
@@ -184,39 +247,100 @@ namespace regTree {
         VRegId allocateMem  ( ProgNode* child, RegCode &regCode );
         VRegId allocateStack( ProgNode* child, RegCode &regCode );
         // etc.
-        //@}
+#endif
 
         /** Store registers that we allocated, along with child who requested them.
          * Many ProgNodes may ask their parent (all the way up to Root) to allocate,
          * leaving \c r2n and \c n2r empty. */
         std::multimap<VRegId,ProgNode*> r2n;
         std::multimap<ProgNode*,VRegId> n2r;
+        //@}
 
     protected:
         ProgNode() : path(), scopeNode(nullptr) {}
-    private:
-        std::string name;
-        std::vector<ProgNode*> path;    ///< path to Root node
-        ProgNode * scopeNode;
     };
 
     /** For every ProgNode except Root, path[0] points to the Root object */
     struct Root : public ProgNode {
-        // all registers initially free
-        Root() : ProgNode(), cnts{0,0,0}, base{0U,0x80000000U,0x40000000U} {}
+        /** set up initial register state. Only "ve" is supported for now. */
+        Root(char const* machine="ve") : ProgNode()
+            , machine(machine)
+            , cnts{0,0,0}
+        , base{1U,0x80000001U,0x40000001U}
+        , allocated_regs(false)
+        {}
 
-        /** Root maintains a global VRegId-->vregs map.
-         * All finer detail available via the kernel ProgNode.
-         */
-        std::map<VRegId,ProgNode* /*kernel*/> vregs;
+        /** Always, you can look up child ProgNode \c pn of any VRegid.
+         * throw if \c vr not defined. */
+        ProgNode& pn(VRegId const vr){
+            return *vregs.at(vr);
+        }
 
-        VRegId allocate( Type const t ){
+        /** After allocation you can lookup actual register assignments */
+        RegId rid(VRegId const vreg){
+            assert( allocated_regs );
+            return this->v2real.at(vreg);
+        }
+
+        VRegId vreg( Type const t ){
+            assert( !allocated_regs );
             return base[t] + (++cnts[t]);
         }
 
+#if 0
+        /** TODO register allocator. \post allocated_regs == true. */
+        void allocate_global();
+#endif
+
       private:
+#if 1
+        std::map<VRegId,RegId>::value_type allocate_global( ProgNode *pn, RegCode const& rc ){
+            std::map<VRegId,RegId>::value_type ret = std::make_pair(VRegId(0),RegId(0));
+            if( !pn->isRoot() ){
+                // punt upwards, in general looks like
+                //return allocate(pn->path.back());
+                // but we are going all the way to root
+                assert( pn->path.at(0) == this );
+                ret = allocate_global(this,rc);
+                assert(ret.first != 0 );
+            }else{
+                // Root grabs a register "forever", or throws (or returns pair(0,undefined)?)
+                ; //find_free_reg(rc.type);
+            }
+            return ret;
+        }
+#endif
+
+
+        /** Root maintains a global VRegId-->vregs map.
+         * All finer detail available via the kernel ProgNode.  For example, every
+         * ProgNode register may point to ProgNodes on its path to Root:
+         *
+         * - what parent scope[s] initialize/spill/load this register content.
+         * - this map may dynamically change during allocation
+         *   - ex. const register loads may migrate Root-wards.
+         *
+         * Ex. RegCode rc = root.pn(vr).rc(vr)
+         *     ProgNode& scopeNode = root.pn(vr).scope()
+         */
+        std::map<VRegId,ProgNode* /*kernel*/> vregs;
+
+
+
         uint32_t cnts[Type::NTYPE];
         uint32_t base[Type::NTYPE];
+
+        char const* machine;
+        bool allocated_regs;
+
+        // 'machine' is used to initialize available registers:
+        //struct RegSet all; all available real registers
+        //  --> char const* regNames[];
+        //  --> int         nRegs[];
+        char const* regNames[]; // of various Type (SCALAR,VECTOR,MASK)
+        char const* nRegs[];
+
+        std::map<VRegId,RegId> v2real;
     };
 
 
