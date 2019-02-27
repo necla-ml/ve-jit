@@ -3,6 +3,7 @@
 #endif
 #include "asmfmt.hpp"
 #include "throw.hpp"
+#include "codegenasm.hpp"
 #include <iostream>
 #include <sstream>
 #include <fstream>
@@ -160,7 +161,7 @@ inline void throw_if_written( AsmFmtCols const* asmfmt, string const& cannot ){
         throw runtime_error( string{"AsmFmtCols already written - cannot "} + cannot );
     }
 }
-std::stack<std::string>::size_type AsmFmtCols::pop_scope(){
+std::vector<std::string>::size_type AsmFmtCols::pop_scope(){
     auto sz = stack_undefs.size();
     if(sz) {
         assert( a != nullptr );
@@ -549,6 +550,58 @@ std::string uncomment_asm( std::string asmcode )
     }
     return oss.str();
 }
+std::string ve_load64_opt0(std::string s, uint64_t v){
+    uint32_t const vlo = uint32_t(v);
+    uint32_t const vhi = uint32_t(uint32_t(v>>32) + ((int32_t)v<0? 1: 0));
+    std::ostringstream oss;
+    bool const is31bit = ( (v&(uint64_t)0x000000007fffFFFFULL) == v );
+    char const * comment=" sign-extended ";
+    if( is31bit                                 // 31-bit v>=0 is OK for lea
+            || ( (int)vlo<0 && (int)vhi==-1 ))  // if v<0 sign-extended int32_t, also happy
+    {
+        if( is31bit ) comment=" ";
+        oss <<"\tlea    "<<s<<", "<<jithex(vlo)<<"\n";
+    }else{
+        oss <<"\tlea    "<<s<<", "<<jithex(vlo)<<"\n"
+            <<"\tor     "<<s<<", 0, (32)0\n"
+            <<"\tlea.sl "<<s<<", "<<jithex(vhi)<<"(,"<<s<<")";
+        comment=" ve_load64_opt0 ";
+    }
+    oss<<" #"<<comment<<s<<" = "<<jithex(v);
+    return oss.str();
+}
+std::string ve_signum64(std::string out, std::string in){
+    ostringstream oss;
+    oss<<"sra.l "<<out<<","<<in<<",63";
+    return oss.str();
+}
+std::string ve_abs64(std::string out, std::string in){
+    ostringstream oss;
+    oss<<"subs.l "<<out<<",0/*I*/,"<<in;
+    oss<<"; maxs.l "<<out<<","<<out<<","<<in;
+    return oss.str();
+}
+void ve_set_base_pointer( AsmFmtCols & a, std::string bp/*="%s34"*/, std::string name/*="foo"*/ ){
+    a.def("STR0(...)", "#__VA_ARGS__")
+        .def("STR(...)",  "STR0(__VA_ARGS__)")
+        .def("CAT(X,Y)", "X##Y")
+        .def("FN",name)             // func name (characters)
+        .def("FNS", "\""+name+"\"") // quoted-string func name
+        .def("L(X)", "CAT("+name+"_,X)")
+        .def("BP",bp,            "base pointer register")
+        ;
+        // macros for relocatable branching
+    a.def("REL(YOURLABEL)", "L(YOURLABEL)-L(BASE)(,BP)", "relocatable address of 'here' data")
+        ;
+        // The following is needed if you use branches
+    a.ins("sic   BP","%s1 is *_BASE, used as base ptr")
+        .lab("L(BASE)")     // this label is reserved
+        .rcom("Now a relative jump looks like:")
+        .rcom("   ins(\"b.l REL(JumpAddr)\")")
+        .rcom("   lab(\"L(JumpAddr)\")")
+        ;
+}
+
 #endif //CODEREMOVE < 1
 
 #ifdef _MAIN

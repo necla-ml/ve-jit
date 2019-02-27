@@ -115,7 +115,7 @@ class AsmFmtCols {
           std::size_t scope( PAIRCONTAINER const& pairs, std::string block_name="" );
       /** emit last set of #undefs. \return number of remaining stack-scopes
        * never errs (no-op if scope-stack is empty) */
-      std::stack<std::string>::size_type pop_scope();
+      std::vector<std::string>::size_type pop_scope();
       /** pop all scopes (emit all active undefs) */
       void pop_scopes();
 
@@ -239,34 +239,21 @@ std::string uncomment_asm( std::string asmcode );
 
 /// \group VE assembler helpers
 //@{
-/** I don't want to rely on headers/libs for optimized versions */
+/** \b NOT optimized -- reduce dependence on other headers!
+ * \c s is a VE register, v is the constant to load. */
 std::string ve_load64_opt0(std::string s, uint64_t v);
+
+/** \c out = replicated MSB (sign bit) of \c in (0 or -1) */
+std::string ve_signum64(std::string out, std::string in);
+/** \c out = absolute value of int64_t \c in */
+std::string ve_abs64(std::string out, std::string in);
 
 /** This helper is unlike a kernel, because a base pointer remains valid
  * forever onward, perhaps even into data stored after the code area.
  * \p a assembler output container.
  * \p bp assembler register (Ex. %s33)
  * \p name of func (Ex. foo)*/
-void ve_set_base_pointer( AsmFmtCols & a, std::string bp="%s34", std::string name="foo" ){
-    a.def("STR0(...)", "#__VA_ARGS__")
-        .def("STR(...)",  "STR0(__VA_ARGS__)")
-        .def("CAT(X,Y)", "X##Y")
-        .def("FN",name)             // func name (characters)
-        .def("FNS", "\""+name+"\"") // quoted-string func name
-        .def("L(X)", "CAT("+name+"_,X)")
-        .def("BP",bp,            "base pointer register")
-        ;
-        // macros for relocatable branching
-    a.def("REL(YOURLABEL)", "L(YOURLABEL)-L(BASE)(,BP)", "relocatable address of 'here' data")
-        ;
-        // The following is needed if you use branches
-    a.ins("sic   BP","%s1 is *_BASE, used as base ptr")
-        .lab("L(BASE)")     // this label is reserved
-        .rcom("Now a relative jump looks like:")
-        .rcom("   ins(\"b.l REL(JumpAddr)\")")
-        .rcom("   lab(\"L(JumpAddr)\")")
-        ;
-}
+void ve_set_base_pointer( AsmFmtCols & a, std::string bp="%s34", std::string name="foo" );
 /* dispatch table based on 0 <= %s0 < nCases.
  * - Register Usage example:
  *   - CASE     %s0

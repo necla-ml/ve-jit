@@ -11,28 +11,6 @@ namespace scramble64 {
     uint64_t const r3 = 3202034522624059733ULL;
 }
 
-/** \b NOT optimized! */
-std::string ve_load64_opt0(std::string s, uint64_t v){
-    uint32_t const vlo = uint32_t(v);
-    uint32_t const vhi = uint32_t(uint32_t(v>>32) + ((int32_t)v<0? 1: 0));
-    std::ostringstream oss;
-    bool const is31bit = ( (v&(uint64_t)0x000000007fffFFFFULL) == v );
-    char const * comment=" sign-extended ";
-    if( is31bit                                 // 31-bit v>=0 is OK for lea
-            || ( (int)vlo<0 && (int)vhi==-1 ))  // if v<0 sign-extended int32_t, also happy
-    {
-        if( is31bit ) comment=" ";
-        oss <<"\tlea    "<<s<<", "<<jithex(vlo)<<"\n";
-    }else{
-        oss <<"\tlea    "<<s<<", "<<jithex(vlo)<<"\n"
-            <<"\tor     "<<s<<", 0, (32)0\n"
-            <<"\tlea.sl "<<s<<", "<<jithex(vhi)<<"(,"<<s<<")";
-        comment=" ve_load64_opt0 ";
-    }
-    oss<<" #"<<comment<<s<<" = "<<jithex(v);
-    return oss.str();
-}
-
 #if 0
     void hash_combine( uint64_t const* v, int const vl ){
         assert( vl > 0 && vl <= mvl ); // vl==0 OK, but wasted work.
