@@ -5,6 +5,9 @@
 #include <string>
 #include <sstream>
 
+#include <iostream>
+using namespace std;
+
 namespace scramble64 {
     uint64_t const r1 = 7664345821815920749ULL;
     uint64_t const r2 = 1181783497276652981ULL;
@@ -32,6 +35,11 @@ void VecHash::kern_asm_begin( AsmFmtCols &a, char const* client_vs/*=nullptr*/,
         uint32_t const seed/*=0*/ ){
     typedef std::list<std::pair<std::string,std::string>> AsmScope;
     char const* vs_register = (client_vs? client_vs: "%v40");
+    cout<<" VecHash::kern_asm_begin"<<endl;
+    auto vs = a.def_words_starting("%s");
+    auto vv = a.def_words_starting("%v");
+    cout<<" parent scalars = {";for(auto s:vs) cout<<" "<<s; cout<<" }"<<endl;
+    cout<<" parent vectors = {";for(auto s:vv) cout<<" "<<s; cout<<" }"<<endl;
     AsmScope const block = {//{"hashval","%s40"},
         {"vh_j","%s40"}
         ,{"vh_r1","%s41"},{"vh_r2","%s42"}
@@ -88,6 +96,11 @@ void VecHash::kern_asm_end( AsmFmtCols &a ){
 void VecHash2::kern_asm_begin( AsmFmtCols &a, char const* client_vs/*=nullptr*/, uint32_t const seed/*=0*/ ){
     typedef std::list<std::pair<std::string,std::string>> AsmScope;
     char const* vs_register = (client_vs? client_vs: "%v40");
+    cout<<" VecHash::kern_asm_begin"<<endl;
+    auto vs = a.def_words_starting("%s");
+    auto vv = a.def_words_starting("%v");
+    cout<<" parent scalars = {";for(auto s:vs) cout<<" "<<s; cout<<" }"<<endl;
+    cout<<" parent vectors = {";for(auto s:vv) cout<<" "<<s; cout<<" }"<<endl;
     AsmScope const block = {//{"hashval","%s40"},
         {"vh2_j","%s40"}
         ,{"vh2_r1","%s41"},{"vh2_r2","%s42"},{"vh2_r3","%s43"}

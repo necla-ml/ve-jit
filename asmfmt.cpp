@@ -500,7 +500,7 @@ string AsmFmtCols::fmt_undef(std::string const& symbol,std::string const& name){
     return undef.str();
 }
 AsmFmtCols& AsmFmtCols::undef(std::string const& symbol,std::string const& name){
-    cerr<<" Warning: AsmFmtCols::undef is deprecated"<<endl;
+    cerr<<" Warning: AsmFmtCols::undef("<<symbol<<","<<name<<") is deprecated"<<endl;
     (*a) << fmt_undef(symbol, name);
     // XXX remove from stack_[un]defs[0]
     return *this;

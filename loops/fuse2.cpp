@@ -1006,10 +1006,13 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
             }
         }
 
+        cout<<" ********************** VECHASH VECHASH *********************"<<endl;
+        // NOTE: fd is the parent but fp is where the code "should" really appear
+        //       I think.   --- how to attache scope_parent concept to AsmFmtCols?
         if(have_sq)
-            VecHash2::kern_asm_begin(fp, "%v6");
+            VecHash2::kern_asm_begin(fd, "%v6");
         else
-            VecHash2::kern_asm_begin(fp); // it'll grab %v40 or such and hold it
+            VecHash2::kern_asm_begin(fd); // it'll grab %v40 or such and hold it
         // TODO: a way for subkernel to request state registers from caller.
 
 #if 0

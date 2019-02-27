@@ -42,22 +42,22 @@ std::size_t AsmFmtCols::scope( PAIRCONTAINER const& pairs, std::string block_nam
     // we will reverse the order for #undefs
     AsmFmtCols undefs;
     {
-        bool name_out = false;
-        std::string comment("} END ");
-        comment.append(block_name);
+        std::string comment;
+        std::string end_comment = "} END";
+        end_comment.append(block_name);
         auto const uend = un.crend();
         auto       uter = un.crbegin();
         for( ; uter != uend; ){
             auto undef = *uter;
             ++uter;
             if( uter == uend ){
-                undefs.undef(undef,comment);
-                name_out = true;
-            }else{
-                undefs.undef(undef);
+                comment = end_comment;
             }
+            (*undefs.a)<<fmt_undef(undef,comment);
         }
-        if(!name_out) rcom(comment);
+        if(comment.empty()){
+            rcom(end_comment);
+        }
     }
     // move the undefs string [a bunch of #undef lines] onto our scope-stack
     //  ... same for the defines string ...

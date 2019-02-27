@@ -231,7 +231,7 @@ class VecHashMvl {
     /** \p mvl is the usual [and limiting] vector length for incoming data.
      */
     VecHashMvl( uint32_t const seed=0 )
-        : mvl(VecHashMvl_MVL), mem(new uint64_t[mvl*4])
+        : /*mvl(VecHashMvl_MVL),*/ mem(new uint64_t[mvl*4])
           , hashVal(scramble64::r2), j((uint64_t)seed<<32) //, j0(j)
           // vs,vx,vy simulate vector registers
           // (better if the memory is on separate cache pages)
@@ -244,13 +244,23 @@ class VecHashMvl {
         init((uint64_t)seed<<32);
     }
     ~VecHashMvl(){ delete[](mem); }
-    int const mvl;
+#if 0
+    /** vl==mvl special case */
+    void hash_combine( uint64_t const* v ) {
+        FOR(i,mvl) vy[i] = r1 * vs[i];       // hash of vs[]=j..j+vl-1
+        FOR(i,mvl) vx[i] = r2 * vx[i];       // vx *= r1
+        FOR(i,mvl) vy[i] = vy[i] ^ vx[i];    // vx ^= hash_vs[]
+        // stop now.  Full Merkle-Damgard would also:
+        //      FOR(i,vl) vy[i] = r3 * vy[i];
+        //      FOR(i,vl) vy[i] = vy[i] ^ vx[i]
+        FOR(i,mvl) vs[i] += vl/*j*/;
+    }
+#endif
     /** If only a few times you need lower vector length,
      * OR if mvl is 256 and you have a VMV vector rotate [by 256]. */
     void hash_combine( uint64_t const* v, int const vl ){
         assert( vl > 0 && vl <= mvl ); // vl==0 OK, but wasted work.
         using namespace scramble64;
-        if( vl==mvl ) this->hash_combine(v);
         FOR(i,vl) vy[i] = r1 * vs[i];       // hash of vs[]=j..j+vl-1
         FOR(i,vl) vx[i] = r2 * vx[i];       // vx *= r1
         FOR(i,vl) vy[i] = vy[i] ^ vx[i];    // vx ^= hash_vs[]
@@ -260,19 +270,21 @@ class VecHashMvl {
         //
         // Idea: the xor-reduction could be replaced by vector rotate.
         //    State registers become vs[] and vx[]
-        uint64_t sy = vl;
-        // svl old_vl
-        // lvl 256 -- this might increase latency a bit.
-        FOR(i,mvl) vz[i] = vx[ (sy+i)%mvl ];    // vmv vz,sy,vx [requires vz!=vx]
-        // if mvl!=256, above rotation is more involved (VMV, mask, VCP)
-        //
-        // Note: when fully ramped up. save/restore VL becomes "just another scope"
-        // save vl
-        FOR(i,mvl) vx[i] = vz[i];
-        FOR(i,mvl) vs[i] += vl/*j*/;
-        // pop vl
-        // lvl old_vl
-        // But now we are maybe just as complicated as xor-reduction!
+        if( vl<mvl ){
+            uint64_t sy = vl;
+            // svl old_vl
+            // lvl 256 -- this might increase latency a bit.
+            FOR(i,mvl) vz[i] = vx[ (sy+i)%mvl ];    // vmv vz,sy,vx [requires vz!=vx]
+            // if mvl!=256, above rotation is more involved (VMV, mask, VCP)
+            //
+            // Note: when fully ramped up. save/restore VL becomes "just another scope"
+            // save vl
+            FOR(i,mvl) vx[i] = vz[i];
+            FOR(i,mvl) vs[i] += vl/*j*/;
+            // pop vl
+            // lvl old_vl
+            // But now we are maybe just as complicated as xor-reduction!
+        }
     }
     /// return current hash value (non-memoized xor-reduction of \c vx)
     uint64_t u64() const {      // non-trivial finalizer
