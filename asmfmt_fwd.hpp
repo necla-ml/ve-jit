@@ -3,7 +3,9 @@
 #include "jitpage.h"
 #include <iosfwd>
 #include <string>
-#include <stack>
+//#include <stack>
+#include <vector>       // now can match #defines with regex
+#include <regex>
 
 #if ASMFMTREMOVE < 2
 /* terminal .S --> .bin or throw */
@@ -47,8 +49,31 @@ struct ExecutablePage {
  *
  * Should flush() and write() return the formatter to empty state,
  * via a->clear(), a->set("") ?  Write now it is dead, unusable, inactive!
- * */
+ *
+ * \ref loops/fuse2.cpp for a demo of how to <em>wire in sub-kernel asm code to
+ * preselected parent locations</em>.  This technique replaces the arbitrariy-deep
+ * nesting and node search mechanisms of cblock.hpp.  Register alloc is done
+ * <em>by hand</em>, just like in regular assembly programming.
+ *
+ * - The trick is to create \e separate AsmFmtCols for each section
+ *   that a sub-kernel might want to add code to,
+ * - and then at the end \e stitch together the AsmFmtCols outputs in
+ *   correct order for the final program.
+ *
+ * - \ref cblock.hpp (to output C code) uses a tree-of-nodes with path-name
+ *   lookups, a slightly different approach (allows nicely indented code output)
+ */
 class AsmFmtCols {
+  public: // utility
+      /** Remove front and back whitespace.
+       * \c whitespace may include null */
+      static std::string trim(const std::string& str,
+              const std::string& whitespace = " \t");
+      /** replace internal sequences matching any chars in \c whitespace
+       * with a \c fill string. \c whitespace may include null */
+      static std::string reduce(const std::string& str,
+              const std::string& fill = " ",
+              const std::string& whitespace = " \t");
   public:
       AsmFmtCols();                           ///< destructor writes to cout
       /** destructor write to file instead of cout.
@@ -77,6 +102,14 @@ class AsmFmtCols {
        *
        * It is an error to destruct or early-destruct [via \c write() or \c flush()]
        * without having popped all scopes.  Or maybe we will auto-pop any remaining?
+       *
+       * Note: you may \c def [and \e deprecated: \c undef] symbols one-by-one.
+       *       Such definitions behave as though operating on the global
+       *       scope; i.e. they add to stack_defs[0], stack_undefs[0].
+       *
+       * NEW: you can pattern-match the symbol substitutions. The intent is to
+       *      allow searching for "all used registers matching...
+       *      Ex. std::vector<std::string> vs = asm.match("^%v[:digit:]+.*"
        */
       template<typename PAIRCONTAINER>
           std::size_t scope( PAIRCONTAINER const& pairs, std::string block_name="" );
@@ -86,6 +119,13 @@ class AsmFmtCols {
       /** pop all scopes (emit all active undefs) */
       void pop_scopes();
 
+      /** Search active macro \e substitutions that begin \c with.
+       * Matches stop at the first [ \n\t#/;] character, so if a match with
+       * "%s1\/\*foo\*\/" would return just plain "%s1".
+       * We assume that '\#define' is only used to introduce macro substitutions.
+       * \post returned strings all begin with \c with.
+       */
+      std::vector<std::string> def_words_starting(std::string with);
       /// \group simple formatting
       ///{
       typedef struct {
@@ -97,8 +137,15 @@ class AsmFmtCols {
       } AsmLine;
       static AsmLine parts(std::string const& instruction);        ///< split into op and args (only?)
 
-      AsmFmtCols& def(std::string const& symbol, std::string const& subst, std::string const& name=""); ///< #define symbol subst
-      AsmFmtCols& undef(std::string const& symbol, std::string const& name="");    ///< might \em uncover a previous definition
+      /** \#define symbol subst (into \b global scope) */
+      AsmFmtCols& def(std::string const& symbol, std::string const& subst, std::string const name="");
+      /** undef something explicitly. XXX not robust:
+       * 1) cannot \em uncover a previous definition?
+       * 2) might spit out duplicate undef lines?
+       * Is this fn necesary?  Can \c push_scope, \c pop_scope do everything you need?
+       * \deprecated
+       */
+      AsmFmtCols& undef(std::string const& symbol, std::string const& name="");
       AsmFmtCols& raw(std::string const& anything);    ///< use this for stuff like cpp macros or output from other AsmFmtCols 'kernels'
       AsmFmtCols& lcom(std::string const& comment);    ///< left <// comment>
       AsmFmtCols& com(std::string const& comment);     ///< mid <// comment>
@@ -156,8 +203,24 @@ class AsmFmtCols {
       static int const argwidth;
       bool written;                   ///< track if user forced an early \c write();
       std::ofstream *of;              ///< optional file output (instread of cout)
-      /** push with \c scope, pop with \c pop_scopes or pop_scope. */
-      std::stack<std::string> stack_undefs;
+      /** push with \c scope, pop with \c pop_scopes or pop_scope.
+       * Each element is a multiline-string (one or more '\#undef') */
+      std::vector<std::string> stack_undefs;
+      /** push with \c scope, pop with \c pop_scopes or pop_scope.
+       * Each element represents one or macro definitions, delimited
+       * by '\#define'.  This was added so the that the set of substitutions
+       * could be \c match'ed to search for 'all defined regs'.
+       *
+       * - Invariant after all calls:
+       *   - \c stack_defs.size()==stack_undefs.size()
+       * - Every '\#define' in stack_defs[1,2,...] has a matching '\#undef',
+       *   but not for stack_defs[0], the "global" scope, where you can
+       *   manually add/remove defintions with \c def and \c undef.
+       *
+       * Hmmm.  Rather than parsing lines, it is more convenient to store
+       * \b just the macro substitution strings (trimmed of whitspace)
+       */
+      std::vector<std::string> stack_defs;
 };
 #if 0
 /** extend AsmFmtCols with scoped symbolic register names */

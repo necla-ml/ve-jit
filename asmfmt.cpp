@@ -2,6 +2,7 @@
 #define ASMFMTREMOVE 0
 #endif
 #include "asmfmt.hpp"
+#include "throw.hpp"
 #include <iostream>
 #include <sstream>
 #include <fstream>
@@ -14,6 +15,41 @@
 
 using namespace std;
 
+std::string AsmFmtCols::trim(const std::string& str,
+        const std::string& whitespace /*= " \t"*/ )
+{
+    const auto strBegin = str.find_first_not_of(whitespace);
+    if (strBegin == std::string::npos)
+        return ""; // no content
+
+    const auto strEnd = str.find_last_not_of(whitespace);
+    const auto strRange = strEnd - strBegin + 1;
+
+    return str.substr(strBegin, strRange);
+}
+
+std::string AsmFmtCols::reduce(const std::string& str,
+        const std::string& fill /*= " "*/,
+        const std::string& whitespace /*"= \t"*/)
+{
+    // trim first
+    auto result = trim(str, whitespace);
+
+    // replace sub ranges
+    auto beginSpace = result.find_first_of(whitespace);
+    while (beginSpace != std::string::npos)
+    {
+        const auto endSpace = result.find_first_not_of(whitespace, beginSpace);
+        const auto range = endSpace - beginSpace;
+
+        result.replace(beginSpace, range, fill);
+
+        const auto newStart = beginSpace + fill.length();
+        beginSpace = result.find_first_of(whitespace, newStart);
+    }
+
+    return result;
+}
 #if ASMFMTREMOVE < 2
 string fname_bin( string const& fname_S ){
     auto len = fname_S.size();
@@ -88,6 +124,8 @@ int const            AsmFmtCols::argwidth = 44;
 
 AsmFmtCols::AsmFmtCols()
     : a(new ostringstream()), written(false), of(nullptr)
+      //, stack_undefs{std::string("")}, stack_defs{std::string("")}
+      , stack_undefs(), stack_defs()
 {
     (*a) << left;
     a->fill(' ');
@@ -95,6 +133,7 @@ AsmFmtCols::AsmFmtCols()
 AsmFmtCols::AsmFmtCols( string const& fname )
     : a(new ostringstream()), written(false),
     of(fname.size()? new ofstream(fname, std::ios::out): (std::ofstream*)nullptr)
+      , stack_undefs(), stack_defs()
 {
     //of->rdbuf()->pubsetbuf(charBuffer,BUFFER_SIZE); // opt
     if(of) (*of) <<"// auto-generated via AsmFmtCols!\n";
@@ -125,9 +164,12 @@ std::stack<std::string>::size_type AsmFmtCols::pop_scope(){
     auto sz = stack_undefs.size();
     if(sz) {
         assert( a != nullptr );
-        (*a) << stack_undefs.top(); // #undef lines, no endl here
-        stack_undefs.pop();
+        (*a) << stack_undefs.back(); // #undef lines, no endl here
         --sz;
+        stack_undefs.resize(sz);
+        stack_defs.resize(sz);
+        if(sz==0) (*a)<<setw(inwidth+opwidth+argwidth-9)<<""
+            <<"/* } END GLOBAL SCOPE */\n";
         written = false;
     }
     return sz;
@@ -214,41 +256,6 @@ AsmFmtCols& AsmFmtCols::ins(){
     throw_if_written(this,__FUNCTION__);
     (*a) << endl;
     return *this;
-}
-std::string trim(const std::string& str,
-        const std::string& whitespace = " \t")
-{
-    const auto strBegin = str.find_first_not_of(whitespace);
-    if (strBegin == std::string::npos)
-        return ""; // no content
-
-    const auto strEnd = str.find_last_not_of(whitespace);
-    const auto strRange = strEnd - strBegin + 1;
-
-    return str.substr(strBegin, strRange);
-}
-
-std::string reduce(const std::string& str,
-        const std::string& fill = " ",
-        const std::string& whitespace = " \t")
-{
-    // trim first
-    auto result = trim(str, whitespace);
-
-    // replace sub ranges
-    auto beginSpace = result.find_first_of(whitespace);
-    while (beginSpace != std::string::npos)
-    {
-        const auto endSpace = result.find_first_not_of(whitespace, beginSpace);
-        const auto range = endSpace - beginSpace;
-
-        result.replace(beginSpace, range, fill);
-
-        const auto newStart = beginSpace + fill.length();
-        beginSpace = result.find_first_of(whitespace, newStart);
-    }
-
-    return result;
 }
 AsmFmtCols::AsmLine AsmFmtCols::parts(std::string const& instruction){
     // made this a STATIC function
@@ -452,13 +459,8 @@ string AsmFmtCols::fmt_def(std::string const& symbol, std::string const& subst, 
     if( name.size() == 0 ){
         define << "\n";
     }else{
-        //auto const wnt = inwidth + opwidth + argwidth - 9;
-        //undef << "#undef  " << left << setw(wnt-8) << macroname << "/* " << name << " */\n";
         auto const col = 8 + std::max(symbol.size(),10UL) + 1 + subst.size();
-        //auto const wnt = inwidth + opwidth + argwidth;
         auto const wnt = inwidth + opwidth + argwidth - 9;
-        //cout<<"col="<<col<<" cf "<<wnt<<endl;
-
         if(col < wnt){
             define << setw(wnt - col) << "";
         }
@@ -466,14 +468,21 @@ string AsmFmtCols::fmt_def(std::string const& symbol, std::string const& subst, 
     }
     return define.str();
 }
-AsmFmtCols& AsmFmtCols::def(std::string const& symbol, std::string const& subst, std::string const& name){
+/** adds to 'global' scope, creating if nec. */
+AsmFmtCols& AsmFmtCols::def(std::string const& symbol, std::string const& subst, std::string name){
+    std::string sub = trim(subst, string(" \n\t\0",4));
+    assert( stack_defs.size() == stack_undefs.size() );
+    std::string namd = name;
     if( stack_undefs.empty() ){
-        (*a) << fmt_def(symbol, subst, name+" { BEG SCOPE");
-        stack_undefs.push(fmt_undef(symbol, name+" } END SCOPE"));
-    }else{
-        (*a) << fmt_def(symbol, subst, name);
-        stack_undefs.push(fmt_undef(symbol, name));
+        stack_defs.push_back("");
+        stack_undefs.push_back("");
+        namd.append(" { GLOBAL SCOPE");
     }
+    std::string define = fmt_def(symbol, sub, namd);
+    (*a) << define;
+    stack_undefs[0].append(fmt_undef(symbol,name));
+    stack_defs  [0].append(sub).push_back('\0'); // for searching substitution values
+                                 // e.g. for registers
     return *this;
 }
 string AsmFmtCols::fmt_undef(std::string const& symbol,std::string const& name){
@@ -490,10 +499,33 @@ string AsmFmtCols::fmt_undef(std::string const& symbol,std::string const& name){
     return undef.str();
 }
 AsmFmtCols& AsmFmtCols::undef(std::string const& symbol,std::string const& name){
+    cerr<<" Warning: AsmFmtCols::undef is deprecated"<<endl;
     (*a) << fmt_undef(symbol, name);
+    // XXX remove from stack_[un]defs[0]
     return *this;
 }
-
+std::vector<string> AsmFmtCols::def_words_starting(std::string with){
+    std::vector<string> ret;
+    size_t with_sz = with.size();
+    for(auto const& s: stack_defs){
+        //cout<<" def_words_staring, string s = <"<<s<<">"<<endl;
+        size_t p=0;
+        for(;;){
+            //cout<<" s[p..]=<"<<s.substr(p)<<">"<<endl;
+            if( p+with_sz < s.size()
+                    && s.compare(p, with_sz, with) == 0 ){
+                size_t q = s.find_first_of(" \n\t\0#;/",p,7);
+                //cout<<" found <"<<s.substr(p,q-p)<<">"<<endl;
+                ret.push_back( s.substr(p,q-p) );
+            }
+            p = s.find('\0',p);
+            if(p==string::npos) break;
+            ++p;
+        }
+    }
+    //cout<<" found "<<ret.size()<<" substitution-first-words beginning with "<<with<<endl;
+    return ret;
+}
 std::string uncomment_asm( std::string asmcode )
 {
     // for multiline, we need a bit more than just 'parts(instruction)'
@@ -544,11 +576,15 @@ int main(int,char**){
                 "once more so that",
                 "I have now added 2");
         std::forward_list<std::pair<std::string,std::string>> block =
-        {{"counter","%s1"},{"counter_beg","0"},{"to","5"}};
+        {{"counter","%s1"},{"counter_beg","0"},{"to","5"},{"out","%s2"}};
         a.scope(block,"opt_block_name");
         a.ins("mpy %s0,%s1,%s2#FIRST;mpy %s0,%s1,%s2#multiline"); // multi-line asm
         a.ins("add %s0,%s1,%s2;add %s0,%s1,%s2","add twice");
+        for(auto s: a.def_words_starting("%s")){
+            cout<<"# def_words_starting... "<<s<<endl;
+        }
         a.ins("sub %s0,%s1,%s2;sub %s0,%s1,%s2#DIFF","diff twice");
+        a.def("CAT","DOG");
         a.pop_scope();
         a.ins("nop #1;nop#2","multiline nops A");
         a.ins("frobnicate X; foo bar#huh\nfrobnicate B\nfoo2 bar2;xyz\nfoo3#X;foo4;#long multiline");

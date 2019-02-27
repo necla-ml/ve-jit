@@ -24,6 +24,13 @@
  * For creation, we use ostringstreams.  These get flushed into vector<string>
  * and annotated with block names, and can be relinked into non-linear output
  * order to form a 'C' program unit [which hopefully compiles].
+ *
+ * 'C' code emission can largely be decided by hand, because the compiler can
+ * can adjust register allocations once the code is about right.
+ *
+ * For assembly output, a more complex approach is needed (with some builtin
+ * smarts about which node set/spills/loads registers.  One register can potential
+ * occur in code emissions of several parent nodes!
  **/
 #include <iostream>
 #include <string>

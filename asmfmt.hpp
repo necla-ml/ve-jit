@@ -4,6 +4,7 @@
 #include <sstream>
 #include <deque>
 #include <iostream>
+#include <assert.h>
 
 #if ASMFMTREMOVE < 1
 inline std::string AsmFmtCols::str() const {
@@ -12,20 +13,28 @@ inline std::string AsmFmtCols::str() const {
 
 template<typename PAIRCONTAINER> inline
 std::size_t AsmFmtCols::scope( PAIRCONTAINER const& pairs, std::string block_name ){
+    assert( stack_defs.size() == stack_undefs.size() );
+    std::string defs;
     std::deque<std::string> un;
     {
         bool name_out = false;
         std::string comment("{ BEG ");
         comment.append(block_name);
+        if( stack_undefs.empty() ) comment.append(" (GLOBAL)");
+
         auto const iend = pairs.end();
         auto       iter = pairs.begin();
+        std::string line;
         for( ; iter != iend; ++iter ){
             if( !name_out ){
-                (*a) << this->fmt_def(iter->first, iter->second, comment);
+                line = this->fmt_def(iter->first, iter->second, comment);
                 name_out = true;
             }else{
-                (*a) << this->fmt_def(iter->first, iter->second);
+                line = this->fmt_def(iter->first, iter->second);
             }
+            (*a) << line;
+            defs.append(trim(iter->second,std::string(" \n\t\0",4)))
+                .push_back('\0');
             un.push_back(iter->first);
         }
         if(!name_out) rcom(comment);
@@ -51,7 +60,9 @@ std::size_t AsmFmtCols::scope( PAIRCONTAINER const& pairs, std::string block_nam
         if(!name_out) rcom(comment);
     }
     // move the undefs string [a bunch of #undef lines] onto our scope-stack
-    stack_undefs.push(undefs.flush());
+    //  ... same for the defines string ...
+    stack_undefs.push_back(undefs.flush());
+    stack_defs  .push_back(  defs);
     //std::cout<<"\nscope-->undefs:\n"<<stack_undefs.top()<<std::endl;
     return un.size();
 }

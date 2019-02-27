@@ -15,6 +15,13 @@
  * state regs, pointers to allocated/stack/spilled memory.  Once you
  * have a program tree, the code snippets can be moved up and down
  * to adapt to total register pressure.
+ *
+ * Register allocation will be tricky!
+ * Perhaps I can use a simpler string-based approach:
+ *
+ * - assembly code should never nest "too many" kernels.
+ * - if register usage does not "look good" (or throws "Out of registers"),
+ *   you adjust <B>by hand</B>
  */
 #include "../throw.hpp"
 #include <string>
