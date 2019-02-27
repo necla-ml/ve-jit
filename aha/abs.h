@@ -47,7 +47,7 @@ int trialy[] = {1, 0, -1, MAXNEG, MAXPOS, \
 #endif
 // First three values of IMMEDS must be 0, -1, and 1.
 #define IMMEDS 0, -1, 1, MAXNEG, -2, 2, 3
-#define SHIMMEDS 1, 2, 30, 31
+#define SHIMMEDS 1, 2, 8, 16, 30, 31
 
 int dummy1[] = {IMMEDS};        // These get optimized out of existence.
 int dummy2[] = {SHIMMEDS};
@@ -114,6 +114,12 @@ int divu(int x, int y, int) {
 int _and(int x, int y, int) {return x & y;}
 int _or (int x, int y, int) {return x | y;}
 int _xor(int x, int y, int) {return x ^ y;}
+int _nand(int x, int y, int) {return (~x) ^ y;}
+int _eqv(int x, int y, int) {return ~(x^y);}
+int _max(int x, int y, int) {return x>y? x: y;}
+int _min(int x, int y, int) {return x<y? x: y;}
+int _mrg(int x, int y, int z) {return (x&(~z))|(y&z);}//bitwise merge
+int _cmp(int x, int y, int z) {return y>z? 0x0eedbeef: y==z? 0x0: 0xfeedbeef;}
 int rotl(int x, int y, int) {int s = y & NBSM;
    return x << s | (unsigned)x >> (32 - s);}
 int shl (int x, int y, int) {int s = y & NBSM;
@@ -128,6 +134,9 @@ int cmpltu(int x, int y, int) {return (unsigned)(x) < (unsigned)(y);}
 int seleq(int x, int y, int z) {return x == 0 ? y : z;}
 int sellt(int x, int y, int z) {return x < 0 ? y : z;}
 int selle(int x, int y, int z) {return x <= 0 ? y : z;}
+int cmoveq(int x, int y, int z) {return y == 0 ? x : z;}
+int cmovgt(int x, int y, int z) {return y > 0 ? x : z;}
+int cmovlt(int x, int y, int z) {return y < 0 ? x : z;}
 
                                 // The machine's instruction set:
 // Note: Commutative ops are commutative in operands 0 and 1.
@@ -136,33 +145,43 @@ struct {
    int  numopnds;               // Number of operands, 1 to 3.
    int  commutative;            // 1 if opnds 0 and 1 commutative.
    int  opndstart[3];           // Starting reg no. for each operand.
+   int  outputreg;              // if 0,1,2, copy output into this operand reg
    char *mnemonic;              // Name of op, for printing.
    char *fun_name;              // Function name, for printing.
    char *op_name;               // Operator name, for printing.
 } isa[] = {
-   {neg,    1, 0, {RX,  0,  0}, "neg",   "-(",   ""     },  // Negate.
-   {_not,   1, 0, {RX,  0,  0}, "not",   "~(",   ""     },  // One's-complement.
-// {pop,    1, 0, {RX,  0,  0}, "pop",   "pop(", ""     },  // Population count.
-// {nlz,    1, 0, {RX,  0,  0}, "nlz",   "nlz(", ""     },  // Num leading 0's.
-// {rev,    1, 0, {RX,  0,  0}, "rev",   "rev(", ""     },  // Bit reversal.
-   {add,    2, 1, {RX,  2,  0}, "add",   "(",    " + "  },  // Add.
-   {sub,    2, 0, { 2,  2,  0}, "sub",   "(",    " - "  },  // Subtract.
-   {mul,    2, 1, {RX,  3,  0}, "mul",   "(",    "*"    },  // Multiply.
-   {div,    2, 0, { 1,  3,  0}, "div",   "(",    "/"    },  // Divide signed.
-   {divu,   2, 0, { 1,  1,  0}, "divu",  "(",    " /u " },  // Divide unsigned.
-   {_and,   2, 1, {RX,  2,  0}, "and",   "(",    " & "  },  // AND.
-   {_or,    2, 1, {RX,  2,  0}, "or",    "(",    " | "  },  // OR.
-   {_xor,   2, 1, {RX,  2,  0}, "xor",   "(",    " ^ "  },  // XOR.
-// {rotl,   2, 0, { 1,NIM,  0}, "rotl",  "(",    " <<r "},  // Rotate shift left.
-   {shl,    2, 0, { 1,NIM,  0}, "shl",   "(",    " << " },  // Shift left.
-   {shr,    2, 0, { 1,NIM,  0}, "shr",   "(",    " >>u "},  // Shift right.
-   {shrs,   2, 0, { 3,NIM,  0}, "shrs",  "(",    " >>s "},  // Shift right signed.
-// {cmpeq,  2, 1, {RX,  0,  0}, "cmpeq", "(",    " == " },  // Compare equal.
-// {cmplt,  2, 0, { 0,  0,  0}, "cmplt", "(",    " < "  },  // Compare less than.
-// {cmpltu, 2, 0, { 1,  1,  0}, "cmpltu","(",    " <u " },  // Compare less than unsigned.
-// {seleq,  3, 0, {RX,  0,  0}, "seleq", "seleq(", ", " },  // Select if = 0.
-// {sellt,  3, 0, {RX,  0,  0}, "sellt", "sellt(", ", " },  // Select if < 0.
-// {selle,  3, 0, {RX,  0,  0}, "selle", "selle(", ", " },  // Select if <= 0.
+// {neg,    1, 0, {RX,  0,  0}, -1, "neg",   "-(",   ""     },  // Negate.
+   {_not,   1, 0, {RX,  0,  0}, -1, "not",   "~(",   ""     },  // One's-complement.
+   {pop,    1, 0, {RX,  0,  0}, -1, "pop",   "pop(", ""     },  // Population count.
+   {nlz,    1, 0, {RX,  0,  0}, -1, "nlz",   "nlz(", ""     },  // Num leading 0's.
+   {rev,    1, 0, {RX,  0,  0}, -1, "rev",   "rev(", ""     },  // Bit reversal.
+   {add,    2, 1, {RX,  2,  0}, -1, "add",   "(",    " + "  },  // Add.
+   {sub,    2, 0, {RX,  1,  0}, -1, "sub",   "(",    " - "  },  // Subtract.
+   {sub,    2, 0, { 0, RX,  0}, -1, "sub",   "(",    " - "  },  // Subtract.
+   {mul,    2, 1, {RX,  3,  0}, -1, "mul",   "(",    "*"    },  // Multiply.
+   {div,    2, 0, { 1,  3,  0}, -1, "div",   "(",    "/"    },  // Divide signed.
+   {divu,   2, 0, { 1,  1,  0}, -1, "divu",  "(",    " /u " },  // Divide unsigned.
+   {_and,   2, 1, {RX,  2,  0}, -1, "and",   "(",    " & "  },  // AND.
+   {_or,    2, 1, {RX,  2,  0}, -1, "or",    "(",    " | "  },  // OR.
+   {_xor,   2, 1, {RX,  2,  0}, -1, "xor",   "(",    " ^ "  },  // XOR.
+   {_nand,  2, 1, {RX,  2,  0}, -1, "nand",  "(",    " ^ "  },  // NAND.
+   {_eqv,   2, 1, {RX,  2,  0}, -1, "eqv",   "(",    " ^ "  },  // EQV. == ~_xor
+   {_max,   2, 1, {RX,  0,  0}, -1, "max",   "max(", ", "   },  // Max.
+   {_min,   2, 1, {RX,  0,  0}, -1, "min",   "min(", ", "   },  // Min.
+// {rotl,   2, 0, { 1,NIM,  0}, -1, "rotl",  "(",    " <<r "},  // Rotate shift left.
+   {shl,    2, 0, { 1,NIM,  0}, -1, "shl",   "(",    " << " },  // Shift left.
+   {shr,    2, 0, { 1,NIM,  0}, -1, "shr",   "(",    " >>u "},  // Shift right.
+   {shrs,   2, 0, { 3,NIM,  0}, -1, "shrs",  "(",    " >>s "},  // Shift right signed.
+   {_mrg,   3, 0, {RX,  0,  0},  0, "mrg",   "mrg(",   ", " },  // Merge. x = {x&(~z)}|{y&z}
+   {cmoveq, 3, 0, {RX, RY,  0},  0, "cmoveq","cmoveq(", ", "},  // CMOV x=(signed_cnd(y)?x:z)
+   {cmovgt, 3, 0, {RX, RY,  0},  0, "cmovgt","cmovgt(", ", "},  // CMOV x=((y>0?z:x)
+   {cmovlt, 3, 0, {RX, RY,  0},  0, "cmovlt","cmovlt(", ", "},  // CMOV x=((y<0?z:x)
+// {cmpeq,  2, 1, {RX,  0,  0}, -1, "cmpeq", "(",    " == " },  // Compare equal.
+// {cmplt,  2, 0, { 0,  0,  0}, -1, "cmplt", "(",    " < "  },  // Compare less than.
+// {cmpltu, 2, 0, { 1,  1,  0}, -1, "cmpltu","(",    " <u " },  // Compare less than unsigned.
+// {seleq,  3, 0, {RX,  0,  0}, -1, "seleq", "seleq(", ", " },  // Select if = 0.
+// {sellt,  3, 0, {RX,  0,  0}, -1, "sellt", "sellt(", ", " },  // Select if < 0.
+// {selle,  3, 0, {RX,  0,  0}, -1, "selle", "selle(", ", " },  // Select if <= 0.
 };
 
 /* ------------------- End of user-setup Portion -------------------- */

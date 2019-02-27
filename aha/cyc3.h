@@ -54,7 +54,7 @@ int trialy[] = {1, 0, -1, (int)MAXNEG, (int)MAXPOS, \
 #endif
 // First three values of IMMEDS must be 0, -1, and 1.
 #define IMMEDS 0, -1, 1, (int)MAXNEG, -2, 2, 3
-#define SHIMMEDS 1, 2, 30, 31
+#define SHIMMEDS 1, 2, 3, 4, 5, 6, 7, 8, 16, 24, 30, 31
 
 int dummy1[] = {IMMEDS};        // These get optimized out of existence.
 int dummy2[] = {SHIMMEDS};
@@ -164,14 +164,16 @@ struct {
    char const*fun_name;         // Function name, for printing.
    char const*op_name;          // Operator name, for printing.
 } isa[] = {
-   {neg,    1, 0, {RX,  0,  0}, -1, "neg",   "-(",   ""     },  // Negate.
+// {neg,    1, 0, {RX,  0,  0}, -1, "neg",   "-(",   ""     },  // Negate.
    {_not,   1, 0, {RX,  0,  0}, -1, "not",   "~(",   ""     },  // One's-complement.
    {pop,    1, 0, {RX,  0,  0}, -1, "pop",   "pop(", ""     },  // Population count.
    {nlz,    1, 0, {RX,  0,  0}, -1, "nlz",   "nlz(", ""     },  // Num leading 0's.
 // {rev,    1, 0, {RX,  0,  0}, -1, "rev",   "rev(", ""     },  // Bit reversal.
    {add,    2, 1, {RX,  2,  0}, -1, "add",   "(",    " + "  },  // Add.
    //{add3,   3, 1, {RX,  2,  2},  2, "add",   "(",    " + "  },  // Add.
-   {sub,    2, 0, { 2,  2,  0}, -1, "sub",   "(",    " - "  },  // Subtract.
+   //{sub,    2, 0, { 2,  2,  0}, -1, "sub",   "(",    " - "  },  // Subtract.
+   {sub,    2, 0, {RX,  1,  0}, -1, "sub",   "(",    " - "  },  // Subtract.
+   {sub,    2, 0, { 0, RX,  0}, -1, "sub",   "(",    " - "  },  // Subtract.
    {mul,    2, 1, {RX,  3,  0}, -1, "mul",   "(",    "*"    },  // Multiply.
    {_max,   2, 1, {RX,  0,  0}, -1, "max",   "max(", ", "   },  // Max.
    {_min,   2, 1, {RX,  0,  0}, -1, "min",   "min(", ", "   },  // Min.
