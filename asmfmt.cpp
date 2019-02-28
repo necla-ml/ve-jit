@@ -475,7 +475,7 @@ AsmFmtCols& AsmFmtCols::undef(std::string const& symbol,std::string const& name)
     // XXX remove from stack_[un]defs[0]
     return *this;
 }
-std::vector<string> AsmFmtCols::def_words_starting(std::string with){
+std::vector<string> AsmFmtCols::def_words_starting(std::string with) const {
     std::vector<string> ret;
     if(parent)
         ret = parent->def_words_starting(with);
@@ -768,6 +768,29 @@ std::string ve_load64(std::string s, uint64_t v){
     return multiReplace("OUT", s,
             choose(opLoadregStrings(v)));
 }
+static std::vector<std::pair<int,int>> const scalar_order_fwd{{0,7},{34,63},{18,33}};
+static std::vector<std::pair<int,int>> const scalar_order_bwd{{0,7},{34,63},{18,33}};
+static std::vector<std::pair<int,int>> const vector_order_fwd{{0,63}};
+static std::vector<std::pair<int,int>> const vector_order_bwd{{63,0}};
+
+void ve_propose_reg( std::string variable, AsmScope& block, AsmFmtCols const& a, RegSearch const how ){
+    std::vector<std::pair<int,int>> const* order = nullptr;
+    char const* pfx = nullptr;
+    switch(how){
+      case(SCALAR)    : pfx="%s"; order=&scalar_order_fwd; break;
+      case(SCALAR_TMP): pfx="%s"; order=&scalar_order_bwd; break;
+      case(VECTOR)    : pfx="%v"; order=&vector_order_fwd; break;
+      case(VECTOR_TMP): pfx="%v"; order=&vector_order_bwd; break;
+    }
+    auto vs = a.def_words_starting(pfx); // anything already within scopes?
+    for(auto const& pre: block){ // for things we ARE GOING TO allocate
+        vs.push_back( pre.second );
+    }
+    std::string register_name = free_pfx(vs,pfx,*order);
+    if(register_name.empty()) THROW("Out of registers");
+    block.push_back({variable,register_name});
+}
+
 #endif //CODEREMOVE < 1
 
 #ifdef _MAIN

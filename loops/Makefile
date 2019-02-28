@@ -29,10 +29,11 @@ ifneq ($(CC:ncc%=ncc),ncc)
 LDLIBS+=${X86LIBS}
 endif
 
+fuse2: ../stringutil.hpp ../codegenasm.hpp ../asmfmt_fwd.hpp ../asmfmt_fwd.hpp
 fuse2: fuse2.cpp vechash.cpp ../libjit1-x86.a ../libveli-x86.a
 	echo "CC=${CC}"
 	echo "LDLIBS=${LDLIBS}"
-	g++ -Wall -std=c++11 -ggdb -O3 $^ -o $@ ${X86FLAGS} ${X86LIBS}
+	g++ -Wall -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
 .PHONY: mega1
 # Instead of randomly trying a bunch of tf2-FOO.log targets,
 # we now record and execution hash of program flow to create

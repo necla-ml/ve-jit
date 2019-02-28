@@ -894,6 +894,9 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
         fk.setParent(&fp);
         fl.setParent(&fp);
         fz.setParent(&fp);
+        // important: vechash puts a scope onto fp, so later code snippets
+        // fk,fl,fz should not "miss" any current scopes. (i.e. it is up
+        // to us to create an appropriate tree of scopes).
 
         // local labels:
         string fusename;
@@ -903,6 +906,8 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
             fusename = oss.str();
         }
         // immediate constants into registers.
+        // An assembler "main" may preallocate some fixed registers,
+        // amongst other readability macros.
         AsmScope block = {
             {"BASE", "L_"+fusename+"_BASE"},
             {"INDUCE", "L_"+fusename+"_INDUCE"},
@@ -910,52 +915,99 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
             {"vl0",  "%s0"},
             {"ii",   "%s1"},
             {"jj",   "%s2"},
-            {"base", "%s7"},
+            {"base", "%s4"}, // yah %s3 might be more logical, but for demo...
         };
-#define HASH_KERNEL 1
-        if(HASH_KERNEL) block.push_back({"reg_hash","%s33"});
+        // if nloops==1, we might not need "base" register?
 
-        if(nloop>1){
-            block.push_back({"cnt",  "%s3"});
-        }
-        if(nloop>1 && (iijj%vl0) ){
-            block.push_back({"vl","%s4"});
-        }
+        if(1){ // illustrate use of auto-register assignments,
+            // even before the scope is officially defined in an AsmFmtCols
+
+            // UTILITY LAMBDAS
+            // pre-assign some registers to fd "defines" scope
+            // I don't care about speed, for now.
+            auto main_scalar = [&]() {
+                auto vs = fd.def_words_starting("%s"); // anything already there?
+                for(auto const& pre: block){ // for things we ARE GOING TO allocate
+                    vs.push_back( pre.second );
+                }
+                std::string ret = free_pfx(vs,"%s",{{0,7},{34,63}});
+                if(ret.empty()) THROW("Out of registers");
+                return ret;
+            };
+            auto block_alloc_scalar = [&](std::string variable){
+                block.push_back({variable,main_scalar()});
+            };
+            auto main_vector = [&]() {
+                auto vs = fd.def_words_starting("%v"); // anything already there?
+                for(auto const& pre: block){ // for things we ARE GOING TO allocate
+                    vs.push_back( pre.second );
+                }
+                std::string ret = free_pfx(vs,"%v",{{0,63}});
+                if(ret.empty()) THROW("Out of registers");
+                return ret;
+            };
+            auto block_alloc_vector = [&](std::string variable){
+                block.push_back({variable,main_vector()});
+            };
+
+            // Allocations
+            // Note that many of these are optional, so register assignments
+            // for different kernels may be ... different.
 #define SAVE_RESTORE_VLEN 1
-        if(SAVE_RESTORE_VLEN) block.push_back({"vl_save","%s5"});
+#define HASH_KERNEL 1
+            if(nloop>1)                     block_alloc_scalar("cnt");
+            if(nloop>1 && (iijj%vl0) )      block_alloc_scalar("vl");
+            if(SAVE_RESTORE_VLEN)           block_alloc_scalar("vl_save");
+#if 0
+            if( have_sq )                   block_alloc_scalar("sq");
+            if(HASH_KERNEL)                 block_alloc_scalar("reg_hash");
+#else
+            // Above lambdas are a common pattern, so some default
+            // search orders were "builtin" for VE registers:
+            if( have_sq )   ve_propose_reg("sq",      block,fd,SCALAR);
+            if(HASH_KERNEL) ve_propose_reg("reg_hash",block,fd,SCALAR);
+#endif
 
-        // ii and jj are freed very early, and can sometimes be re-used...
-        if( have_jjMODvl_reset ){
-            //block.push_back({"jjovl","%s7"});
-            // new: iloop%vl as a cyclic counter simplifies things...
-            block.push_back({"tmod","ii"});
-            if(jj/vl>2) block.push_back({"tm0","jj"});
-        }else{
-            if(have_vl_over_jj && !have_jj_M){
-                if(vl/jj > 127) block.push_back({"vlojj","ii"}); // register absolutely needed
-                //else block.push_back({"vlojj",jitdec(vl/jj)}); // we'll jitdec(vl/jj) below
-            }else if( have_jj_M ){
-                // For jj=1,2 don't need jj_M, so smallest jj for jj_M is 3,
-                // So vlojj is ** at most ** MVL/jj or 256/3 ~ 85
-                assert( vl/jj <= 85 );
-                // we never need vlojj in a register in this case
-                // Note: we also need the jj value if nloop > 1, so put jj_M into ii...
-                block.push_back({"jj_M", "ii"}); // not a short/nice value
+            // ii and jj usage ends pretty early, so [hand-optimization...]
+            // we can re-use some always-there regs...
+            if( have_jjMODvl_reset ){
+                //block.push_back({"jjovl","%s7"});
+                // new: iloop%vl as a cyclic counter simplifies things...
+                block.push_back({"tmod","ii"});
+                if(jj/vl>2) block.push_back({"tm0","jj"});
+            }else{
+                if(have_vl_over_jj && !have_jj_M){
+                    if(vl/jj > 127) block.push_back({"vlojj","ii"}); // register absolutely needed
+                    //else block.push_back({"vlojj",jitdec(vl/jj)}); // we'll jitdec(vl/jj) below
+                }else if( have_jj_M ){
+                    // For jj=1,2 don't need jj_M, so smallest jj for jj_M is 3,
+                    // So vlojj is ** at most ** MVL/jj or 256/3 ~ 85
+                    assert( vl/jj <= 85 );
+                    // we never need vlojj in a register in this case
+                    // Note: we also need the jj value if nloop > 1, so put jj_M into ii...
+                    block.push_back({"jj_M", "ii"}); // not a short/nice value
+                }
+            }
+
+            // vector regs
+            block.push_back({"a",    "%v0"});
+            block.push_back({"b",    "%v1"});
+            if(have_jj_M){
+                // OK, I could hand-allocate everything here, but for demo...
+                block_alloc_vector("vx");
+                block_alloc_vector("vy");
+            }
+            if((have_jj_M && nloop>1)){
+#if 0
+                block_alloc_vector("bA");
+                block_alloc_vector("bD");
+#else
+                // demo the lambda-less helpers (recommended)
+                ve_propose_reg("bA",block,fd,VECTOR);
+                ve_propose_reg("bD",block,fd,VECTOR);
+#endif
             }
         }
-
-        // vector regs
-        block.push_back({"a",    "%v0"});
-        block.push_back({"b",    "%v1"});
-        if((have_jj_M && nloop>1)){
-            block.push_back({"bA","%v2"});
-            block.push_back({"bD","%v3"});
-        }
-        if(have_jj_M){
-            block.push_back({"vx","%v4"});
-            block.push_back({"vy","%v5"});
-        }
-        if( have_sq ) block.push_back({"sq","%v6"});
 
         fd.scope(block,"vectorized double-loop --> index vectors");
 
@@ -1015,7 +1067,7 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
         // NOTE: fd is the parent but fp is where the code "should" really appear
         //       I think.   --- how to attache scope_parent concept to AsmFmtCols?
         if(have_sq)
-            VecHash2::kern_asm_begin(fp, "%v6");
+            VecHash2::kern_asm_begin(fp, "sq");
         else
             VecHash2::kern_asm_begin(fp); // it'll grab %v40 or such and hold it
         // TODO: a way for subkernel to request state registers from caller.

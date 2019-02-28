@@ -3,8 +3,10 @@
 #include "jit_data.h" // C data, ...
 #include "stringutil.hpp"
 //#include "jitpipe_fwd.hpp"  // just for multiReplace XXX
-#include "velogic.hpp" // fully-tested "load scalar reg with constant"
+//#include "velogic.hpp" // fully-tested "load scalar reg with constant"
 // Note: required code is in veliFoo.cpp (wrpiFoo.cpp for the tests)
+// oh I moved it to asmfmt...
+#include "asmfmt_fwd.hpp"
 
 #include <cstdint>
 #include <iostream>

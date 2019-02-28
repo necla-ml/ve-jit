@@ -6,6 +6,7 @@
 //#include <stack>
 #include <vector>       // now can match #defines with regex
 #include <regex>
+#include <list>
 
 #if ASMFMTREMOVE < 2
 /* terminal .S --> .bin or throw */
@@ -31,6 +32,7 @@ struct ExecutablePage {
 
 /* assemble a .S file to a .bin file and load it into an ExecutablePage */
 //ExecutablePage asm2page( std::string const& fname_S );
+
 
 #if ASMFMTREMOVE < 1
 /** Simple assembly line formatting. -std=c++11.
@@ -116,7 +118,7 @@ class AsmFmtCols {
        * We assume that '\#define' is only used to introduce macro substitutions.
        * \post returned strings all begin with \c with.
        */
-      std::vector<std::string> def_words_starting(std::string with);
+      std::vector<std::string> def_words_starting(std::string with) const;
       /** Set scoping parent, returning old pointer [default=NULL].
        * You can arrange AsmFmtCols as a nesting of scopes, so we can
        * consult \c parent to know about other in-scope \c def macros.
@@ -301,6 +303,22 @@ std::string ve_load64_opt0(std::string s, uint64_t v);
 
 /** choose with easier interface (and no context) */
 std::string ve_load64(std::string s, uint64_t v);
+
+/** A common pattern is to pre-select any required registers into an \c AsmScope block,
+ * and then shove all the assignments into AsmFmtCols::scope(block,name) */
+typedef std::list<std::pair<std::string,std::string>> AsmScope;
+enum RegSearch { SCALAR, SCALAR_TMP, VECTOR, VECTOR_TMP };
+/** add a scalar register to \c block that does conflicts with neither \c block
+ * nor \c asmfmt scopes (or parent scopes).
+ *
+ * - \c search_pattern SCALAR searches %s{{0-7},{34,63},{18,33},
+ *   - VECTOR searches %v{{0-63}}
+ *   - and *_TMP search in reverse order.
+ */
+void ve_propose_reg( std::string variable,
+        AsmScope& block,        // add {variable,register} to block
+        AsmFmtCols const& a,    // excluding registers known to block or a
+        enum RegSearch const how );
 
 //@}
 /* dispatch table based on 0 <= %s0 < nCases.
