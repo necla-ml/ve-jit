@@ -4,9 +4,9 @@
  * Must compile with at least \c -std=c++11 (uses \c nullptr)
  */
 #include "pstreams-1.0.1/pstream.h"
+#include "stringutil.hpp"
 #include "throw.hpp"
 #include <sstream>
-#include <cstdio>   // tmpnam, tempnam?
 
 /** Base class for command pipes with std::string input and outputs
  * Use std::string to do something like
@@ -30,21 +30,6 @@ struct HEXDUMPpipe;     // run std::string through hexdump -C
 struct BLOBDISpipe;     // run std::string through binary-blob disassembly
 
 /** non-overlapping global \c needle --> \c replace in \c haystack. \return \e fresh string. */
-inline std::string multiReplace(
-        const std::string needle,
-        const std::string replace,
-        std::string haystack)
-{
-    size_t const nlen = needle.length();
-    size_t const rlen = replace.length();
-    size_t nLoc = 0;;
-    while ((nLoc = haystack.find(needle, nLoc)) != std::string::npos) {
-        haystack.replace(nLoc, nlen, replace);
-        nLoc += rlen;
-    }
-    return haystack;
-}
-
 struct PstreamPipe {
     /** shell script that runs cpp, then nas,
      * then nobjcopy to convert the ELF object file into a binary blob
@@ -133,15 +118,6 @@ struct HEXDUMPpipe : public PstreamPipe {
     //HEXDUMPpipe() : PstreamPipe("bash -c 'cat - > foo; hexdump -C foo'") {}
 };
 
-inline std::string my_tmpnam() {
-    std::string templ("tmpXXXXXX");
-    char * templ_data = const_cast<char*>(templ.data()); // c++17 for non-const 'data()'
-    int fd = mkstemp(templ_data); // c11 specifies zero-termination
-    if(fd==-1) THROW("issues creating temp file "<<templ);
-    close(fd);
-    return templ;
-}
-
 /** invoke a 'binary blob disassemble' pipe.
  * Interesting because it shows how several bash commands can be used,
  * as well as mktemp to avoid tmp file name clashes. */
@@ -218,7 +194,7 @@ class DllPipe {
     ~DllPipe(){}
     /** return the library name, lib<B>basename</B>.so */
     std::string lib() { return libname; }
-    std::string libFullPath() { return libname.empty()? libname: outDir+pathSep()+libname; }
+    std::string libFullPath();
 
   private:
     /** Set a tmp filename into ccode_tmpfile.

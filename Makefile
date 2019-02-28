@@ -486,9 +486,9 @@ veliFoo.o: veliFoo.cpp velogic.hpp
 	$(CXX) ${CXXFLAGS} -Wall -O2 -c $< -o $@
 
 #asmfmt.cpp has a standalone demo program with -D_MAIN compiler	
-asmfmt-x86: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp jitpage.o
+asmfmt-x86: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp jit_data.c jit_data.h jitpage.c jitpage.h
 	g++ $(CXXFLAGS) -O2 -E -dD $< >& $(patsubst %,%.i,$@)
-	g++ ${CXXFLAGS} -Wall -D_MAIN asmfmt.cpp jitpage.c -o $@ -ldl
+	g++ ${CXXFLAGS} -Wall -D_MAIN asmfmt.cpp jitpage.c jit_data.c -o $@ -ldl
 asmfmt-ve: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp jitpage.o
 	$(CXX) $(CXXFLAGS) -O2 -E -dD $< >& $(patsubst %,%.i,$@)
 	#$(CXX) $(CXXFLAGS) -O2 -D_MAIN $(filter-out %.hpp,$^) -o $@

@@ -33,7 +33,8 @@ struct ExecutablePage {
 //ExecutablePage asm2page( std::string const& fname_S );
 
 #if ASMFMTREMOVE < 1
-/** simple assembly line formatting. -std=c++11.
+/** Simple assembly line formatting. -std=c++11.
+ * An \c ostringstream wrapper for nice-looking assembler output.
  *
  * Keeping adding labels, instructions and comments to build up
  * an output string.  When destroyed [or with \c write] the assembler
@@ -65,16 +66,6 @@ struct ExecutablePage {
  */
 class AsmFmtCols {
   public: // utility
-      /** Remove front and back whitespace.
-       * \c whitespace may include null */
-      static std::string trim(const std::string& str,
-              const std::string& whitespace = " \t");
-      /** replace internal sequences matching any chars in \c whitespace
-       * with a \c fill string. \c whitespace may include null */
-      static std::string reduce(const std::string& str,
-              const std::string& fill = " ",
-              const std::string& whitespace = " \t");
-  public:
       AsmFmtCols();                           ///< destructor writes to cout
       /** destructor write to file instead of cout.
        * Use an empty string for no file/cout output when you want
@@ -126,6 +117,13 @@ class AsmFmtCols {
        * \post returned strings all begin with \c with.
        */
       std::vector<std::string> def_words_starting(std::string with);
+      /** Set scoping parent, returning old pointer [default=NULL].
+       * You can arrange AsmFmtCols as a nesting of scopes, so we can
+       * consult \c parent to know about other in-scope \c def macros.
+       * \return old AsmFmtCols \c parent (usually nullptr).
+       */
+      AsmFmtCols *setParent( AsmFmtCols* p );
+
       /// \group simple formatting
       ///{
       typedef struct {
@@ -206,6 +204,16 @@ class AsmFmtCols {
       /** push with \c scope, pop with \c pop_scopes or pop_scope.
        * Each element is a multiline-string (one or more '\#undef') */
       std::vector<std::string> stack_undefs;
+      /** Each scope has a vector of macro --> substitution strings */
+      struct StringPairs
+          : public std::vector<std::pair<std::string,std::string>>
+      {
+          /// Convenient \c push_back trimmed versions of \c name and \c subst.
+          void push_trimmed(std::string name, std::string subst);
+      };
+      /** Now that we maintain the original \c stack_defs mapping, we can
+       * hide the undef string creation details. */
+      std::string defs2undefs( StringPairs const& macs, std::string block_name );
       /** push with \c scope, pop with \c pop_scopes or pop_scope.
        * Each element represents one or macro definitions, delimited
        * by '\#define'.  This was added so the that the set of substitutions
@@ -218,9 +226,10 @@ class AsmFmtCols {
        *   manually add/remove defintions with \c def and \c undef.
        *
        * Hmmm.  Rather than parsing lines, it is more convenient to store
-       * \b just the macro substitution strings (trimmed of whitspace)
+       * the raw strings (as a reverse mapping of \e subst --> \e macro name.
        */
-      std::vector<std::string> stack_defs;
+      std::vector<StringPairs> stack_defs;
+      AsmFmtCols *parent;             ///< optional scope parent to support \c def_words_starting
 };
 #if 0
 /** extend AsmFmtCols with scoped symbolic register names */
@@ -239,10 +248,6 @@ std::string uncomment_asm( std::string asmcode );
 
 /// \group VE assembler helpers
 //@{
-/** \b NOT optimized -- reduce dependence on other headers!
- * \c s is a VE register, v is the constant to load. */
-std::string ve_load64_opt0(std::string s, uint64_t v);
-
 /** \c out = replicated MSB (sign bit) of \c in (0 or -1) */
 std::string ve_signum64(std::string out, std::string in);
 /** \c out = absolute value of int64_t \c in */
@@ -254,6 +259,50 @@ std::string ve_abs64(std::string out, std::string in);
  * \p bp assembler register (Ex. %s33)
  * \p name of func (Ex. foo)*/
 void ve_set_base_pointer( AsmFmtCols & a, std::string bp="%s34", std::string name="foo" );
+/** \group VE load scalar register with constant */
+//@{
+struct OpLoadregStrings{
+    std::string lea;
+    std::string log;
+    std::string shl;
+    std::string ari;
+    std::string lea2; ///< 2-op lea
+};
+
+/** return all types of found loadreg strings, according to instruction type */
+OpLoadregStrings opLoadregStrings( uint64_t const parm );
+/** use just one choice with some default instruction-type preference.
+ * - register usage:  the string uses scalar registers
+ *   - OUT      (#define as %s3 for \ref veli_loadreg.cpp tests)
+ *   - T0	(tmp register, %s40 in \c veli_loadreg.cpp tests)
+ *
+ * so you could output a chunk to load 77 into a scalar register with:
+ * ```
+ * std::string load77;
+ * {
+ *     AsmFmtCols prog;
+ *     prog.def("OUT",[name of your scalar output register]);
+ *     prog.def("T0",[name of your scalar temporary register]);
+ *     prog.ins(choose(opLoadregStrings(77))
+ *     load77 = prog.flush_all();
+ * }
+ * ```
+ * (oh.  T0 is no longer required)
+ * Desired: comment as OUT = hexdec(77), stripping off the opLoadregStrings "debug" comments
+ *
+ * \p context  is for future use (ex. supply an instruction types of surrounding
+ * instruction[s] so we can better overlap execution units)
+ */
+std::string choose(OpLoadregStrings const& ops, void* context=nullptr);
+
+/** \b NOT optimized -- reduce dependence on other headers!
+ * \c s is a VE register, v is the constant to load. */
+std::string ve_load64_opt0(std::string s, uint64_t v);
+
+/** choose with easier interface (and no context) */
+std::string ve_load64(std::string s, uint64_t v);
+
+//@}
 /* dispatch table based on 0 <= %s0 < nCases.
  * - Register Usage example:
  *   - CASE     %s0

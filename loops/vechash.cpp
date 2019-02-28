@@ -47,11 +47,11 @@ void VecHash::kern_asm_begin( AsmFmtCols &a, char const* client_vs/*=nullptr*/,
     };
     a.scope(block,"VecHash::kern_asm registers");
     // const regs
-    a.ins(ve_load64_opt0("vh_r1", scramble64::r1));
-    a.ins(ve_load64_opt0("vh_r2", scramble64::r2));
+    a.ins(ve_load64("vh_r1", scramble64::r1));
+    a.ins(ve_load64("vh_r2", scramble64::r2));
     a.ins("vh_vseq     vh_vs");       // const, vs={0,1,2,...mvl}
     // state (R/W regs)
-    a.ins(ve_load64_opt0("vh_j", (uint64_t)seed<<32));
+    a.ins(ve_load64("vh_j", (uint64_t)seed<<32));
     a.ins("vbrd vh_x,0");
     a.com("VecHash : init done");
 }
@@ -107,11 +107,11 @@ void VecHash2::kern_asm_begin( AsmFmtCols &a, char const* client_vs/*=nullptr*/,
         ,{"vh2_vs",vs_register}
     };
     a.scope(block,"vechash2::kern_asm state registers");
-    a.ins(ve_load64_opt0("vh2_r1", scramble64::r1));
+    a.ins(ve_load64("vh2_r1", scramble64::r1),"scramble64::r1");
     //a.ins(ve_load64_opt0("hashval", 0)); // oh no. we hash_combine into a client register
-    a.ins(ve_load64_opt0("vh2_r2", scramble64::r2));
-    a.ins(ve_load64_opt0("vh2_j", (uint64_t)seed<<32));
-    a.ins(ve_load64_opt0("vh2_r3", scramble64::r3));
+    a.ins(ve_load64("vh2_r2", scramble64::r2),"scramble64::r2");
+    a.ins(ve_load64("vh2_j", (uint64_t)seed<<32));
+    a.ins(ve_load64("vh2_r3", scramble64::r3),"scramble64::r3");
     a.ins("vh2_vseq     vh2_vs");       // const, vs={0,1,2,...mvl}
     a.com("vechash2 : init done");
 }

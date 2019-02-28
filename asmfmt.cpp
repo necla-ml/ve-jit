@@ -16,41 +16,6 @@
 
 using namespace std;
 
-std::string AsmFmtCols::trim(const std::string& str,
-        const std::string& whitespace /*= " \t"*/ )
-{
-    const auto strBegin = str.find_first_not_of(whitespace);
-    if (strBegin == std::string::npos)
-        return ""; // no content
-
-    const auto strEnd = str.find_last_not_of(whitespace);
-    const auto strRange = strEnd - strBegin + 1;
-
-    return str.substr(strBegin, strRange);
-}
-
-std::string AsmFmtCols::reduce(const std::string& str,
-        const std::string& fill /*= " "*/,
-        const std::string& whitespace /*"= \t"*/)
-{
-    // trim first
-    auto result = trim(str, whitespace);
-
-    // replace sub ranges
-    auto beginSpace = result.find_first_of(whitespace);
-    while (beginSpace != std::string::npos)
-    {
-        const auto endSpace = result.find_first_not_of(whitespace, beginSpace);
-        const auto range = endSpace - beginSpace;
-
-        result.replace(beginSpace, range, fill);
-
-        const auto newStart = beginSpace + fill.length();
-        beginSpace = result.find_first_of(whitespace, newStart);
-    }
-
-    return result;
-}
 #if ASMFMTREMOVE < 2
 string fname_bin( string const& fname_S ){
     auto len = fname_S.size();
@@ -126,7 +91,7 @@ int const            AsmFmtCols::argwidth = 44;
 AsmFmtCols::AsmFmtCols()
     : a(new ostringstream()), written(false), of(nullptr)
       //, stack_undefs{std::string("")}, stack_defs{std::string("")}
-      , stack_undefs(), stack_defs()
+      , stack_undefs(), stack_defs(), parent(nullptr)
 {
     (*a) << left;
     a->fill(' ');
@@ -134,7 +99,7 @@ AsmFmtCols::AsmFmtCols()
 AsmFmtCols::AsmFmtCols( string const& fname )
     : a(new ostringstream()), written(false),
     of(fname.size()? new ofstream(fname, std::ios::out): (std::ofstream*)nullptr)
-      , stack_undefs(), stack_defs()
+      , stack_undefs(), stack_defs(), parent(nullptr)
 {
     //of->rdbuf()->pubsetbuf(charBuffer,BUFFER_SIZE); // opt
     if(of) (*of) <<"// auto-generated via AsmFmtCols!\n";
@@ -469,21 +434,26 @@ string AsmFmtCols::fmt_def(std::string const& symbol, std::string const& subst, 
     }
     return define.str();
 }
+void AsmFmtCols::StringPairs::push_trimmed(std::string name, std::string subst){
+    push_back( std::make_pair(
+                trim(name,  std::string(" \n\t\0",4)),
+                trim(subst, std::string(" \n\t\0",4))
+                ));
+}
 /** adds to 'global' scope, creating if nec. */
 AsmFmtCols& AsmFmtCols::def(std::string const& symbol, std::string const& subst, std::string name){
     std::string sub = trim(subst, string(" \n\t\0",4));
     assert( stack_defs.size() == stack_undefs.size() );
     std::string namd = name;
     if( stack_undefs.empty() ){
-        stack_defs.push_back("");
+        stack_defs.push_back(StringPairs());
         stack_undefs.push_back("");
         namd.append(" { GLOBAL SCOPE");
     }
     std::string define = fmt_def(symbol, sub, namd);
     (*a) << define;
     stack_undefs[0].append(fmt_undef(symbol,name));
-    stack_defs  [0].append(sub).push_back('\0'); // for searching substitution values
-                                 // e.g. for registers
+    stack_defs  [0].push_trimmed(symbol, subst);
     return *this;
 }
 string AsmFmtCols::fmt_undef(std::string const& symbol,std::string const& name){
@@ -507,25 +477,41 @@ AsmFmtCols& AsmFmtCols::undef(std::string const& symbol,std::string const& name)
 }
 std::vector<string> AsmFmtCols::def_words_starting(std::string with){
     std::vector<string> ret;
+    if(parent)
+        ret = parent->def_words_starting(with);
     size_t with_sz = with.size();
-    for(auto const& s: stack_defs){
-        //cout<<" def_words_staring, string s = <"<<s<<">"<<endl;
-        size_t p=0;
-        for(;;){
-            //cout<<" s[p..]=<"<<s.substr(p)<<">"<<endl;
-            if( p+with_sz < s.size()
-                    && s.compare(p, with_sz, with) == 0 ){
-                size_t q = s.find_first_of(" \n\t\0#;/",p,7);
-                //cout<<" found <"<<s.substr(p,q-p)<<">"<<endl;
-                ret.push_back( s.substr(p,q-p) );
+    for(auto const& vmac: stack_defs){
+        for(auto const& d: vmac){                // d ~ vector<symbol,subst>
+            std::string const& s = d.second;
+            if(s.compare(0,with_sz, with) == 0){
+                ret.push_back(s);
             }
-            p = s.find('\0',p);
-            if(p==string::npos) break;
-            ++p;
         }
     }
     //cout<<" found "<<ret.size()<<" substitution-first-words beginning with "<<with<<endl;
     return ret;
+}
+std::string AsmFmtCols::defs2undefs( StringPairs const& macs, std::string block_name ){
+    AsmFmtCols undefs;
+    {
+        std::string comment;
+        std::string end_comment = "} END";
+        end_comment.append(block_name);
+        auto const mend = macs.crend();
+        auto       mdef = macs.crbegin();
+        for( ; mdef != mend; ){
+            auto macro = mdef->first;   // the macro name (and args!?)
+            ++mdef;
+            if( mdef == mend ){
+                comment = end_comment;
+            }
+            (*undefs.a)<<fmt_undef(macro,comment);
+        }
+        if(comment.empty()){
+            rcom(end_comment);
+        }
+    }
+    return undefs.str();
 }
 std::string uncomment_asm( std::string asmcode )
 {
@@ -563,7 +549,7 @@ std::string ve_load64_opt0(std::string s, uint64_t v){
         oss <<"\tlea    "<<s<<", "<<jithex(vlo)<<"\n";
     }else{
         oss <<"\tlea    "<<s<<", "<<jithex(vlo)<<"\n"
-            <<"\tor     "<<s<<", 0, (32)0\n"
+            <<"\tand     "<<s<<", "<<s<<", (32)0\n"
             <<"\tlea.sl "<<s<<", "<<jithex(vhi)<<"(,"<<s<<")";
         comment=" ve_load64_opt0 ";
     }
@@ -576,9 +562,27 @@ std::string ve_signum64(std::string out, std::string in){
     return oss.str();
 }
 std::string ve_abs64(std::string out, std::string in){
-    ostringstream oss;
-    oss<<"subs.l "<<out<<",0/*I*/,"<<in;
-    oss<<"; maxs.l "<<out<<","<<out<<","<<in;
+   ostringstream oss;
+   /*
+     Found a 2-operation program:
+     sub   r1,0,rx
+     max   r2,r1,rx
+     Expr: max((0 - x), x)
+
+     Found a 2-operation program:
+     sub   r1,0,rx
+     cmovgt r2,r1,r1,rx
+     Expr: cmovgt((0 - x), (0 - x), x)
+
+     Found a 2-operation program:
+     sub   r1,0,rx
+     cmovlt r2,rx,r1,r1
+     Expr: cmovlt(x, (0 - x), (0 - x))
+    */
+    //oss<<"subs.l "<<out<<",0/*I*/,"<<in;
+    //oss<<"; maxs.l "<<out<<","<<out<<","<<in;
+    oss<<"sub "<<out<<",0,"<<in
+        <<"; cmovgt "<<out<<","<<out<<","<<in; // VE operation is: Sx = (Sy>0? Sx: Sz)
     return oss.str();
 }
 void ve_set_base_pointer( AsmFmtCols & a, std::string bp/*="%s34"*/, std::string name/*="foo"*/ ){
@@ -602,6 +606,168 @@ void ve_set_base_pointer( AsmFmtCols & a, std::string bp/*="%s34"*/, std::string
         ;
 }
 
+/** Find possible 64-bit VE scalar register load instructions.
+ * \return instruction string[s] to load a 64-bit scalar VE register.
+ * You can supply such strings into AsmFmtCols for nice formatting.
+ * Within the returned strings, \c OUT is the output register.
+ * no temp register is used. */
+OpLoadregStrings opLoadregStrings( uint64_t const parm )
+{
+    OpLoadregStrings ret;
+    uint32_t const hi = ((parm >> 32) & 0xffffFFFF); // unsigned shift-right
+    uint32_t const lo = (uint32_t)parm;              // 32 lsbs (trunc)
+    uint64_t const lo7 = (parm & 0x7f);              // 7 lsbs (trunc)
+    int64_t  const sext7 = (int64_t)(lo7<<57) >> 57; // 7 lsbs (trunc, sign-extend)
+
+    { // lea logic
+        bool is31bit = ( (parm&(uint64_t)0x000000007fffFFFF) == parm );
+        //bool is32bit = ( (parm&(int64_t) 0x00000000ffffFFFF) == parm );
+        bool hiOnes  = ( (int)hi == -1 );
+        if(is31bit){
+            //KASE(1,"lea 31-bit",parm == (parm&0x3fffFFFF));
+            ret.lea="lea OUT, "+(lo<=1000000? jitdec(lo): jithex(lo))
+                +"# load: 31-bit";
+        }else if((int)lo < 0 && hiOnes){
+            assert( (int64_t)parm < 0 ); assert((int)lo < 0);
+            //KASE(2,"lea 32-bit -ve",parm == (uint64_t)(int64_t)(int32_t)lo);
+            ret.lea="lea OUT, "+((int64_t)parm >= -100000? jitdec((int32_t)lo): jithex(lo))
+                +"# load: sext(32-bit)";
+        }else if(lo==0){
+            //KASE(3,"lea.sl hi only",lo == 0);
+            ret.lea="lea.sl OUT, "+jithex(hi)+"# load: hi-only";
+        }
+        //
+        // 2-instruction lea is always possible (TODO mixed instruction types)
+        //
+        //uint64_t tmplo = (int64_t)(int32_t)lo;
+        // lea.sl OUT, <hi or hi+1> (,TMP)
+        //        -ve lo will fill hi with ones i.e. -1
+        //        so we add hi+1 to MSBs to restore desired sums
+        uint64_t dd = ((int32_t)lo>=0? hi: hi+1);
+        //uint64_t tmp2 = tmphi << 32;    // (sext(D,64)<<32)
+        //uint64_t out = tmp2 + tmplo;     // lea.sl lea_out, tmphi(,lea_out);
+        //assert( parm == out );
+        // Changed:  do not use a T0 tmp register
+        ret.lea2="lea OUT, "+jithex(lo);
+        if(dd!=hi) ret.lea2.append("# sext");
+        ret.lea2+=" ; lea.sl OUT, "+jithex(dd)+"(,OUT)";
+        if(dd!=hi) ret.lea2.append("# load "+jithex(parm));
+    }
+    { // bit ops logic
+        // simple cases: I or M zero
+        bool isI = (int64_t)parm >= -64 && (int64_t)parm <= 63; // I : 7-bit immediate
+        bool isM = isMval(parm); // M : (m)B 0<=m<=63 B=0|1 "m high B's followed by not-B's"
+        if(isI){
+            //KASE(4,"or OUT,"+jitdec(sext7)+",(0)1", parm==sext7);
+            ret.log="or OUT, "+jitdec(sext7)+",(0)1 # load: small I";
+        }else if(isM){
+            //KASE(5,"or OUT,0,"+jitimm(parm), isMval(parm));
+            ret.log="or OUT, 0,"+jitimm(parm)+"# load: (M){0|1}";
+        }
+        //if(isMval(parm&~0x3f)){...}
+        // KASE 6 subsumed by KASE 9 (equivalent I, M)
+        else if(isMval(parm|0x3f)){
+            assert( isMval(parm^sext7) ); // more general, but this is more readable
+            uint64_t const ival = (~parm &0x3f);
+            uint64_t const mval = parm|0x3f;
+            //KASE(7,"xor OUT, ~parm&0x3f "+jithex(ival)+", parm|0x3f "+jitimm(mval),
+            //        parm == (ival ^ mval) && isIval(ival) && isMval(mval));
+            ret.log="xor OUT, "+jithex(ival)+","+jitimm(mval)+"# load: xor(I,M)";
+        }else if(isMval(parm^sext7) ){ // xor rules don't depend on sign of lo7
+            // if A = B^C, then B = A^C and C = B^A (Generally true)
+            //int64_t const ival = sext7;
+            uint64_t const mval = parm^sext7;
+            //KASE(9,"xor OUT, "+jithex(ival)+","+jitimm(mval),
+            //        parm == (ival ^ mval) && isIval(ival) && isMval(mval));
+            ret.log="xor OUT, "+jitdec(sext7)+","+jitimm(mval)+"# load: xor(I,M)";
+        }
+        if(!ret.log.empty()) ret.log.append(" --> "+jithex(parm));
+    }
+    { // shift left
+        // search for an unsigned right-shift that can regenerate parm
+        int oksr=0;
+        for(int sr=1; sr<64; ++sr){
+            if( parm == (parm>>sr<<sr) && isMval(parm>>sr) ){
+                oksr=sr; // use smallest shift
+                break;
+            }
+        }
+        if(oksr){
+            uint64_t mval = parm >> oksr;
+            //KASE(19,"sll OUT,"+jitimm(mval)+","<<jitdec(oksr),
+            //        parm == (mval << oksr) && isMval(mval));
+            ret.shl="sll OUT, "+jitimm(mval)+","+jitdec(oksr);
+        }
+    }
+    { // arithmetic ops (+,-)
+        if(ret.ari.empty()) for( int64_t ival = 0; ret.ari.empty() && ival<=63; ++ival ){
+            // P = I + M <===> M == P - I
+            uint64_t const mval = parm - (uint64_t)ival;
+            if( isMval(mval) ){
+                //KASE(20,"addu.l OUT,"+jitdec(ival)+", "+jitimm(mval),
+                //        parm == ival + mval && isIval(ival) && isMval(mval));
+                ret.ari="addu.l OUT, "+jitdec(ival)+","+jitimm(parm-ival)+"# load: add(I,M)";
+                break;
+            }
+        }
+        if(ret.ari.empty()) for( int64_t ival = -1; ret.ari.empty() && ival>=-64; --ival ){
+            uint64_t const mval = parm - (uint64_t)ival;
+            if( isMval(mval) ){
+                //KASE(21,"addu.l OUT,"+jitdec(ival)+","+jitimm(mval),
+                //        parm == ival + mval && isIval(ival) && isMval(mval));
+                ret.ari="addu.l OUT, "+jitdec(ival)+","+jitimm(parm-ival)+"# load: add(I,M)";
+                break;
+            }
+        }
+        // Q; Is it correct that SUB (unsigned subtract) still
+        //    sign-extends the 7-bit Immediate in "Sy" field?
+        if(ret.ari.empty()) for( int64_t ival = 0; ret.ari.empty() && ival<=63; ++ival ){
+            // P = I - M <==> M = I - P
+            uint64_t const mval = (uint64_t)ival - (uint64_t)parm;
+            if( isMval(mval) ){
+                //uint64_t out = (uint64_t)ival - (uint64_t)mval;
+                //KASE(22,"subu.l OUT,"+jitdec(ival)+","+jitimm(mval),
+                //        parm == out  && isIval(ival) && isMval(mval));
+                ret.ari="subu.l OUT, "+jitdec(ival)+","+jitimm(mval)+"# load: subu(I,M)";
+                break;
+            }
+        }
+        if(ret.ari.empty()) for( int64_t ival = -1; ret.ari.empty() && ival>=-64; --ival ){
+            uint64_t const mval = (uint64_t)ival - (uint64_t)parm;
+            if( isMval(mval) ){
+                //uint64_t out = (uint64_t)ival - (uint64_t)mval;
+                //KASE(23,"subu.l OUT, "+jitdec(ival)+","+jitimm(mval),
+                //        parm == out  && isIval(ival) && isMval(mval));
+                ret.ari="subu.l OUT, "+jitdec(ival)+","+jitimm(mval)+"# load: subu(I,M)";
+                break;
+            }
+        }
+        if(!ret.ari.empty()) ret.ari.append(" --> "+jithex(parm));
+    }
+    return ret;
+}
+
+std::string choose(OpLoadregStrings const& ops, void* /*context=nullptr*/)
+{
+    enum Optype { SHL, LEA, LOG, ARI, LEA2 };
+    static std::array<Optype, 5> const pref = {SHL, LEA, LOG, ARI, LEA2};
+    string code;
+    for(auto const optype: pref){
+        code = (optype==LEA? ops.lea
+                :optype==LOG? ops.log
+                :optype==SHL? ops.shl
+                :optype==ARI? ops.ari
+                : ops.lea2);
+        if( !code.empty() ){
+            break;
+        }
+    }
+    return code;
+}
+std::string ve_load64(std::string s, uint64_t v){
+    return multiReplace("OUT", s,
+            choose(opLoadregStrings(v)));
+}
 #endif //CODEREMOVE < 1
 
 #ifdef _MAIN

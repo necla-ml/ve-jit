@@ -889,6 +889,11 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
         register uint64_t cnt = iijj; // NEW: iijj to one [i.e. remain], rather than [0..iijj)
 
         AsmFmtCols fd,fp,fi,fk,fl,fz;
+        fp.com("fuse2 presets").setParent(&fd);
+        fi.setParent(&fp);
+        fk.setParent(&fp);
+        fl.setParent(&fp);
+        fz.setParent(&fp);
 
         // local labels:
         string fusename;
@@ -1010,9 +1015,9 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
         // NOTE: fd is the parent but fp is where the code "should" really appear
         //       I think.   --- how to attache scope_parent concept to AsmFmtCols?
         if(have_sq)
-            VecHash2::kern_asm_begin(fd, "%v6");
+            VecHash2::kern_asm_begin(fp, "%v6");
         else
-            VecHash2::kern_asm_begin(fd); // it'll grab %v40 or such and hold it
+            VecHash2::kern_asm_begin(fp); // it'll grab %v40 or such and hold it
         // TODO: a way for subkernel to request state registers from caller.
 
 #if 0

@@ -91,40 +91,5 @@ std::string prgiLoadreg(uint64_t start);
 
 //@}
 
-/** \group helpers */
-//@{
-struct OpLoadregStrings{
-    std::string lea;
-    std::string log;
-    std::string shl;
-    std::string ari;
-    std::string lea2; ///< 2-op lea
-};
-
-/** return all types of found loadreg strings, according to instruction type */
-OpLoadregStrings opLoadregStrings( uint64_t const parm );
-/** use just one choice with some default instruction-type preference.
- * - register usage:  the string uses scalar registers
- *   - OUT      (#define as %s3 for \ref veli_loadreg.cpp tests)
- *   - T0	(tmp register, %s40 in \c veli_loadreg.cpp tests)
- *
- * so you could output a chunk to load 77 into a scalar register with:
- * ```
- * std::string load77;
- * {
- *     AsmFmtCols prog;
- *     prog.def("OUT",<name of your scalar output register>);
- *     prog.def("T0",<name of your scalar temporary register>);
- *     prog.ins(choose(opLoadregStrings(77))
- *     load77 = prog.flush_all();
- * }
- * ```
- * Desired: comment as OUT = hexdec(77), stripping off the opLoadregStrings "debug" comments
- *
- * \p context  is for future use (ex. supply an instruction types of surrounding
- * instruction[s] so we can better overlap execution units)
- */
-std::string choose(OpLoadregStrings const& ops, void* context=nullptr);
-//@}
 #endif // VELOGIC_HPP
 

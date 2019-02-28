@@ -11,11 +11,18 @@ inline std::string AsmFmtCols::str() const {
     return (*a).str();
 }
 
+inline AsmFmtCols * AsmFmtCols::setParent( AsmFmtCols* p ) {
+    AsmFmtCols *ret=parent;
+    parent = p;
+    return ret;
+}
+
 template<typename PAIRCONTAINER> inline
 std::size_t AsmFmtCols::scope( PAIRCONTAINER const& pairs, std::string block_name ){
     assert( stack_defs.size() == stack_undefs.size() );
-    std::string defs;
-    std::deque<std::string> un;
+    // trimmed substitution --> macro strings
+    StringPairs defs;
+    //std::deque<std::string> un;
     {
         bool name_out = false;
         std::string comment("{ BEG ");
@@ -33,38 +40,15 @@ std::size_t AsmFmtCols::scope( PAIRCONTAINER const& pairs, std::string block_nam
                 line = this->fmt_def(iter->first, iter->second);
             }
             (*a) << line;
-            defs.append(trim(iter->second,std::string(" \n\t\0",4)))
-                .push_back('\0');
-            un.push_back(iter->first);
+            defs.push_trimmed(iter->first, iter->second);
         }
         if(!name_out) rcom(comment);
     }
-    // we will reverse the order for #undefs
-    AsmFmtCols undefs;
-    {
-        std::string comment;
-        std::string end_comment = "} END";
-        end_comment.append(block_name);
-        auto const uend = un.crend();
-        auto       uter = un.crbegin();
-        for( ; uter != uend; ){
-            auto undef = *uter;
-            ++uter;
-            if( uter == uend ){
-                comment = end_comment;
-            }
-            (*undefs.a)<<fmt_undef(undef,comment);
-        }
-        if(comment.empty()){
-            rcom(end_comment);
-        }
-    }
-    // move the undefs string [a bunch of #undef lines] onto our scope-stack
-    //  ... same for the defines string ...
-    stack_undefs.push_back(undefs.flush());
-    stack_defs  .push_back(  defs);
+    // create the reverse-order #undef string immediately?
+    stack_undefs.push_back(defs2undefs(defs, block_name));
+    stack_defs  .push_back(defs);
     //std::cout<<"\nscope-->undefs:\n"<<stack_undefs.top()<<std::endl;
-    return un.size();
+    return defs.size();
 }
 #endif //ASMFMTREMOVE < 1
 

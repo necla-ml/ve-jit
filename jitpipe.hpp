@@ -99,6 +99,9 @@ inline constexpr char const* DllPipe::pathSep() {
     return "/";
 #endif
 }
+inline std::string DllPipe::libFullPath() {
+    return libname.empty()? libname: outDir+pathSep()+libname;
+}
 // TODO: want 'C' version
 inline std::string DllPipe::getPath() {
     long const sz = pathconf(".",_PC_PATH_MAX); // assume we are interested cwd
@@ -116,7 +119,7 @@ inline std::string DllPipe::getPath() {
       default: THROW("Unrecognised errno="<<error);
     }
 }
-void DllPipe::mkTmpfile(std::string code){
+inline void DllPipe::mkTmpfile(std::string code){
     // other inputs: this->basename, this->outDir, suffix
     // output:       this->ccode_tmpfile
     std::string base = basename;

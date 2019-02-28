@@ -29,7 +29,7 @@ ifneq ($(CC:ncc%=ncc),ncc)
 LDLIBS+=${X86LIBS}
 endif
 
-fuse2: fuse2.cpp vechash.cpp ../libjit1-x86.a
+fuse2: fuse2.cpp vechash.cpp ../libjit1-x86.a ../libveli-x86.a
 	echo "CC=${CC}"
 	echo "LDLIBS=${LDLIBS}"
 	g++ -Wall -std=c++11 -ggdb -O3 $^ -o $@ ${X86FLAGS} ${X86LIBS}

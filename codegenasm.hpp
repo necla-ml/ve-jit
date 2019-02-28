@@ -1,6 +1,10 @@
 #ifndef CODEGENASM_HPP
 #define CODEGENASM_HPP
 #include "jit_data.h" // C data, ...
+#include "stringutil.hpp"
+//#include "jitpipe_fwd.hpp"  // just for multiReplace XXX
+#include "velogic.hpp" // fully-tested "load scalar reg with constant"
+// Note: required code is in veliFoo.cpp (wrpiFoo.cpp for the tests)
 
 #include <cstdint>
 #include <iostream>
@@ -131,24 +135,6 @@ inline void extendedEuclid( T& k, T a, T& j, T b, T& g)
 }
 //@} int arithmetic helpers
 
-template<typename T>
-std::string jitdec(T const t){
-    std::ostringstream oss;
-    oss << t;
-    return oss.str();
-}
-template<typename T>
-std::string jithex(T const t){
-    std::ostringstream oss;
-    oss << "0x" << std::hex << t << std::dec;
-    return oss.str();
-}
-inline std::string hexdec(int64_t const i){
-    return (i>-1000000 && i<1000000
-            ? jitdec(i)
-            : jithex(i));
-}
-
 /** string for VE 'M' representation of a 64-bit value.
  * 'M' representation is (M)B,
  * where M is 0..63 and B is 0|1,
@@ -278,42 +264,7 @@ struct CodeGenAsm
        * \todo There is tested code that covers all reasonable optimizations,
        *       and it should be used to load constants into scalar registers!!!
        */
-      std::string load( std::string const reg, uint64_t value ){
-          std::ostringstream oss;
-          if( (int64_t)value >= -64 && (int64_t)value <= 63 ){
-              auto t=tmp();
-              oss<<"or "<<reg<<","<<(int64_t)value<<","<<jitimm(0);
-          }else if( isimm(value) ){
-              auto t=tmp();
-              oss<<"or "<<reg<<","<<0<<","<<jitimm(value);
-          }else if( value < (uint64_t{1}<<32) ){
-              oss<<"lea "<<reg<<","<<jitdec(value);
-          }else if( (int64_t)value < (int64_t)(int32_t)value ){
-              // sext(32-bit) can yield 64-bit value exactly
-              oss<<"lea "<<reg<<","<<jitdec(value);
-              //else search for xor I,M
-              //else search for eqv I,M
-              //else search for nnd I,M
-              //else search for add I,M
-              //else search for sub I,M
-              //else search for mpy I,M
-              // ?? 2 instruction LEA ??
-          }else{
-              // needs testing !!! -- often have an explicit shl !!!
-              uint32_t hi = (value>>32);
-              uint32_t lo = (value & ((uint64_t{1}<<32)-1));
-              if((int32_t)lo >= 0){ // sext(lo) has zeros in hi word
-                  auto t=tmp();
-                  oss<<"lea.sl "<<t.str<<",0x"<<std::hex<<hi<<"#(TmpReg);";
-                  oss<<"lea "<<reg<<",0x"<<std::setfill('0')<<std::setw(8)<<lo<<"(,"<<t.str<<")";
-              }else{
-                  auto t=tmp();
-                  oss<<"lea.sl "<<t.str<<",0x"<<std::hex<<~hi<<";"; // sext of lo will toggle hi bits to OK
-                  oss<<"lea "<<reg<<","<<std::setfill('0')<<std::setw(8)<<lo<<"(,"<<t.str<<")";
-              }
-          }
-          return oss.str();
-      }
+      std::string load( std::string const reg, uint64_t value );
   private:
       /** return and mark used an entry in tmpRegs */
       int alloc() {
@@ -344,5 +295,46 @@ struct CodeGenAsm
 inline CodeGenAsm::TmpReg::~TmpReg() {
     owner->free(tmp);
 }
+inline std::string CodeGenAsm::load( std::string const reg, uint64_t value ){
+#if 1
+    return multiReplace("OUT",reg,
+            choose(opLoadregStrings(value)));
+#else
+    std::ostringstream oss;
+    if( (int64_t)value >= -64 && (int64_t)value <= 63 ){
+        auto t=tmp();
+        oss<<"or "<<reg<<","<<(int64_t)value<<","<<jitimm(0);
+    }else if( isimm(value) ){
+        auto t=tmp();
+        oss<<"or "<<reg<<","<<0<<","<<jitimm(value);
+    }else if( value < (uint64_t{1}<<32) ){
+        oss<<"lea "<<reg<<","<<jitdec(value);
+    }else if( (int64_t)value < (int64_t)(int32_t)value ){
+        // sext(32-bit) can yield 64-bit value exactly
+        oss<<"lea "<<reg<<","<<jitdec(value);
+        //else search for xor I,M
+        //else search for eqv I,M
+        //else search for nnd I,M
+        //else search for add I,M
+        //else search for sub I,M
+        //else search for mpy I,M
+        // ?? 2 instruction LEA ??
+    }else{
+        // needs testing !!! -- often have an explicit shl !!!
+        uint32_t hi = (value>>32);
+        uint32_t lo = (value & ((uint64_t{1}<<32)-1));
+        if((int32_t)lo >= 0){ // sext(lo) has zeros in hi word
+            auto t=tmp();
+            oss<<"lea.sl "<<t.str<<",0x"<<std::hex<<hi<<"#(TmpReg);";
+            oss<<"lea "<<reg<<",0x"<<std::setfill('0')<<std::setw(8)<<lo<<"(,"<<t.str<<")";
+        }else{
+            auto t=tmp();
+            oss<<"lea.sl "<<t.str<<",0x"<<std::hex<<~hi<<";"; // sext of lo will toggle hi bits to OK
+            oss<<"lea "<<reg<<","<<std::setfill('0')<<std::setw(8)<<lo<<"(,"<<t.str<<")";
+        }
+    }
+    return oss.str();
+#endif
+            }
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break 
 #endif //CODEGENASM_HPP
