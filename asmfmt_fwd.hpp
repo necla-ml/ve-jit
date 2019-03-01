@@ -119,6 +119,9 @@ class AsmFmtCols {
        * \post returned strings all begin with \c with.
        */
       std::vector<std::string> def_words_starting(std::string with) const;
+      /** like \c def_words_starting, but return cpp macros {name,word}s
+       * instead of just words (words begin \c with). */
+      std::vector<std::pair<std::string,std::string>> def_macs_starting(std::string with) const;
       /** Set scoping parent, returning old pointer [default=NULL].
        * You can arrange AsmFmtCols as a nesting of scopes, so we can
        * consult \c parent to know about other in-scope \c def macros.
@@ -269,6 +272,8 @@ struct OpLoadregStrings{
     std::string shl;
     std::string ari;
     std::string lea2; ///< 2-op lea
+    bool one_op() const;
+    std::string choose() const;
 };
 
 /** return all types of found loadreg strings, according to instruction type */
@@ -297,6 +302,16 @@ OpLoadregStrings opLoadregStrings( uint64_t const parm );
  */
 std::string choose(OpLoadregStrings const& ops, void* context=nullptr);
 
+inline std::string OpLoadregStrings::choose() const {
+    return ::choose(*this);
+}
+inline bool OpLoadregStrings::one_op() const {
+    return !lea.empty()
+        ||  !log.empty()
+        ||  !shl.empty()
+        ||  !ari.empty() ;
+}
+
 /** \b NOT optimized -- reduce dependence on other headers!
  * \c s is a VE register, v is the constant to load. */
 std::string ve_load64_opt0(std::string s, uint64_t v);
@@ -307,6 +322,7 @@ std::string ve_load64(std::string s, uint64_t v);
 /** A common pattern is to pre-select any required registers into an \c AsmScope block,
  * and then shove all the assignments into AsmFmtCols::scope(block,name) */
 typedef std::list<std::pair<std::string,std::string>> AsmScope;
+
 enum RegSearch { SCALAR, SCALAR_TMP, VECTOR, VECTOR_TMP };
 /** add a scalar register to \c block that does conflicts with neither \c block
  * nor \c asmfmt scopes (or parent scopes).
@@ -319,6 +335,13 @@ void ve_propose_reg( std::string variable,
         AsmScope& block,        // add {variable,register} to block
         AsmFmtCols const& a,    // excluding registers known to block or a
         enum RegSearch const how );
+/** A customized register search order. */
+void ve_propose_reg( std::string variable,
+        AsmScope& block,
+        AsmFmtCols const& a,
+        std::string prefix,
+        std::vector<std::pair<int,int>> const search_order
+        );
 
 //@}
 /* dispatch table based on 0 <= %s0 < nCases.

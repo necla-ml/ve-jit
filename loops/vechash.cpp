@@ -15,44 +15,46 @@ namespace scramble64 {
     uint64_t const r3 = 3202034522624059733ULL;
 }
 
-#if 0
-    void hash_combine( uint64_t const* v, int const vl ){
-        assert( vl > 0 && vl <= mvl ); // vl==0 OK, but wasted work.
-        using namespace scramble64;  // r1, r2, r3 scramblers
-        //FOR(i,vl) vs[i] = i;
-        FOR(i,vl) vz[i] = j + vs[i];
-        FOR(i,vl) vx[i] = r2 * v[i];            // hash v[]
-        FOR(i,vl) vz[i] = r1 * vz[i];           // hash vs[]=j..j+vl-1
-        FOR(i,vl) vx[i] = vx[i] + vy[i];        // add hash_v[]
-        FOR(i,vl) vx[i] = vx[i] + vz[i];        // add hash_vs[]
-        // for add hash_*[], we xor-reduce needs to be done right now :(
-        r = 0;
-        FOR(i,vl) r ^= vx[i];
-        hashVal ^= r;                           // hashVal ^= vx[0]^vx[1]^...^vx[vl-1]
-        j += vl;
-    }
-#endif
+static std::vector<std::pair<int,int>> const vechash_scalar_order{{40,63},{39,34},{7,0},{33,18},{12,13}};
+static std::vector<std::pair<int,int>> const vechash_vector_order{{40,63},{39,0}};
+
+/** custom register assignment order, hopefully distinctive from ve_propose_reg defaults */
+static void vechash_scalar(std::string variable, AsmScope& block, AsmFmtCols const& a){
+    ve_propose_reg(variable,block,a,"%v",vechash_vector_order);
+}
+static void vechash_vector(std::string variable, AsmScope& block, AsmFmtCols const& a){
+    ve_propose_reg(variable,block,a,"%v",vechash_vector_order);
+}
+
+/** Note: assume that current vl is max we'll every see, for purposes
+ * of initializes vs={0,1,2,...vl} */
 void VecHash::kern_asm_begin( AsmFmtCols &a, char const* client_vs/*=nullptr*/,
         uint32_t const seed/*=0*/ ){
-    typedef std::list<std::pair<std::string,std::string>> AsmScope;
-    char const* vs_register = (client_vs? client_vs: "%v40");
-    cout<<" VecHash::kern_asm_begin"<<endl;
-    auto vs = a.def_words_starting("%s");
-    auto vv = a.def_words_starting("%v");
-    cout<<" parent scalars = {";for(auto s:vs) cout<<" "<<s; cout<<" }"<<endl;
-    std::string free_scalar_register = free_pfx( vs, "%s", {{0,7},{63,34}} );
-    cout<<" I suggest free_scalar_register = "<<free_scalar_register<<endl;
-    cout<<" parent vectors = {";for(auto s:vv) cout<<" "<<s; cout<<" }"<<endl;
-    AsmScope const block = {//{"hashval","%s40"},
-        {"vh_j","%s40"}
-        ,{"vh_r1","%s41"},{"vh_r2","%s42"}
-        ,{"vh_vs",vs_register}
-    };
+    if(0){
+        cout<<" VecHash::kern_asm_begin"<<endl;
+        auto vs = a.def_words_starting("%s");
+        auto vv = a.def_words_starting("%v");
+        cout<<" parent scalars = {";for(auto s:vs) cout<<" "<<s; cout<<" }"<<endl;
+        std::string free_scalar_register = free_pfx( vs, "%s", {{0,7},{63,34}} );
+        cout<<" I suggest free_scalar_register = "<<free_scalar_register<<endl;
+        cout<<" parent vectors = {";for(auto s:vv) cout<<" "<<s; cout<<" }"<<endl;
+    }
+    AsmScope block = {}; //{"hashval","%s40"},
+    vechash_scalar("rnd64a",block,a);   // const (may move up)
+    vechash_scalar("rnd64b",block,a);   // const (can also be colocated)
+    vechash_scalar("vh_j",  block,a);   // state (cannot migrate up)
+    vechash_vector("vh_x",  block,a);   // state (cannot migrate up)
+    if(client_vs) block.push_back({"vh_vseq",client_vs});
+    else          vechash_vector ("vh_vseq",block,a);
     a.scope(block,"VecHash::kern_asm registers");
     // const regs
-    a.ins(ve_load64("vh_r1", scramble64::r1));
-    a.ins(ve_load64("vh_r2", scramble64::r2));
-    a.ins("vh_vseq     vh_vs");       // const, vs={0,1,2,...mvl}
+    if(!client_vs){
+        // vh_vseq really should be 0..MVL-1, for most safety.
+        a.ins("svl rnd64a; lea rnd64b,256; lvl rnd64b; vseq vh_vseq; lvl rnd64a"
+                ,"vh_vseq=0,1,..,MVL-1");
+    }
+    a.ins(ve_load64("rnd64a", scramble64::r1));
+    a.ins(ve_load64("rnd64b", scramble64::r2));
     // state (R/W regs)
     a.ins(ve_load64("vh_j", (uint64_t)seed<<32));
     a.ins("vbrd vh_x,0");
@@ -64,18 +66,17 @@ void VecHash::kern_asm( AsmFmtCols &a,
             "  in: "+va+", "+vl,
             "  inout: "+hash+" (scalar reg)",
             "  state: vh_j",
-            "  const: vh_r1, vh_r2, vh_vs",
+            "  const: rnd64a, rnd64b, vh_vs",
             "  scratch: vh_r, vh_vx, vh_vy, vh_vz"
           );
-    typedef std::list<std::pair<std::string,std::string>> AsmScope;
     // TODO: resolve any conflicts of scope regs with ANY 
     AsmScope const block = {{"vh_r","%s63"}
         ,{"vh_vx","%v63"},{"vh_vy","%v62"}//,{"vh_vz","%v63"}
     };
     a.scope(block,"vechash2::kern_asm");
     a.ins("vaddu.l  vh_vy, vh_j, vh_vs");
-    a.ins("vmulu.l  vh_vy, vh_r1, vh_vz",           "scramble64::r1 * (j+vs[])");
-    a.ins("vmulu.l  vh_vx, vh_r2, /**/"+va,         "scramble64::r2 * "+va+"[]");
+    a.ins("vmulu.l  vh_vy, rnd64a, vh_vz",           "scramble64::r1 * (j+vs[])");
+    a.ins("vmulu.l  vh_vx, rnd64b, /**/"+va,         "scramble64::r2 * "+va+"[]");
     a.ins("vaddu.l  vh_vx, vh_vx, vh_vz",           "sum");
     a.ins("vrxor    vh_vy, vh_vx");
     a.ins("lvs      vh_r, vh_vy(0)",                "r = xor-reduction(vx)");
@@ -96,74 +97,41 @@ void VecHash::kern_asm_end( AsmFmtCols &a ){
  *
  * TODO: look at all scopes of parent 'a' to allocate non-conflicting state regs
  */
-void VecHash2::kern_asm_begin( AsmFmtCols &a, char const* client_vs/*=nullptr*/, uint32_t const seed/*=0*/ ){
-    typedef std::list<std::pair<std::string,std::string>> AsmScope;
-    char const* vs_register = (client_vs? client_vs: "%v40");
-#if 0 // original methods
-    cout<<" VecHash::kern_asm_begin"<<endl;
-    auto vs = a.def_words_starting("%s");
-    auto vv = a.def_words_starting("%v");
-    cout<<" parent scalars = {";for(auto s:vs) cout<<" "<<s; cout<<" }"<<endl;
-    std::string free_scalar_register = free_pfx( vs, "%s", {{0,7},{63,34}} );
-    cout<<" I suggest free_scalar_register = "<<free_scalar_register<<endl;
-    cout<<" parent vectors = {";for(auto s:vv) cout<<" "<<s; cout<<" }"<<endl;
-    AsmScope const block = {//{"hashval","%s40"},
-        {"vh2_j","%s40"}
-        ,{"vh2_r1","%s41"},{"vh2_r2","%s42"},{"vh2_r3","%s43"}
-        ,{"vh2_vs",vs_register}
-    };
-#else // better way
-    AsmScope block{
-        {"vh2_vs",vs_register} // client tells us this register
-    };
-    // UTILITY LAMBDAS
-    // pre-assign some registers to fd "defines" scope
-    // I don't care about speed, for now.
-    auto main_scalar = [&]() {
-        auto vs = a.def_words_starting("%s"); // anything already there?
-        for(auto const& pre: block){ // for things we ARE GOING TO allocate
-            vs.push_back( pre.second );
-        }
-        // vechash does not call any child macros, so let me allocate with
-        // this search pattern (mostly this is for demo).
-        std::string ret = free_pfx(vs,"%s",{{40,44},{39,34},{0,7},{45,63}});
-        if(ret.empty()) THROW("Out of registers");
-        return ret;
-    };
-    auto block_alloc_scalar = [&](std::string variable){
-        block.push_back({variable,main_scalar()});
-    };
-#if 0
-    auto main_vector = [&]() {
-        auto vs = a.def_words_starting("%v"); // anything already there?
-        for(auto const& pre: block){ // for things we ARE GOING TO allocate
-            vs.push_back( pre.second );
-        }
-        std::string ret = free_pfx(vs,"%v",{{0,63}});
-        if(ret.empty()) THROW("Out of registers");
-        return ret;
-    };
-    auto block_alloc_vector = [&](std::string variable){
-        block.push_back({variable,main_vector()});
-    };
-    block_alloc_vector("vh2_vs");
-#endif
-    block_alloc_scalar("vh2_j");
-    block_alloc_scalar("vh2_r1");
-    block_alloc_scalar("vh2_r2");
-    block_alloc_scalar("vh2_r3");
-#endif
-    a.scope(block,"vechash2::kern_asm state registers");
-    // Note: our persistent context registers are now published
-    //       within the client's scope stack ...
-    //       we pop_scope them during kern_asm_end
-    a.ins(ve_load64("vh2_r1", scramble64::r1),"scramble64::r1");
-    //a.ins(ve_load64_opt0("hashval", 0)); // oh no. we hash_combine into a client register
-    a.ins(ve_load64("vh2_r2", scramble64::r2),"scramble64::r2");
-    a.ins(ve_load64("vh2_j", (uint64_t)seed<<32));
-    a.ins(ve_load64("vh2_r3", scramble64::r3),"scramble64::r3");
-    a.ins("vh2_vseq     vh2_vs");       // const, vs={0,1,2,...mvl}
-    a.com("vechash2 : init done");
+void VecHash2::kern_asm_begin( AsmFmtCols &ro_regs, AsmFmtCols &state,
+        char const* client_vs/*=nullptr*/, uint32_t const seed/*=0*/ )
+{
+    // read-only register constants (move up as far as possible)
+    AsmScope block; // empty
+    {
+        // vechash has no subroutines, so try for a distinct group of regs
+        // const
+        vechash_scalar("rnd64a",block,state);   // const (may move up)
+        vechash_scalar("rnd64b",block,state);   // const (can also be colocated)
+        vechash_scalar("rnd64c",block,state);   // const (can also be colocated)
+        if(client_vs) block.push_back({"vh_vseq",client_vs}); // ideally 0,1,...,MVL-1
+        else          vechash_vector ("vh_vseq",block,state);
+        ro_regs.scope(block,"const: vechash2");
+        if(!client_vs)
+            ro_regs.ins("svl rnd64a; lea rnd64b,256; lvl rnd64b; vseq vh_vseq; lvl rnd64a"
+                    ,"0,1,..,MVL-1");
+        ro_regs.ins(ve_load64("rnd64a", scramble64::r1),"scramble64::r1");
+        ro_regs.ins(ve_load64("rnd64b", scramble64::r2),"scramble64::r2");
+        ro_regs.ins(ve_load64("rnd64c", scramble64::r3),"scramble64::r3");
+    }
+    block.clear();
+    // state register init
+    {
+        vechash_scalar("vh2_j",  block,state);  // state (cannot migrate up)
+        vechash_vector("vh_x",  block,state);   // state (cannot migrate up)
+        state.scope(block,"state: vechash2");
+        // const
+        // Note: our persistent context registers are now published
+        //       within the client's scope stack ...
+        //       we pop_scope them during kern_asm_end
+        // state
+        state.ins(ve_load64("vh2_j", (uint64_t)seed<<32));
+        state.ins("vbrdl vh_x,0","vechash2 state init DONE");
+    }
 }
 /** input strings are registers.
  * \c va, \c vb (vectors) of length \c vl (scalar) are to be mixed in
@@ -175,54 +143,19 @@ void VecHash2::kern_asm( AsmFmtCols &a,
             "  in: "+va+", "+vb+", "+vl,
             "  inout: "+hash+" (scalar reg)",
             "  state: vh2_j",
-            "  const: vh2_r1, vh2_r2, vh2_r3, vh2_vs",
+            "  const: rnd64a, rnd64b, rnd64c, vh2_vs",
             "  scratch: vh2_r, vh2_vx, vh2_vy, vh2_vz"
           );
-    typedef std::list<std::pair<std::string,std::string>> AsmScope;
-#if 0
-    // TODO: resolve any conflicts of scope regs with ANY 
-    AsmScope const block = {{"vh2_r","%s63"}
-        ,{"vh2_vx","%v61"},{"vh2_vy","%v62"},{"vh2_vz","%v63"}
-    };
-#else
     AsmScope block; // empty
-    // Find free scratch registers searching from 63 downward
-    auto tmp_scalar = [&]() {
-        auto vs = a.def_words_starting("%s"); // anything already there?
-        for(auto const& pre: block){ // for things we ARE GOING TO allocate
-            vs.push_back( pre.second );
-        }
-        // vechash does not call any child macros, so let me allocate with
-        // this search pattern (mostly this is for demo).
-        std::string ret = free_pfx(vs,"%s",{{63,34},{7,0}});
-        if(ret.empty()) THROW("Out of registers");
-        return ret;
-    };
-    auto tmp_alloc_scalar = [&](std::string variable){
-        block.push_back({variable,tmp_scalar()});
-    };
-    auto tmp_vector = [&]() {
-        auto vs = a.def_words_starting("%v"); // anything already there?
-        for(auto const& pre: block){ // for things we ARE GOING TO allocate
-            vs.push_back( pre.second );
-        }
-        std::string ret = free_pfx(vs,"%v",{{0,63}});
-        if(ret.empty()) THROW("Out of registers");
-        return ret;
-    };
-    auto tmp_alloc_vector = [&](std::string variable){
-        block.push_back({variable,tmp_vector()});
-    };
-    tmp_alloc_vector("vh2_vx");
-    tmp_alloc_vector("vh2_vy");
-    tmp_alloc_vector("vh2_vz");
-    tmp_alloc_scalar("vh2_r");
-#endif
+    ve_propose_reg("vh2_r" ,block,a,SCALAR_TMP);
+    ve_propose_reg("vh2_vx",block,a,VECTOR_TMP);
+    ve_propose_reg("vh2_vy",block,a,VECTOR_TMP);
+    ve_propose_reg("vh2_vz",block,a,VECTOR_TMP);
     a.scope(block,"vechash2::kern_asm");
-    a.ins("vmulu.l  vh2_vx, vh2_r2, /**/"+va,       "scramble64::r2 * "+va+"[]");
-    a.ins("vaddu.l  vh2_vy, vh2_j, vh2_vs");
-    a.ins("vmulu.l  vh2_vz, vh2_r3, /**/"+vb,       "scramble64::r3 * "+vb+"[]");
-    a.ins("vmulu.l  vh2_vy, vh2_r1, vh2_vy",        "scramble64::r1 * (j+vs[])");
+    a.ins("vmulu.l  vh2_vx, rnd64b, /**/"+va,       "scramble64::r2 * "+va+"[]");
+    a.ins("vaddu.l  vh2_vy, vh2_j, vh2_vs",         "init for state j");
+    a.ins("vmulu.l  vh2_vz, rnd64c, /**/"+vb,       "scramble64::r3 * "+vb+"[]");
+    a.ins("vmulu.l  vh2_vy, rnd64a, vh2_vy",        "scramble64::r1 * (j+vs[])");
     a.ins("vaddu.l  vh2_vx, vh2_vx, vh2_vz");
     a.ins("vaddu.l  vh2_vx, vh2_vx, vh2_vy",        "vx ~ sum of scrambles");
     a.ins("vrxor    vh2_vy, vh2_vx");
