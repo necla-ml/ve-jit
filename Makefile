@@ -667,17 +667,16 @@ clean:
 	$(MAKE) -f bugN.mk clean
 realclean: clean
 	rm -f $(TARGETS)
-	rm -f ftostring a.exe 2
-	rm -f msk msk0 msk1 msk2 msk3 msk4 syscall_hello smir jitve0
-	rm -f bld.log asmfmt.log jitpp_hello.log mk*.log bld*.log
 	rm -f tmp_*.S *.bin
+	rm -f msk msk0 msk1 msk2 msk3 msk4 syscall_hello smir jitve0 ftostring a.exe 2
+	rm -f bld.log asmfmt.log jit*.log mk*.log bld*.log test*.log dl*.log syscall*.log
 	rm -rf CMakeCache.txt CMakeFiles asmfmt asmfmt-x86 asmfmt.txt jitve_hello.s
-	rm -f dllbuild-ve dllbuild-veb dllbuild-x86 dllbuild-x86b \
-		dllok0 dllok2 dllok3 dllok4 dltest0 dltest0-x86 \
-		dllvebug1 dllvebug10 dllvebug2 dltest1 dltest1-clang \
-		dltest1-nclang dltest1-x86 dltest1link \
-		libclang_lucky.so libgcc_lucky.so libncc_lucky.so \
-		bug bug-pic-ve bug-ve bug-x86 cblock 
+	rm -f dllbuild-ve dllbuild-veb dllbuild-x86 dllbuild-x86b
+	rm -f dllok0 dllok2 dllok3 dllok4 dltest0 dltest0-x86
+	rm -f dllvebug1 dllvebug10 dllvebug2 dltest1 dltest1-clang
+	rm -f dltest1-nclang dltest1-x86 dltest1link
+	rm -f libclang_lucky.so libgcc_lucky.so libncc_lucky.so
+	rm -f bug bug-pic-ve bug-ve bug-x86 cblock
 	$(MAKE) -f bugN.mk realclean
 	$(MAKE) -C loops realclean
 	$(MAKE) -C loops2 realclean
