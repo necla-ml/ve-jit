@@ -68,6 +68,7 @@ TARGETS=asmkern0.asm libjit1.a libjit1-x86.a asmfmt-ve\
 #CC:=ncc
 #CXX:=nc++
 CFLAGS:=-O2 -g2
+CFLAGS+=-Wall -Werror
 CXXFLAGS:=$(CFLAGS) -std=c++11
 VE_EXEC:=ve_exec
 OBJDUMP:=nobjdump
@@ -99,7 +100,7 @@ SHELL:=LC_ALL=C /bin/bash
 liblist:
 	@ls -l lib*.a
 force: # force libs to be recompiled
-	rm -f libjit1*.a asmfmt*.o jitpage*.o jit_data*.o
+	rm -f libjit1*.a asmfmt*.o jitpage*.o intutil*.o
 	rm -f libveli*.a prgiFoo.o wrpiFoo.o
 	rm -f $(patsubst %.cpp,%*.o,$(LIBVELI_SRC)) $(LIBVELI_TARGETS)
 	$(MAKE) $(LIBJIT1_TARGETS)
@@ -113,10 +114,10 @@ endif
 .PHONY: all-vejit-libs
 all-vejit-libs:
 	./mklibs.sh >& mklibs.log	# writes libs into vejit/lib/
-vejit.tar.gz: jitpage.h jit_data.h throw.hpp \
+vejit.tar.gz: jitpage.h intutil.h throw.hpp \
 		asmfmt_fwd.hpp asmfmt.hpp codegenasm.hpp velogic.hpp \
 		cblock.hpp dllbuild.hpp \
-		asmfmt.cpp cblock.cpp dllbuild.cpp jitpage.c jit_data.c \
+		asmfmt.cpp cblock.cpp dllbuild.cpp jitpage.c intutil.c \
 		jitpage.hpp jitpipe_fwd.hpp jitpipe.hpp cblock.hpp pstreams-1.0.1 bin_mk.c \
 		$(VEJIT_LIBS) $(VEJIT_SHARE)
 	rm -rf vejit
@@ -240,10 +241,10 @@ jitve_math: jitve_math.c jitpage.o
 #
 # NEW: CMakeLists.txt + mklibs.sh to build variants of libjit1
 #
-.PRECIOUS: asmfmt.o jit_data.o jitpage.o
+.PRECIOUS: asmfmt.o intutil.o jitpage.o
 #%-omp.o: %.c: $(CC) ${CFLAGS} -O2 -c $< -o $@
 #%-omp-ftrace1.o: %.c: $(CC) ${CFLAGS} -O2 -c $< -o $@
-libjit1.a: asmfmt.o jitpage.o jit_data.o \
+libjit1.a: asmfmt.o jitpage.o intutil.o \
 		cblock-ve.o dllbuild-ve.o bin.mk-ve.lo
 	rm -f $@
 	$(AR) rcs $@ $^
@@ -253,7 +254,7 @@ libjit1.a: asmfmt.o jitpage.o jit_data.o \
 #// nc++ only has a .a version std:: C++ library?
 #// dlrt-ve needs -lnc++ before dlopen would succeed !
 # C things	
-jit_data.o: jit_data.c jit_data.h
+intutil.o: intutil.c intutil.h
 	$(CC) ${CFLAGS} -O2 -c $< -o $@
 jitpage.o: jitpage.c jitpage.h
 	$(CC) $(CFLAGS) -D_GNU_SOURCE -c $< -o $@ -ldl
@@ -264,12 +265,12 @@ cblock-ve.o: cblock.cpp cblock.hpp
 	$(CXX) -Wall -g2 -std=c++11 -c $< -o $@
 dllbuild-ve.o: dllbuild.cpp
 	$(CXX) -o $@ $(CXXFLAGS) -Wall -Werror -c $<
-libjit1.so: jitpage.lo jit_data.lo bin.mk-ve.lo \
+libjit1.so: jitpage.lo intutil.lo bin.mk-ve.lo \
 	asmfmt.lo cblock-ve.lo dllbuild-ve.lo # C++ things
 	$(CXX) -o $@ -shared -Wl,-trace -wL,-verbose $^ #-ldl #-lnc++
 	readelf -h $@
 	readelf -d $@
-jit_data.lo: jit_data.c jit_data.h
+intutil.lo: intutil.c intutil.h
 	$(CC) ${CFLAGS} -fPIC -O2 -c $< -o $@
 jitpage.lo: jitpage.c jitpage.h
 	$(CXX) $(CXXFLAGS) -fPIC -c $< -o $@ -ldl
@@ -282,7 +283,7 @@ dllbuild-ve.lo: dllbuild.cpp
 
 libvenobug.so: \
 	jitpage.lo \
-	jit_data.lo \
+	intutil.lo \
 	bin.mk-ve.lo
 	$(CC) -o $@ -shared $^
 .PHONY: hdrs0.cpp bug0.cpp hdrs1.cpp hdrs2.cpp empty.cpp
@@ -342,7 +343,7 @@ libveasmfmt2.so: asmfmt2.lo
 	$(CXX) -o $@ -shared $^
 libvebug.so: \
 	jitpage.lo \
-	jit_data.lo \
+	intutil.lo \
 	bin.mk-ve.lo \
 	asmfmt.lo
 	$(CXX) -o $@ -shared $^
@@ -397,13 +398,13 @@ dllvebug14: dllbug.cpp libvebug.so
 	./$@ 7
 	echo "Exit status $$?"
 
-libjit1-x86.a: asmfmt-x86.o jitpage-x86.o jit_data-x86.o \
+libjit1-x86.a: asmfmt-x86.o jitpage-x86.o intutil-x86.o \
 		cblock-x86.o dllbuild-x86.o bin.mk-x86.lo
 	rm -f $@
 	ar rcs $@ $^
 	readelf -h $@
 	readelf -d $@
-libjit1-x86.so: asmfmt-x86.lo jitpage-x86.lo jit_data-x86.lo \
+libjit1-x86.so: asmfmt-x86.lo jitpage-x86.lo intutil-x86.lo \
 		cblock-x86.lo dllbuild-x86.lo bin.mk-x86.lo
 	gcc -o $@ -shared $^ # -ldl
 	readelf -h $@
@@ -414,9 +415,9 @@ asmfmt-x86.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
 	g++ ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
 asmfmt-x86.lo: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
 	g++ ${CXXFLAGS} -fPIC -O2 -c asmfmt.cpp -o $@
-jit_data-x86.o: jit_data.c jit_data.h
+intutil-x86.o: intutil.c intutil.h
 	g++ ${CFLAGS} -O2 -c $< -o $@
-jit_data-x86.lo: jit_data.c jit_data.h
+intutil-x86.lo: intutil.c intutil.h
 	g++ ${CFLAGS} -fPIC -O2 -c $< -o $@
 jitpage-x86.o: jitpage.c jitpage.h
 	g++ $(CXXFLAGS) -O2 -c $< -o $@ -ldl
@@ -486,13 +487,13 @@ veliFoo.o: veliFoo.cpp velogic.hpp
 	$(CXX) ${CXXFLAGS} -Wall -O2 -c $< -o $@
 
 #asmfmt.cpp has a standalone demo program with -D_MAIN compiler	
-asmfmt-x86: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp jit_data.c jit_data.h jitpage.c jitpage.h
+asmfmt-x86: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp intutil.c intutil.h jitpage.c jitpage.h
 	g++ $(CXXFLAGS) -O2 -E -dD $< >& $(patsubst %,%.i,$@)
-	g++ ${CXXFLAGS} -Wall -D_MAIN asmfmt.cpp jitpage.c jit_data.c -o $@ -ldl
+	g++ ${CXXFLAGS} -Wall -D_MAIN asmfmt.cpp jitpage.c intutil.c -o $@ -ldl
 asmfmt-ve: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp jitpage.o
 	$(CXX) $(CXXFLAGS) -O2 -E -dD $< >& $(patsubst %,%.i,$@)
 	#$(CXX) $(CXXFLAGS) -O2 -D_MAIN $(filter-out %.hpp,$^) -o $@
-	$(CXX) ${CXXFLAGS} -D_MAIN -Wall asmfmt.cpp jitpage.c -o $@ -ldl
+	$(CXX) ${CXXFLAGS} -D_MAIN -Wall asmfmt.cpp jitpage.c intutil.c -o $@ -ldl
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
 #
 # C++ version of jitve_hello.
@@ -500,7 +501,7 @@ asmfmt-ve: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp jitpage.o
 # it also returns a very lucky value (7).
 #
 .PRECIOUS: jitpp_hello
-jitpp_hello: jitpp_hello.cpp asmfmt.o jitpage.o
+jitpp_hello: jitpp_hello.cpp asmfmt.o intutil.o jitpage.o
 	$(CXX) $(CFLAGS) -O2 -E -dD $< >& $(patsubst %.cpp,%.i,$<)
 	$(CXX) $(CFLAGS) -O2 $^ -o $@ $(LDFLAGS)
 	$(CXX) $(CFLAGS) -Wa,-adhln -c $^ >& $(patsubst %.cpp,%.asm,$<)
@@ -522,7 +523,7 @@ msk: msk.cpp
 	$(OBJDUMP) -d $@ >& msk.dis
 	$(VE_EXEC) ./$@ 2>&1 | tee msk.log
 endif
-jitpp_loadreg: jitpp_loadreg.cpp asmfmt.o jitpage.o jit_data.o
+jitpp_loadreg: jitpp_loadreg.cpp asmfmt.o jitpage.o intutil.o
 	-$(CXX) $(CXXFLAGS) -O2 -E -dD $< >& $(patsubst %.cpp,%.i,$<) && echo YAY || echo OHOH for jitpp_loadreg.i
 	$(CXX) $(CXXFLAGS) -O2 $^ -o $@ $(LDFLAGS)
 	$(CXX) $(CXXFLAGS) -Wa,-adhln -c $^ >& $(patsubst %.cpp,%.asm,$<)

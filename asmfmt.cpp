@@ -3,15 +3,17 @@
 #endif
 #include "asmfmt.hpp"
 #include "throw.hpp"
-#include "codegenasm.hpp"
+//#include "codegenasm.hpp"
+#include "stringutil.hpp"
 #include <iostream>
+#include <iomanip>
 #include <sstream>
 #include <fstream>
-#include <iomanip>
-#include <stdexcept>
+//#include <stdexcept>
 #include <algorithm> // max
-#include <cstdlib>
-#include <cassert>
+//#include <cstdlib>
+//#include <cassert>
+#include <array>
 //#include <cstdio> // FILE, ftell
 
 using namespace std;

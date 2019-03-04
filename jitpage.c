@@ -61,7 +61,7 @@ int asm2bin(char const* basename, char const* const cpp_asm_code, int const v/*e
     {
         char mk_cmd[100];
         //snprintf(&mk_cmd[0],100,"VERBOSE=0 make -f bin.mk %s.bin%c",basename,'\0');
-        if(snprintf(&mk_cmd[0],100,"make -f bin.mk %s.bin%c",basename,'\0')<=0) goto errors;
+        if(snprintf(&mk_cmd[0],100,"make VERBOSE=1 -f bin.mk %s.bin%c",basename,'\0')<=0) goto errors;
         if(v){printf("cmd: %s\n",mk_cmd); fflush(stdout);}
         if(system(mk_cmd)!=0) goto errors;
         sleep(1);

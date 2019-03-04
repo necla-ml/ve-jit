@@ -11,7 +11,7 @@
 #define STR(...) STR0(__VA_ARGS__)
 
 using namespace std;
-test_hello(){
+void test_hello(){
 #if 0
     COMM(print out a Hello World 'debug' string as we exit)
         COMM(relocatable no-symbols version of write(1,"Hello world\n",2))
@@ -85,10 +85,11 @@ test_hello(){
         //auto kh = kernel_hello.flush(); // write AND get a copy of the string
         cout<<"kernel_hello.str():   also in "<<asmFile<<"\n"<<kh<<endl;
     }
-    //cout<<"asm2bin(\""<<asmFile<<"\",verbose)..."<<endl;
-    auto bytes_bin = asm2bin( asmFile, 0/*verbose*/ );                     // .S --> .bin
-    //cout<<"ExecutablePage page( fname_bin(\""<<asmFile<<"\")"<<endl;
-    // NO: segfaults on ve: ExecutablePage page( fname_bin(asmFile) );   // .bin --> codepage
+    if(0){ cout<<"asm2bin(\""<<asmFile<<"\",verbose)..."; }
+    auto bytes_bin = asm2bin( asmFile, 0/*verbose*/ );                  // .S --> .bin
+    if(1){ cout<<" binary blob of "<<bytes_bin<<" bytes"<<endl; }
+    cout<<"ExecutablePage page( fname_bin(\""<<asmFile<<"\")"<<endl;
+    // NO: segfaults on ve: ExecutablePage page( fname_bin(asmFile) );  // .bin --> codepage
     string binFile = fname_bin(asmFile);
     ExecutablePage page( binFile );   // .bin --> codepage
     {

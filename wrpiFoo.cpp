@@ -1,6 +1,6 @@
 /** \file wrappers to call VE jit pages with test logic */
 #if !defined(__ve)
-#warning "Empty, since requires ncc to compile VE inline asm"
+//#warning "Empty, since requires ncc to compile VE inline asm"
 #else
 
 #include "velogic.hpp"

@@ -71,9 +71,8 @@ int main(int argc,char**argv){
 	// (directly use SYSV_write)
 	const char* str = "Hello, syscall!\n"; // 16 bytes
 	//                 1234567890123456
-	int const len = 16;
-	int const syscall_num = SYS_write;
-	int const fd = 1;
+#define FD 1
+#define LEN 16
 	// syscall details:
 	//    https://github.com/veos-sxarr-NEC/musl-libc-ve
 	// files:	
@@ -82,17 +81,10 @@ int main(int argc,char**argv){
 	// 	src/thread/ve/syscall_cp.S
 	// 	src/internal/syscall.h
 	// Note: this emulated write(fd,str,len) is not cancellable
-#if 0
-	lea_cx(%s0, syscall_num);
-	lea_cx(%s1, fd);
-	lea_cx(%s2, str);
-	lea_cx(%s3, len);
-#else
 	asm("lea %s0,%0"::"i"(SYS_write));	// immediate values compile a bit nicer
-	asm("lea %s1,%0"::"i"(1));
+	asm("lea %s1,%0"::"i"(FD));
 	asm("lea %s2,(,%0)"::"r"(str));
-	asm("lea %s3,%0"::"i"(16));
-#endif
+	asm("lea %s3,%0"::"i"(LEN));
 	asm(
 			"ld		%s4, 0x18(,%tp)\n" // 0x18 == SHM_OFFSET
 			"\tshm.l	%s0, 0x0(%s4)\n"
@@ -113,14 +105,14 @@ int main(int argc,char**argv){
 	// NOTE: .align 3  actually does alignment to 2^3 multiple
 	//
 	asm("lea %s0,%0"::"i"(SYS_write));
-	asm("lea %s1,%0"::"i"(1));
-	asm("sic %s4");			// %s4 <-- IC
+	asm("lea %s1,%0"::"i"(FD));
+	asm("sic %s4");			    // %s4 <-- IC (establish relative addressing)
 	asm("br.l afterstring\n"	// 8-byte branch instruction
-		"startstring:\n"	// 0x8(,%s4)
+		"startstring:\n"	    // 0x8(,%s4)
 			"\t.ascii \"Hello, ilprt!\\n\"\n"
 		"endstring:\n"
 			"\t.align 3\n"
-		"afterstring:\n"
+		"afterstring:\n"        // now set %s2, %s3
 			"\tlea %s2,0x8(,%s4)\n"
 			"\tlea %s3,endstring-startstring\n"
 	   );
@@ -134,6 +126,8 @@ int main(int argc,char**argv){
 			//"beq.l.t	0,0(,%lr)\n" // we are not a function call
 			//:::"%s46","memory"
 	   );
+#undef LEN
+#undef FD
 
     // as a final demo, the following macros can be adapted to
     // print a "here"-string inside a jit code block:

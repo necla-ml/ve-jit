@@ -25,7 +25,7 @@ Hello:
 	${CXX} --version
 hdrs%.o: hdrs%.cpp 
 	$(CXX) -o $@ ${CXXFLAGS} -fPIC -O2 -c $<
-	$(NM) -C $@
+	#$(NM) -C $@
 libvehdrs%.so: hdrs%.o
 	$(CXX) -o $@ -shared $^ $(LDFLAGS)
 #bug%: bug0.cpp libvenobug.so libvehdrs%.so
@@ -52,14 +52,14 @@ hdrs1.cpp:
 		echo '#include <iostream>'; \
 		} > $@
 hdrs2.cpp:
-	# This one fails
-	{ \
-		echo '#include <iostream.h>'; \
-		echo 'int foo() { std::cout<<"7"; return 7; }'; \
-		} > $@
 	# This one is OK
 	{ \
 		echo 'int foo() { return 7; }'; \
+		} > $@
+	# This one fails
+	{ \
+		echo '#include <iostream>'; \
+		echo 'int foo() { std::cout<<"7"; return 7; }'; \
 		} > $@
 clean:
 	rm -f hdrs0.cpp hdrs1.cpp hdrs2.cpp hdrs*.o libvehdrs*.so

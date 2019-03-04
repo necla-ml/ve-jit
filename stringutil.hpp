@@ -2,10 +2,13 @@
 #define STRINGUTIL_HPP
 /** \file
  * pure-header std::string stuff */
-#include "throw.hpp"
+
+#include "intutil.hpp"
 #include <cstdio>   // tmpnam, tempnam?
 #include <unistd.h> // close
 
+/// \group string modification
+//@{
 inline std::string multiReplace(
         const std::string needle,
         const std::string replace,
@@ -60,7 +63,10 @@ inline std::string reduce(const std::string& str,
 
     return result;
 }
+//@}
 
+/// \group simple constant outputs
+//@{
 template<typename T>
 std::string jitdec(T const t){
     std::ostringstream oss;
@@ -78,6 +84,64 @@ inline std::string hexdec(int64_t const i){
             ? jitdec(i)
             : jithex(i));
 }
+//@}
+
+/// \group VE immediate operands
+//@{
+/** string for VE 'M' representation of a 64-bit value.
+ * 'M' representation is (M)B,
+ * where M is 0..63 and B is 0|1,
+ * meaning "M B's followed by not-B's".
+ * \throw if \c t cannot be represented in such format
+ */
+template<typename T>
+std::string jitimm(T const t){
+    int64_t i=static_cast<int64_t>(t);
+    // common and special cases
+    if(i==0) return std::string("(0)1");
+    if(i==-1) return std::string("(0)0");
+    if(i==1) return std::string("(63)0");
+    // remaing cases generic
+    std::ostringstream oss;
+    bool const neg = i<0;
+    char const* leading_bit=(neg? "1": "0");    // string for 1|0 MSB
+    if(neg) i=~i;                               // now i == |t|, positive
+    if(!positivePow2(i+1))
+        THROW("jitimm("<<t<<") not representable as 64-bit N(B) N B's followed by rest not-B");
+    int const trailing = popcount(i); // in |t|
+    oss<<"("<<64-trailing<<")"<<leading_bit;
+    return oss.str();
+}
+template<typename T>
+bool isIval(T const t){
+    typename std::make_signed<T>::type i = t;
+    return i >= -64 && i <= 63;
+}
+template<typename T>
+bool isMval(T const t){
+    int64_t i=static_cast<int64_t>(t);
+    // common and special cases
+    if(i==0) return true;
+    if(i==-1) return true;
+    if(i==1) return true;
+    // remaing cases generic
+    //std::ostringstream oss;
+    bool const neg = i<0;
+    //char const* leading_bit=(neg? "1": "0");    // string for 1|0 MSB
+    if(neg) i=~i;                               // now i == |t|, positive
+    if(!positivePow2(i+1))
+        //THROW("oops")
+        return false;
+    //int const trailing = popcount(i); // in |t|
+    //oss<<"("<<64-trailing<<")"<<leading_bit;
+    //return oss.str();
+    return true;
+}
+template<typename T>
+bool isimm(T const t){ // deprecated original name
+    return isMval(t);
+}
+//@} VE immediate operands
 
 /** open and close a tmp file from \c mkstemp, returning its name. */
 inline std::string my_tmpnam() {
