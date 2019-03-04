@@ -657,12 +657,11 @@ dltest1-nclang: dltest1.cpp jitpipe.hpp Makefile
 	g++ $(CXXFLAGS) -DJIT_NCLANG -o $@ -Wall -Werror $< -ldl
 clean:
 	rm -f *.o *.lo *.i *.ii *.out *.gch bin.mk*.o bin_mk.c
-	rm -f msk*.i msk*.S msk*.dis msk*.out
+	rm -f msk*.i msk*.S msk*.dis msk*.out tmp_*.s tmp*lucky*
 	rm -f syscall_hello.o syscall_hello.asm syscall_hello.dis
-	rm -f asmkern0.asm asmkern0.dis
+	rm -f asmkern0.asm asmkern0.dis syscall_hello.s
 	for f in *.bin; do b=`basename $$f .bin`; rm -f $$b.asm $$b.o $$b.dis $$b.dump; done
 	for f in tmp_*.S; do b=`basename $$f .S`; rm -f $$b.asm $$b.dis $$b.dump; done
-	rm -f tmp*lucky*
 	rm -rf tmp
 	rm -f jitve_math.asm jitve_hello.asm jitve_hello.s jitve_hello.dis jitve*.dis jitpp_hello.asm
 	$(MAKE) -f bugN.mk clean
@@ -673,6 +672,12 @@ realclean: clean
 	rm -f bld.log asmfmt.log jitpp_hello.log mk*.log bld*.log
 	rm -f tmp_*.S *.bin
 	rm -rf CMakeCache.txt CMakeFiles asmfmt asmfmt-x86 asmfmt.txt jitve_hello.s
+	rm -f dllbuild-ve dllbuild-veb dllbuild-x86 dllbuild-x86b \
+		dllok0 dllok2 dllok3 dllok4 dltest0 dltest0-x86 \
+		dllvebug1 dllvebug10 dllvebug2 dltest1 dltest1-clang \
+		dltest1-nclang dltest1-x86 dltest1link \
+		libclang_lucky.so libgcc_lucky.so libncc_lucky.so \
+		bug bug-pic-ve bug-ve bug-x86 cblock 
 	$(MAKE) -f bugN.mk realclean
 	$(MAKE) -C loops realclean
 	$(MAKE) -C loops2 realclean
