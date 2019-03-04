@@ -6,6 +6,9 @@
 #include "intutil.hpp"
 #include <cstdio>   // tmpnam, tempnam?
 #include <unistd.h> // close
+#include <vector>
+#include <string>
+#include <algorithm>    // std::find?
 
 /// \group string modification
 //@{
@@ -23,6 +26,54 @@ inline std::string multiReplace(
     }
     return haystack;
 }
+
+/** Search inclusive integer range[s] \c irs [beg,end] for a string \c pfx+jitdec(ir)
+ * that is \b NOT in a given \c exclude vector of strings.
+ * Range \c ir is searched from beg to end (up or down).
+ * \return first nonexcluded string pfxN (N = integer value) (or empty string)
+ * ranges are unchecked.
+ *
+ * Ex. free_pfx( vs, "%s", 63, 34 ) with vs={"%s0","cat","%s63","%s60","%v61",%s62"}
+ *     should return "%s61".  This example tries to return a scalar VE
+ *     register that is not preserved in the VE 'C' abi.
+ *
+ * For an assembler 'main' routine, you might modify this to use %s0-%s7
+ */
+inline std::string free_pfx( std::vector<std::string> const& exclude,
+        std::string pfx = "%s",
+        std::vector<std::pair<int,int>> const& irs
+        = std::vector<std::pair<int,int>>{{63,34}} )
+{
+    std::ostringstream trial;
+    size_t const pfx_sz = pfx.size();
+    trial<<pfx;
+    for(auto const& ir: irs){
+        int       i  =ir.first;
+        int const end=ir.second;
+        int const inc = (i<end? +1: -1);
+        for(;;){
+            //trial.replace( pfx_sz, std::string::npos, tostring(ir) );
+            //  'tostring' is supposedly C++11, but was not supported?
+            trial.clear();          // re-use the ostringstream buffer
+            trial.seekp(pfx_sz);    // position the 'put' pointer
+            trial<<i;
+            std::string t = trial.str();
+            std::cout<<" ?"<<t;
+            if(std::find(exclude.begin(),exclude.end(),t) == exclude.end()){
+                // found one that is not excluded...
+                std::cout<<"\n free_pfx-->"<<t<<std::endl;
+                return t;
+            }
+            if( i == end )
+                break;
+            i += inc;
+        }
+    }
+    // client is expected deal with empty-string properly !
+    return std::string();
+}
+
+
 
 /** Remove front and back whitespace.
  * \c whitespace may include null */

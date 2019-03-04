@@ -4,17 +4,7 @@
 #include "stringutil.hpp"
 #include "velogic.hpp" // fully-tested "load scalar reg with constant"
 #include "asmfmt_fwd.hpp"
-// Note: required code is in veliFoo.cpp (wrpiFoo.cpp for the tests)
-
-//#include <iostream>
-//#include <iomanip>
-//#include <string>
-//#include <sstream>
 #include <array>
-//#include <cassert>
-//
-//#include "throw.hpp"
-//#include <typeinfo>
 /** this class returns raw string for assembler ops */
 struct CodeGenAsm
 {

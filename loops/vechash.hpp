@@ -151,8 +151,8 @@ struct VecHash2 {
         j += vl;
         return hashVal;
     }
-    static void kern_asm_begin( AsmFmtCols &a, char const* client_vs=nullptr,
-            uint32_t const seed=0 );
+    static void kern_asm_begin( AsmFmtCols &ro_regs, AsmFmtCols &state,
+            char const* client_vs=nullptr, uint32_t const seed=0 );
     static void kern_asm( AsmFmtCols &parent,
             std::string va, std::string vb, std::string vl, std::string hash );
     static void kern_asm_end( AsmFmtCols &a );

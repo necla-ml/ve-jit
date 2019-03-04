@@ -477,7 +477,7 @@ AsmFmtCols& AsmFmtCols::undef(std::string const& symbol,std::string const& name)
     // XXX remove from stack_[un]defs[0]
     return *this;
 }
-std::vector<string> AsmFmtCols::def_words_starting(std::string with){
+std::vector<string> AsmFmtCols::def_words_starting(std::string with) const {
     std::vector<string> ret;
     if(parent)
         ret = parent->def_words_starting(with);
@@ -487,6 +487,23 @@ std::vector<string> AsmFmtCols::def_words_starting(std::string with){
             std::string const& s = d.second;
             if(s.compare(0,with_sz, with) == 0){
                 ret.push_back(s);
+            }
+        }
+    }
+    //cout<<" found "<<ret.size()<<" substitution-first-words beginning with "<<with<<endl;
+    return ret;
+}
+vector<pair<string,string>> AsmFmtCols::def_macs_starting(std::string with) const {
+    vector<pair<string,string>> ret;
+    if(parent)
+        ret = parent->def_macs_starting(with);
+    size_t with_sz = with.size();
+    for(auto const& vmac: stack_defs){
+        for(auto const& d: vmac){                // d ~ vector<symbol,subst>
+            std::string const& s = d.second;
+            if(s.compare(0,with_sz, with) == 0){
+                //ret.push_back(static_cast<const pair<string,string>&>(d));
+                ret.push_back(d);
             }
         }
     }
@@ -650,10 +667,8 @@ OpLoadregStrings opLoadregStrings( uint64_t const parm )
         //uint64_t out = tmp2 + tmplo;     // lea.sl lea_out, tmphi(,lea_out);
         //assert( parm == out );
         // Changed:  do not use a T0 tmp register
-        ret.lea2="lea OUT, "+jithex(lo);
-        if(dd!=hi) ret.lea2.append("# sext");
+        ret.lea2="lea OUT, "+jithex(lo)+"# "+(dd!=hi?"Xld ":" ld ")+jithex(parm);
         ret.lea2+=" ; lea.sl OUT, "+jithex(dd)+"(,OUT)";
-        if(dd!=hi) ret.lea2.append("# load "+jithex(parm));
     }
     { // bit ops logic
         // simple cases: I or M zero
@@ -769,6 +784,51 @@ std::string choose(OpLoadregStrings const& ops, void* /*context=nullptr*/)
 std::string ve_load64(std::string s, uint64_t v){
     return multiReplace("OUT", s,
             choose(opLoadregStrings(v)));
+}
+
+/** /todo return {var,subst} PAIRS, because same_name and same_reg
+ *       might be nice to coagulate (presume identical content) */
+void ve_propose_reg( std::string variable, AsmScope& block, AsmFmtCols const& a,
+        std::string prefix,
+        std::vector<std::pair<int,int>> const search_order){
+    auto vs = a.def_words_starting(prefix); // anything already within scopes?
+    for(auto const& pre: block){ // for things we ARE GOING TO allocate
+        vs.push_back( pre.second );
+    }
+    std::string register_name = free_pfx(vs,prefix,search_order);
+    if(register_name.empty()) THROW("Out of registers");
+    block.push_back({variable,register_name});
+}
+
+// VE note: %s12 : "Outer register, used for pointing start addr of called fn"
+//          %s13 : "Used to pass id of function to dynamic linker"
+//          are both not preserved in C ABI
+static std::vector<std::pair<int,int>> const scalar_order_fwd{{0,7},{34,63},{12,13},{18,33}};
+static std::vector<std::pair<int,int>> const scalar_order_bwd{{63,34},{7,0},{13,12},{33,18}};
+static std::vector<std::pair<int,int>> const vector_order_fwd{{0,63}};
+static std::vector<std::pair<int,int>> const vector_order_bwd{{63,0}};
+
+void ve_propose_reg( std::string variable, AsmScope& block, AsmFmtCols const& a, RegSearch const how ){
+    std::vector<std::pair<int,int>> const* order = nullptr;
+    char const* pfx = nullptr;
+    switch(how){
+      case(SCALAR)    : pfx="%s"; order=&scalar_order_fwd; break;
+      case(SCALAR_TMP): pfx="%s"; order=&scalar_order_bwd; break;
+      case(VECTOR)    : pfx="%v"; order=&vector_order_fwd; break;
+      case(VECTOR_TMP): pfx="%v"; order=&vector_order_bwd; break;
+    }
+    assert( order != nullptr );
+#if 0
+    auto vs = a.def_words_starting(pfx); // anything already within scopes?
+    for(auto const& pre: block){ // for things we ARE GOING TO allocate
+        vs.push_back( pre.second );
+    }
+    std::string register_name = free_pfx(vs,pfx,*order);
+    if(register_name.empty()) THROW("Out of registers");
+    block.push_back({variable,register_name});
+#else
+    ve_propose_reg( variable, block, a, pfx, *order );
+#endif
 }
 #endif //CODEREMOVE < 1
 

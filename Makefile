@@ -411,7 +411,7 @@ libjit1-x86.so: asmfmt-x86.lo jitpage-x86.lo intutil-x86.lo \
 	readelf -d $@
 dllbuild-x86.lo: dllbuild.cpp dllbuild.hpp
 	g++ -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -c $<
-asmfmt-x86.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
+asmfmt-x86.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp stringutil.hpp jitpage.h
 	g++ ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
 asmfmt-x86.lo: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
 	g++ ${CXXFLAGS} -fPIC -O2 -c asmfmt.cpp -o $@

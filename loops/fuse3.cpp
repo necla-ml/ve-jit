@@ -889,6 +889,12 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
 
         register uint64_t cnt = iijj; // NEW: iijj to one [i.e. remain], rather than [0..iijj)
 
+        // fd   defines
+        // fp   pre-loop setup
+        // fi   loop induction
+        // fk   kernel area
+        // fl   loop done test
+        // fz   cleanup/restore
         AsmFmtCols fd,fp,fi,fk,fl,fz;
         fp.com("fuse2 presets").setParent(&fd);
         fi.setParent(&fp);
@@ -913,11 +919,23 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
             {"BASE", "L_"+fusename+"_BASE"},
             {"INDUCE", "L_"+fusename+"_INDUCE"},
             {"KERNEL_BLOCK", "L_"+fusename+"_KERNEL_BLOCK"},
-            {"vl0",  "%s0"},
-            {"ii",   "%s1"},
-            {"jj",   "%s2"},
-            {"base", "%s4"}, // yah %s3 might be more logical, but for demo...
         };
+        // const registers from parent, or following defaults:
+        char const* parent_base = nullptr;
+        char const* parent_vl0  = nullptr;
+        char const* parent_ii   = nullptr;
+        char const* parent_jj   = nullptr;
+        if(parent_vl0) block.push_back({"vl0",parent_vl0});
+        else             ve_propose_reg("vl0",block,fd,SCALAR);
+        if(parent_vl0) block.push_back({"ii",parent_ii});
+        else             ve_propose_reg("ii",block,fd,SCALAR);
+        if(parent_vl0) block.push_back({"jj",parent_jj});
+        else             ve_propose_reg("jj",block,fd,SCALAR);
+        // NOTE: this reg is a good candidate for already existing
+        if(parent_vl0) block.push_back({"base",parent_base});
+        else             ve_propose_reg("base",block,fd,SCALAR);
+        ve_propose_reg("cnt0",block,fd,SCALAR);
+        // state registers
         // if nloops==1, we might not need "base" register?
 
         if(1){ // illustrate use of auto-register assignments,
@@ -961,14 +979,7 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
             if(nloop>1)                     block_alloc_scalar("cnt");
             if(nloop>1 && (iijj%vl0) )      block_alloc_scalar("vl");
             if(SAVE_RESTORE_VLEN)           block_alloc_scalar("vl_save");
-#if 0
-            if( have_sq )                   block_alloc_scalar("sq");
-            if(HASH_KERNEL)                 block_alloc_scalar("reg_hash");
-#else
-            // Above lambdas are a common pattern, so some default
-            // search orders were "builtin" for VE registers:
             if(HASH_KERNEL) ve_propose_reg("reg_hash",block,fd,SCALAR);
-#endif
 
             // ii and jj usage ends pretty early, so [hand-optimization...]
             // we can re-use some always-there regs...
@@ -1020,6 +1031,7 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
         }
 
         //+++++++++++++++++ fuse2 state registers +++++++++++++++++++
+
         if(nloop>1 && (iijj%vl0) ){
             fp.ins("or  vl, vl0,vl0", "vl = vl0");
         }
@@ -1034,13 +1046,16 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
         if(nloop > 1 /*&& iijj%vl0==0*/ ){
             auto comment="cnt=ii*jj= "+jitdec(ii)+"*"+jitdec(jj)+" to 1 by "+jitdec(vl0);
             auto ops = opLoadregStrings(iijj);
-            if(ops.lea.empty() && ops.log.empty() && ops.shl.empty() && ops.ari.empty()){
-                fp.ins(multiReplace("OUT", "cnt", choose(ops)));
+            if(ops.one_op()){
+                fp.ins(ops.choose());                   // prefer 1-op fast load
             }else{
-                fp.ins("mulu cnt, ii,jj", comment);
+                // cnt is a state register, that must be re-initialized always.
+                // so if ii and jj disappear, we can no longer initialize cnt
+                // with a single multiply
+                fp.ins("mulu cnt, ii,jj", comment);     // over 1-op multiply
             }
         }
-        fp.rcom("ii and jj regs now reusable");
+        //fp.rcom("ii and jj regs now reusable");
 
         if( have_jjMODvl_reset ){
             //fp.ins("lea jjovl,"+jitdec(jj/vl),      "jjovl = jj/vl = "+jitdec(jj)+"/"+jitdec(vl));
@@ -1058,9 +1073,8 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
             }
         }
 
-        cout<<" ********************** VECHASH VECHASH *********************"<<endl;
-        // NOTE: fd is the parent but fp is where the code "should" really appear
-        //       I think.   --- how to attache scope_parent concept to AsmFmtCols?
+        // fd can move upward, but fp init must occur immediately before the loop code.
+        // So vechash begin attaches to fd !
         if(have_sq)
             VecHash2::kern_asm_begin(fd,fp, "sq");
         else

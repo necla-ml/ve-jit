@@ -94,3 +94,7 @@ dllvebug[0-9]
 dllbuild-veb
 dllbuild-x86b
 [a-z].log
+x.log
+mk.log
+**mk*.log
+**x.log
