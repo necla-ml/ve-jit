@@ -20,6 +20,7 @@ OBJDUMP:=objdump
 OBJCOPY:=objcopy
 SHELL:=/bin/bash
 CFLAGS:=-O2 -g2 -pthread
+CFLAGS+=-Wall -Werror
 CXXFLAGS:=$(CFLAGS) -std=c++11
 LIBVELI_TARGETS:=libveli-x86.a
 LIBJIT1_TARGETS:=libjit1-x86.a libjit1-x86.so
@@ -424,9 +425,9 @@ jitpage-x86.o: jitpage.c jitpage.h
 jitpage-x86.lo: jitpage.c jitpage.h
 	g++ $(CXXFLAGS) -fPIC -O2 -c $< -o $@ -ldl
 cblock-x86.o: cblock.cpp cblock.hpp
-	g++    -Wall -g2 -std=c++11 -c $< -o $@
+	g++ ${CXXFLAGS} -g2 -std=c++11 -c $< -o $@
 cblock-x86.lo: cblock.cpp cblock.hpp
-	g++ -fPIC -Wall -g2 -std=c++11 -c $< -o $@
+	g++ ${CXXFLAGS} -fPIC -c $< -o $@
 dllbuild-x86.o: dllbuild.cpp dllbuild.hpp
 	g++ -o $@ $(CXXFLAGS) -Wall -Werror -c $<
 

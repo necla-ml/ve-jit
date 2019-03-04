@@ -113,7 +113,7 @@ void test_loadreg(char const* const cmd, unsigned long const parm, int const opt
             //             so if(isI), then sext7 is the integer "I" value
             bool isM = isMval(parm); // M : (m)B 0<=m<=63 B=0|1 "m high B's followed by not-B's"
             bool is31bit = ( (parm&0x7fffFFFF) == parm );
-            bool is32bit = ( (parm&0xffffFFFF) == parm );
+            //bool is32bit = ( (parm&0xffffFFFF) == parm );
             bool isSext32 = (hi==0xffffFFFFF);
             assert( isI == ((int64_t)parm == sext7) ); // equiv condition
 
