@@ -54,9 +54,8 @@ std::string prgiFoo(uint64_t start)
     prog.lcom(STR(__FUNCTION__) " (i="+jithex(start)+" = "+jitdec(start));
     string func("Foo");
     if(1){ // if you need relative addressing ...
-        prog
 #if 0
-            .def("STR0(...)", "#__VA_ARGS__")
+        prog.def("STR0(...)", "#__VA_ARGS__")
             .def("STR(...)",  "STR0(__VA_ARGS__)")
             .def("CAT(X,Y)", "X##Y")
             .def("FN",func)             // func name (characters)
@@ -65,24 +64,27 @@ std::string prgiFoo(uint64_t start)
             .def("SI","%s0",            "input value")
             .def("ALG","%s1",           "alg modifier [rarely]")
             .def("BP","%s2",            "internal base pointer for const 'here' data")
+            ;
 #endif
             // prgiFoo tests have real outputs:
-            .def("OUT","%s3",           "output value")
+        prog.def("OUT","%s3",           "output value")
             .def("OUT2","%s4",          "2nd output [sometimes]")
             .def("VOUT","%v0",          "vector outputs")
             .def("VOUT2","%v1",         " Ex. loop_init(ii,jj)-->vl + 2 vectors?")
+            ;
             // veliFoo tests have 
             //.def("SE","%s2", "error output")
             //.def("SO","%s3", "other output (code path? secondary output?)")
             // all can use tmp scalar registers (that are in VECLOBBER list of wrpiFoo.cpp) 
-            .def("T0","%s40")
+        prog.def("T0","%s40")
             .def("T1","%s41") // etc
             // and some vector registers (also in VECLOBBER?)
             .def("V1","%V1")  // etc
             // macros for relocatable branching
             .def("REL(YOURLABEL)", "L(YOURLABEL) - L(BASE)(,BP)", "relocatable address of 'here' data")
+            ;
             // The following is needed if you use branches
-            .ins("sic   BP","%s1 is icbase, used as base ptr")
+        prog.ins("sic   BP","%s1 is icbase, used as base ptr")
             .lab("L(BASE)")     // this label is reserved
             // Here is an example branch
             .ins("b REL(USELESS)","demonstrate a useless branch")
@@ -90,8 +92,9 @@ std::string prgiFoo(uint64_t start)
             .ins() // blank line
             .com("SNIPPET START")
             .com("YOUR CODE")
+            ;
             // add more core code to prog, %s0 is the input, output|error-->%s2,...
-            .ins()
+        prog.ins()
             .com("or OUT, 0,(0)1",      "prgIFoo output")
             //.com("or " SE ",0,... veliFoo logic test error detected")
             //
@@ -100,8 +103,9 @@ std::string prgiFoo(uint64_t start)
             .com("SNIPPET END")
             .ins("b.l (,%lr)",          "return (no epilogue)")
             .ins()
+            ;
             // here is an example of storing some const data in the executable page
-            .lab("L(DATA)")
+        prog.lab("L(DATA)")
             .lab("L(szstring)")
             .ins(".byte L(strend) - L(strstart)", "asciz data length")
             .lab("L(strstart)")

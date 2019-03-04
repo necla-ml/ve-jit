@@ -118,6 +118,81 @@ Set init_tvals(){
     //     instruction type for the first "lea" (lo 32bit) load.
     return targ;
 }
+void emit_defines(AsmFmtCols& prog, std::string func){
+    prog.def("STR0(...)", "#__VA_ARGS__");
+    prog.def("STR(...)",  "STR0(__VA_ARGS__)");
+    prog.def("CAT(X,Y)", "X##Y");
+    prog.def("FN",func);                // func name (characters);
+    prog.def("FNS", "\""+func+"\"");    // quoted-string func name;
+    prog.def("L(X)", "CAT("+func+"_,X)");
+    prog.def("SI","%s0",            "input value");
+    prog.def("BP","%s1",            "base JitPage address");
+    // macros for relocatable branching
+    prog.def("REL(YOURLABEL)", "L(YOURLABEL)-L(BASE)(,BP)", "relocatable address of 'here' data");
+    // The following is needed if you use branches
+    prog.ins("sic   BP","%s1 is *_BASE, used as base ptr");
+    prog.lab("L(BASE)");                // this label is reserved;
+    // Here is an example branch
+    //.ins("b REL(USELESS)","demonstrate a useless branch")
+    //.lab("L(USELESS)")
+    prog.ins(); // blank line;
+    prog.com("SNIPPET START");
+    prog.def("INP", "%s0", "input: 0 <= test case number < tvals.size()");
+    // unused .def("MAXIN", "%s1")
+    prog.def("ERR", "%s2",          "output 0 if input in range");
+    prog.def("OUT","%s3",           "output value");
+    prog.def("OTHER","%s4",         "other output");
+    prog.def("T0","%s40",           "tmp reg");
+}
+void emit_argcheck(AsmFmtCols& prog, size_t const tvals_size){
+    prog.ins("bge.l INP, REL(OK1)");
+    prog.ins("lea ERR,-1");
+    prog.ins("lea OUT,0");
+    prog.ins("b.l (,%lr)", "unconditional return, error=-1");
+    prog.lab("L(OK1)");
+    prog.ins();
+    // VE expr size error
+    OpLoadregStrings ops = opLoadregStrings( tvals_size );
+    assert(!ops.lea.empty());
+    prog.ins(ops.lea,"load tvals.size()="+jitdec(tvals_size));
+    prog.ins("brlt.l.t INP,OUT, L(OK2)","test case < tvals.size()?");
+    prog.ins("lea ERR,+1");
+    prog.ins("lea OUT,0");
+    prog.ins("b.l (,%lr)", "error 2, INP test case too high, error=+1");
+    prog.lab("L(OK2)");
+    prog.ins();
+}
+void emit_jumptable_header(AsmFmtCols& prog){
+    // INP was in open range [ 0, tvals.size() )
+    prog.ins("lea ERR,0");
+    prog.ins("lea OUT,0");
+    prog.ins();
+    //
+    //  each case is like:
+    //     jit code to load %s3 with tvals[i]
+    //     b.l (,%lr) # return
+    //     if( jit code was a single-instruction ) NOP
+    //
+    //  so jump addr is CASE0 + INP * 24
+    prog.lcom("JUMP TABLE for FIXED-SIZE code entries (3 ops ~ 24 bytes)");
+    prog.ins("lea T0,24");
+    prog.ins("mulu.l T0, INP,T0", "byte offset of IN'th test");
+    // branch can only accept <disp>(,<reg>)  "AS" format, so
+    // we first calculate the absolute address into T0 (ASX format ok for LEA)
+    // and then branch to that absolute address
+    //
+    // WORKING >= 5 will attempt the "switch" via computed-goto ...
+    // actually full ASX format IS allowed for bsic !!!
+    //
+    // and returns OTHER = absolute address of code for INP'th test
+    prog.lcom("If not returning test addr in OTHER, could execute the branch as just");
+    prog.lcom("      bsic T0, L(CASE_0)-L(BASE)(T0,BP)  #Sx=IC+8; IC=Sy+Sz+sext(D)");
+    prog.ins("lea OTHER, L(CASE_0)-L(BASE)(,BP)", "abs_address of 0'th test");
+    prog.ins("addu.l OTHER,OTHER,T0", "abs_addr of INP'th test");
+    prog.rcom("OTHER=addr of INP'th test case");
+    prog.ins("b.l (,OTHER)", "branch to absolute address,");
+    prog.ins();
+}
 /**construct a program that assembles the snippets into
  * a simple const-size \e switch-case test, where input
  * in range 0..tvals.size()-1 returns tvals[i] loaded
@@ -127,174 +202,26 @@ std::string getBigTest(SET const& tvals){
     // see veliFoo.cpp for suggestions about macros
     AsmFmtCols prog("");
     prog.lcom(STR0(__FUNCTION__) " (tvals.size() = "+jitdec(tvals.size()));
-    string func("LRBIG");
-    OpLoadregStrings ops;
-    prog
-        // we use labels...
-        .def("STR0(...)", "#__VA_ARGS__")
-        .def("STR(...)",  "STR0(__VA_ARGS__)")
-        .def("CAT(X,Y)", "X##Y")
-        .def("FN",func)             // func name (characters)
-        .def("FNS", "\""+func+"\"") // quoted-string func name
-        .def("L(X)", "CAT("+func+"_,X)")
-        .def("SI","%s0",            "input value")
-        .def("BP","%s1",            "base JitPage address")
-        // macros for relocatable branching
-        .def("REL(YOURLABEL)", "L(YOURLABEL)-L(BASE)(,BP)", "relocatable address of 'here' data")
-        // The following is needed if you use branches
-        .ins("sic   BP","%s1 is *_BASE, used as base ptr")
-        .lab("L(BASE)")     // this label is reserved
-        // Here is an example branch
-        //.ins("b REL(USELESS)","demonstrate a useless branch")
-        //.lab("L(USELESS)")
-        .ins() // blank line
-        .com("SNIPPET START");
-    prog.def("INP", "%s0", "input: 0 <= test case number < tvals.size()")
-        // unused .def("MAXIN", "%s1")
-        .def("ERR", "%s2",          "output 0 if input in range")
-        .def("OUT","%s3",           "output value")
-        .def("OTHER","%s4",         "other output")
-        .def("T0","%s40",           "tmp reg");
-#ifndef WORKING
-#define WORKING 0 // OK, after ? incremental steps I think the bugs were fixed :(
-#endif
-#if WORKING==0
-    // debug: return ERR=OUT=666 always
-    prog.ins("lea ERR,666");
-    prog.ins("lea OUT,666");
-    prog.ins("b.l (,%lr)", "return without doing anything useful");
-#elif WORKING==1
-    // debug: return ERR=OUT=-1 if IN is negative (test branches) else +1
-    prog.ins("lea ERR,-1");
-    prog.ins("lea OUT,-1");
-    prog.ins("blt.l INP, (,%lr)", "conditional return");
-    prog.ins("lea ERR,+1");
-    prog.ins("lea OUT,+1");
-    prog.ins("b.l (,%lr)", "unconditional return");
-#elif WORKING==2 // same but now using a relative address
-    // debug: return ERR=OUT=-1 if IN is negative (test branches) else +1
-    prog.ins("bge.l INP, REL(OK1)");
-    prog.ins("lea ERR,-1");
-    prog.ins("lea OUT,-1");
-    prog.ins("b.l (,%lr)", "unconditional return");
-    prog.lab("L(OK1)");
-    prog.ins("lea ERR,+1");
-    prog.ins("lea OUT,+1");
-    prog.ins("b.l (,%lr)", "unconditional return");
-#elif WORKING==3 // test 0 <= INP < tvals.size() (ret -1 | 0 | +1 only)
-    // ve BC, BCS, BCF load **absolute** address into IC
-    prog.ins("bge.l INP, REL(OK1)", "jump ABSOLUTE")
-        .ins("lea ERR,-1")
-        .ins("lea OUT,-1")
-        .ins("b.l (,%lr)", "return unconditional, error -1")
-        .lab("L(OK1)")
-        .ins();
-    ops = opLoadregStrings( tvals.size() ); // all these set value of OUT, maybe use T0
-    assert(!ops.lea.empty());
-    prog.ins(ops.lea,"load tvals.size()="+jitdec(tvals.size()))
-        // ve BCR op **adds** an offset to current IC
-        // nas replace L(OK2) with it relative address automatically.
-        .ins("brlt.l.t INP,OUT, L(OK2)","test and jump RELATIVE")
-        .ins("lea ERR,+1")
-        .ins("lea OUT,+1")
-        .ins("b.l (,%lr)", "error +1, INP test case too high")
-        .lab("L(OK2)")
-        .ins();
-    prog.ins("lea ERR,0")
-        .ins("lea OUT,0")
-        .ins("b.l (,%lr)", "error 0, INP in range")
-        .ins();
-#else // WORKING>=4
+    // we use labels...
+    string funcname("LRBIG");
+    emit_defines(prog, funcname);
     // defines, comments done...
-    prog.ins("bge.l INP, REL(OK1)")
-        .ins("lea ERR,-1")
-        .ins("lea OUT,0")
-        .ins("b.l (,%lr)", "unconditional return, error=-1")
-        .lab("L(OK1)")
-        .ins();
-    ops = opLoadregStrings( tvals.size() ); // all these set value of OUT, maybe use T0
-    assert(!ops.lea.empty());
-    prog.ins(ops.lea,"load tvals.size()="+jitdec(tvals.size()))
-        .ins("brlt.l.t INP,OUT, L(OK2)","test case < tvals.size()?")
-        .ins("lea ERR,+1")
-        .ins("lea OUT,0")
-        .ins("b.l (,%lr)", "error 2, INP test case too high, error=+1")
-        .lab("L(OK2)")
-        .ins();
-    // INP was in open range [ 0, tvals.size() )
-    prog.ins("lea ERR,0")
-        .ins("lea OUT,0")
-        .ins();
-    //
-    //  each case is like:
-    //     jit code to load %s3 with tvals[i]
-    //     b.l (,%lr) # return
-    //     if( jit code was a single-instruction ) NOP
-    //
-    //  so jump addr is CASE0 + INP * 24
-    prog.lcom("JUMP TABLE for FIXED-SIZE code entries (3 ops ~ 24 bytes)")
-        .ins("lea T0,24")
-        .ins("mulu.l T0, INP,T0", "byte offset of IN'th test");
-        // branch can only accept <disp>(,<reg>)  "AS" format, so
-        // we first calculate the absolute address into T0 (ASX format ok for LEA)
-        // and then branch to that absolute address
-#if WORKING==4 // return the absolute address only (do not branch into the table)
-    prog.ins("lea OTHER, L(CASE_0)-L(BASE)(,BP)", "calc absolute address of 0'th test")
-        .ins("addu.l OTHER,OTHER,T0", "absolute address of test code")
-        // oh. nas says can't use index AND displacement ??
-        .ins("b.l (,%lr)", "unconditional return")
-        .lab("L(CASE_0)")
-        .lcom("never get here")
-        .ins();
-#elif WORKING >= 5
-    //
-    // WORKING >= 5 will attempt the "switch" via computed-goto ...
-    // actually full ASX format IS allowed for bsic !!!
-    //
-#if 1 // OK
-    // and returns OTHER = absolute address of code for INP'th test
-    prog.lcom("If not returning test addr in OTHER, could execute the branch as just")
-        .lcom("      bsic T0, L(CASE_0)-L(BASE)(T0,BP)  #Sx=IC+8; IC=Sy+Sz+sext(D)");
-    prog.ins("lea OTHER, L(CASE_0)-L(BASE)(,BP)", "abs_address of 0'th test")
-        .ins("addu.l OTHER,OTHER,T0", "abs_addr of INP'th test")
-        .rcom("OTHER=addr of INP'th test case")
-        .ins("b.l (,OTHER)", "branch to absolute address,")
-        .ins();
-#elif 0
-    prog.ins("lea OTHER, L(CASE_0)-L(BASE)(,BP)", "calc absolute address of 0'th test")
-        .rcom("OTHER=addr of CASE_0")
-        .ins("bsic T0, 0(T0,OTHER)", "bsic accepts ASX address D(Sy,Sz)")
-        .ins();
-#else
-    prog.ins("bsic T0, L(CASE_0)-L(BASE)(T0,BP)", "Sx=IC+8; IC=Sy+Sz+sext(D)");
-
-#endif
+    emit_argcheck(prog, tvals.size());
+    emit_jumptable_header(prog);
     // oh. nas says can't use index AND displacement ??
     //.ins("bsic.l OTHER, 8(T0,OTHER)", "branch to absolute address,")
     // note that if you remember the OTHER return value, you can
     // branch directly to that case again.
+    //
+    // all these set value of OUT, maybe use T0
     prog.lab("L(CASE_0)");
     //
     // Now populate tvals.size() test cases to load OUT with some value.
     //
-#if WORKING==5
-    for(uint64_t i=0U; i<tvals.size(); ++i){
-        // Test the switch-via-computed-go-to:
-        //   every test case 'i' returns exactly 'i'.  Always.
-        //   valid range is 31-bit, +ve, so just use 'lea' always.
-        // opLoadregStrings(i) returns a choice of impls,
-        ops = opLoadregStrings(i);  // all these set value of OUT, maybe use T0
-        assert( !ops.lea.empty() );
-        prog.ins( ops.lea, "return i="+jitdec(i)+" 1-op lea");
-        prog.ins("b.l (,%lr)", "return from test case "+jitdec(i));
-        prog.ins("nop");
-        // call with INP(%s0) in range 0..tvals.size()
-        // should return ERR(%s2) == 0 and OUT(%s3) == INP(%s0)
-    }
-#elif WORKING>=6
     int64_t i=0;
     // TODO: sort the tvals in increasing order, then loop...
     //enum {Lea, Log, Ari, Shl, Lea2};
+    OpLoadregStrings ops;
     for(auto t: tvals){ // .. in some unknown REPRODUCIBLE order (it is a hash set)
         // Now (at long last) every test case will execute the "optimal"
         // way to load INP=tvals[i] into the OUT register.
@@ -303,52 +230,45 @@ std::string getBigTest(SET const& tvals){
         // favoring     lea > log > shl > ari > lea2
         // Here let's mix it up a bit more...
         string one_op = (
-                    !ops.log.empty()? ops.log
-                    : !ops.shl.empty()? ops.shl
-                    : !ops.lea.empty()? ops.lea
-                    : !ops.ari.empty()? ops.ari
-                    : string("") );
+                !ops.log.empty()? ops.log
+                : !ops.shl.empty()? ops.shl
+                : !ops.lea.empty()? ops.lea
+                : !ops.ari.empty()? ops.ari
+                : string("") );
         if(!one_op.empty()){
             string comment = "case i="+jitdec(i)+" 1-op load of "+hexdec(t);
             cout<<comment<<endl;
-            prog.ins()
-                .com(comment)
-                .ins( one_op )
-                .ins("b.l (,%lr)", "return from case "+jitdec(i))
-                .ins("nop");
+            prog.ins();
+            prog.com(comment);
+            prog.ins( one_op );
+            prog.ins("b.l (,%lr)", "return from case "+jitdec(i));
+            prog.ins("nop");
         }else{
             string two_op = ops.lea2;
             assert( !two_op.empty() );
             string comment = "case i="+jitdec(i)+" 2-op load of "+hexdec(t);
             cout<<comment<<endl;
-            prog.ins()
-                .com(comment)
-                .ins( two_op )
-                .ins("b.l (,%lr)", "return from case "+jitdec(i));
+            prog.ins();
+            prog.com(comment);
+            prog.ins( two_op );
+            prog.ins("b.l (,%lr)", "return from case "+jitdec(i));
         }
         ++i;
     }
-#else
-#error "WORKING test case not implemented?"
-#endif
-#endif
-#endif
     //
-
-    prog.com("SNIPPET END")
-        .ins("b.l (,%lr)",          "return (no epilogue)")
-        .ins()
+    prog.com("SNIPPET END");
+    prog.ins("b.l (,%lr)",          "return (no epilogue)");
+    prog.ins();
         // here is an example of storing some const data in the executable page
-        .lab("L(DATA)")
-        .lab("L(szstring)")
-        .ins(".byte L(strend) - L(strstart)", "asciz data length")
-        .lab("L(strstart)")
-        .ins(".ascii FNS")
-        .lab("L(strend)")
-        .ins(".ascii \""+jitdec(WORKING)+"\"", "WORKING")
+    prog.lab("L(DATA)");
+    prog.lab("L(szstring)");
+    prog.ins(".byte L(strend) - L(strstart)", "asciz data length");
+    prog.lab("L(strstart)");
+    prog.ins(".ascii FNS");
+    prog.lab("L(strend)");
+    prog.ins(".ascii \""+jitdec(WORKING)+"\"", "WORKING");
         //.undef("FN").undef("FNS").undef("L")
         //.ins(".align 3" "; " L(more) ":", "if you want more code")
-        ;
     std::string program = prog.flush_all(); // program, + accumulated #undef s
     if(1){ // verbose ?
         cout<<__FUNCTION__<<" --> program:\n"
