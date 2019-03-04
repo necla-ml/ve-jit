@@ -70,7 +70,8 @@ TARGETS=asmkern0.asm libjit1.a libjit1-x86.a asmfmt-ve\
 #CXX:=nc++
 CFLAGS:=-O2 -g2
 CFLAGS+=-Wall -Werror
-CXXFLAGS:=$(CFLAGS) -std=c++11
+#CXXFLAGS:=$(CFLAGS) -std=c++11
+CXXFLAGS:=$(CFLAGS) -std=gnu++11
 VE_EXEC:=ve_exec
 OBJDUMP:=nobjdump
 OBJCOPY:=nobjcopy

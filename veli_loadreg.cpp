@@ -41,6 +41,10 @@
 #define STR0(...) #__VA_ARGS__
 #define STR(...) STR0(__VA_ARGS__)
 
+#ifndef WORKING
+#define WORKING 6
+#endif
+
 using namespace std;
 
 // I began with unordered_set, but it is vital to reproduce the order, so
@@ -193,6 +197,35 @@ void emit_jumptable_header(AsmFmtCols& prog){
     prog.ins("b.l (,OTHER)", "branch to absolute address,");
     prog.ins();
 }
+void emit_case(AsmFmtCols& prog, uint64_t case_num, uint64_t const t){
+    auto ops = opLoadregStrings(t);
+    string one_op = (
+            !ops.log.empty()? ops.log
+            : !ops.shl.empty()? ops.shl
+            : !ops.lea.empty()? ops.lea
+            : !ops.ari.empty()? ops.ari
+            : string("") );
+    string is = jitdec(case_num);
+    string ts = hexdec(t);
+    if(!one_op.empty()){
+        string comment = "case i="+is+" 1-op load of "+ts;
+        cout<<comment<<endl;
+        prog.ins();
+        prog.com(comment);
+        prog.ins( one_op );
+        prog.ins("b.l (,%lr)", "return from case "+is);
+        prog.ins("nop");
+    }else{
+        string two_op = ops.lea2;
+        assert( !two_op.empty() );
+        string comment = "case case_num="+is+" 2-op load of "+ts;
+        cout<<comment<<endl;
+        prog.ins();
+        prog.com(comment);
+        prog.ins( two_op );
+        prog.ins("b.l (,%lr)", "return from case "+is);
+    }
+}
 /**construct a program that assembles the snippets into
  * a simple const-size \e switch-case test, where input
  * in range 0..tvals.size()-1 returns tvals[i] loaded
@@ -218,41 +251,15 @@ std::string getBigTest(SET const& tvals){
     //
     // Now populate tvals.size() test cases to load OUT with some value.
     //
-    int64_t i=0;
     // TODO: sort the tvals in increasing order, then loop...
-    //enum {Lea, Log, Ari, Shl, Lea2};
-    OpLoadregStrings ops;
+    uint64_t i=0;
     for(auto t: tvals){ // .. in some unknown REPRODUCIBLE order (it is a hash set)
         // Now (at long last) every test case will execute the "optimal"
         // way to load INP=tvals[i] into the OUT register.
-        ops = opLoadregStrings(t);
         // If we wanted to use min ops we could use     prgiLoadreg  (returns 1 string)
         // favoring     lea > log > shl > ari > lea2
         // Here let's mix it up a bit more...
-        string one_op = (
-                !ops.log.empty()? ops.log
-                : !ops.shl.empty()? ops.shl
-                : !ops.lea.empty()? ops.lea
-                : !ops.ari.empty()? ops.ari
-                : string("") );
-        if(!one_op.empty()){
-            string comment = "case i="+jitdec(i)+" 1-op load of "+hexdec(t);
-            cout<<comment<<endl;
-            prog.ins();
-            prog.com(comment);
-            prog.ins( one_op );
-            prog.ins("b.l (,%lr)", "return from case "+jitdec(i));
-            prog.ins("nop");
-        }else{
-            string two_op = ops.lea2;
-            assert( !two_op.empty() );
-            string comment = "case i="+jitdec(i)+" 2-op load of "+hexdec(t);
-            cout<<comment<<endl;
-            prog.ins();
-            prog.com(comment);
-            prog.ins( two_op );
-            prog.ins("b.l (,%lr)", "return from case "+jitdec(i));
-        }
+        emit_case(prog, i, t);
         ++i;
     }
     //

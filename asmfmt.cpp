@@ -99,12 +99,14 @@ AsmFmtCols::AsmFmtCols()
     a->fill(' ');
 }
 AsmFmtCols::AsmFmtCols( string const& fname )
-    : a(new ostringstream()), written(false),
-    of(fname.size()? new ofstream(fname, std::ios::out): (std::ofstream*)nullptr)
-      , stack_undefs(), stack_defs(), parent(nullptr)
+    : a(new ostringstream()), written(false)
+      , of(nullptr), stack_undefs(), stack_defs(), parent(nullptr)
 {
     //of->rdbuf()->pubsetbuf(charBuffer,BUFFER_SIZE); // opt
-    if(of) (*of) <<"// auto-generated via AsmFmtCols!\n";
+    if(fname.size()){
+        of = new ofstream(fname, std::ios::out);
+        (*of) <<"// auto-generated via AsmFmtCols!\n";
+    }
     (*a) << left;
     a->fill(' ');
 }
@@ -624,7 +626,87 @@ void ve_set_base_pointer( AsmFmtCols & a, std::string bp/*="%s34"*/, std::string
         .rcom("   lab(\"L(JumpAddr)\")")
         ;
 }
-
+/** VE lea logic */
+static void opLoadreg_lea(OpLoadregStrings& ret, uint64_t const parm){
+    uint32_t const hi = ((parm >> 32) & 0xffffFFFF); // unsigned shift-right
+    uint32_t const lo = (uint32_t)parm;              // 32 lsbs (trunc)
+    bool is31bit = ( (parm&(uint64_t)0x000000007fffFFFF) == parm );
+    //bool is32bit = ( (parm&(int64_t) 0x00000000ffffFFFF) == parm );
+    bool hiOnes  = ( (int)hi == -1 );
+    if(is31bit){
+        //KASE(1,"lea 31-bit",parm == (parm&0x3fffFFFF));
+        ret.lea="lea OUT, "+(lo<=1000000? jitdec(lo): jithex(lo))
+            +"# load: 31-bit";
+    }else if((int)lo < 0 && hiOnes){
+        assert( (int64_t)parm < 0 ); assert((int)lo < 0);
+        //KASE(2,"lea 32-bit -ve",parm == (uint64_t)(int64_t)(int32_t)lo);
+        ret.lea="lea OUT, "+((int64_t)parm >= -100000? jitdec((int32_t)lo): jithex(lo))
+            +"# load: sext(32-bit)";
+    }else if(lo==0){
+        //KASE(3,"lea.sl hi only",lo == 0);
+        ret.lea="lea.sl OUT, "+jithex(hi)+"# load: hi-only";
+    }
+    //
+    // 2-instruction lea is always possible (TODO mixed instruction types)
+    //
+    //uint64_t tmplo = (int64_t)(int32_t)lo;
+    // lea.sl OUT, <hi or hi+1> (,TMP)
+    //        -ve lo will fill hi with ones i.e. -1
+    //        so we add hi+1 to MSBs to restore desired sums
+    uint64_t dd = ((int32_t)lo>=0? hi: hi+1);
+    //uint64_t tmp2 = tmphi << 32;    // (sext(D,64)<<32)
+    //uint64_t out = tmp2 + tmplo;     // lea.sl lea_out, tmphi(,lea_out);
+    //assert( parm == out );
+    // Changed:  do not use a T0 tmp register
+    string comment("# ");
+    comment += (dd!=hi?"Xld ":" ld ")+jithex(parm);
+    //ret.lea2="lea OUT, "+jithex(lo)+comment; // VE expr size error?
+    ret.lea2 = "lea OUT, ";
+    ret.lea2 += jithex(lo);
+    ret.lea2 += comment;
+    ret.lea2 += " ; lea.sl OUT, "+jithex(dd)+"(,OUT)";
+}
+static void opLoadreg_log(OpLoadregStrings& ret, uint64_t const parm){
+    /** VE bit ops logic */
+    uint64_t const lo7 = (parm & 0x7f);              // 7 lsbs (trunc)
+    int64_t  const sext7 = (int64_t)(lo7<<57) >> 57; // 7 lsbs (trunc, sign-extend)
+    // simple cases: I or M zero
+    bool isI = (int64_t)parm >= -64 && (int64_t)parm <= 63; // I : 7-bit immediate
+    bool isM = isMval(parm); // M : (m)B 0<=m<=63 B=0|1 "m high B's followed by not-B's"
+    if(isI){
+        //KASE(4,"or OUT,"+jitdec(sext7)+",(0)1", parm==sext7);
+        ret.log="or OUT, "+jitdec(sext7)+",(0)1 # load: small I";
+    }else if(isM){
+        //KASE(5,"or OUT,0,"+jitimm(parm), isMval(parm));
+        ret.log="or OUT, 0,"+jitimm(parm)+"# load: (M){0|1}";
+    }
+    //if(isMval(parm&~0x3f)){...}
+    // KASE 6 subsumed by KASE 9 (equivalent I, M)
+    else if(isMval(parm|0x3f)){
+        assert( isMval(parm^sext7) ); // more general, but this is more readable
+        uint64_t const ival = (~parm &0x3f);
+        uint64_t const mval = parm|0x3f;
+        //KASE(7,"xor OUT, ~parm&0x3f "+jithex(ival)+", parm|0x3f "+jitimm(mval),
+        //        parm == (ival ^ mval) && isIval(ival) && isMval(mval));
+        ret.log="xor OUT, ";
+        ret.log += jithex(ival);
+        ret.log += ",";
+        ret.log += jitimm(mval);
+        ret.log += "# load: xor(I,M)";
+    }else if(isMval(parm^sext7) ){ // xor rules don't depend on sign of lo7
+        // if A = B^C, then B = A^C and C = B^A (Generally true)
+        //int64_t const ival = sext7;
+        uint64_t const mval = parm^sext7;
+        //KASE(9,"xor OUT, "+jithex(ival)+","+jitimm(mval),
+        //        parm == (ival ^ mval) && isIval(ival) && isMval(mval));
+        ret.log="xor OUT, ";
+        ret.log += jitdec(sext7);
+        ret.log += ",";
+        ret.log += jitimm(mval);
+        ret.log += "# load: xor(I,M)";
+    }
+    if(!ret.log.empty()) ret.log.append(" --> "+jithex(parm));
+}
 /** Find possible 64-bit VE scalar register load instructions.
  * \return instruction string[s] to load a 64-bit scalar VE register.
  * You can supply such strings into AsmFmtCols for nice formatting.
@@ -633,75 +715,9 @@ void ve_set_base_pointer( AsmFmtCols & a, std::string bp/*="%s34"*/, std::string
 OpLoadregStrings opLoadregStrings( uint64_t const parm )
 {
     OpLoadregStrings ret;
-    uint32_t const hi = ((parm >> 32) & 0xffffFFFF); // unsigned shift-right
-    uint32_t const lo = (uint32_t)parm;              // 32 lsbs (trunc)
-    uint64_t const lo7 = (parm & 0x7f);              // 7 lsbs (trunc)
-    int64_t  const sext7 = (int64_t)(lo7<<57) >> 57; // 7 lsbs (trunc, sign-extend)
+    opLoadreg_lea(ret, parm); // get lea and lea2 strings
+    opLoadreg_log(ret, parm); // get or/xor (logical) loads
 
-    { // lea logic
-        bool is31bit = ( (parm&(uint64_t)0x000000007fffFFFF) == parm );
-        //bool is32bit = ( (parm&(int64_t) 0x00000000ffffFFFF) == parm );
-        bool hiOnes  = ( (int)hi == -1 );
-        if(is31bit){
-            //KASE(1,"lea 31-bit",parm == (parm&0x3fffFFFF));
-            ret.lea="lea OUT, "+(lo<=1000000? jitdec(lo): jithex(lo))
-                +"# load: 31-bit";
-        }else if((int)lo < 0 && hiOnes){
-            assert( (int64_t)parm < 0 ); assert((int)lo < 0);
-            //KASE(2,"lea 32-bit -ve",parm == (uint64_t)(int64_t)(int32_t)lo);
-            ret.lea="lea OUT, "+((int64_t)parm >= -100000? jitdec((int32_t)lo): jithex(lo))
-                +"# load: sext(32-bit)";
-        }else if(lo==0){
-            //KASE(3,"lea.sl hi only",lo == 0);
-            ret.lea="lea.sl OUT, "+jithex(hi)+"# load: hi-only";
-        }
-        //
-        // 2-instruction lea is always possible (TODO mixed instruction types)
-        //
-        //uint64_t tmplo = (int64_t)(int32_t)lo;
-        // lea.sl OUT, <hi or hi+1> (,TMP)
-        //        -ve lo will fill hi with ones i.e. -1
-        //        so we add hi+1 to MSBs to restore desired sums
-        uint64_t dd = ((int32_t)lo>=0? hi: hi+1);
-        //uint64_t tmp2 = tmphi << 32;    // (sext(D,64)<<32)
-        //uint64_t out = tmp2 + tmplo;     // lea.sl lea_out, tmphi(,lea_out);
-        //assert( parm == out );
-        // Changed:  do not use a T0 tmp register
-        string comment("# ");
-        comment += (dd!=hi?"Xld ":" ld ")+jithex(parm);
-        ret.lea2="lea OUT, "+jithex(lo)+comment; // VE expr size error?
-        ret.lea2+=" ; lea.sl OUT, "+jithex(dd)+"(,OUT)";
-    }
-    { // bit ops logic
-        // simple cases: I or M zero
-        bool isI = (int64_t)parm >= -64 && (int64_t)parm <= 63; // I : 7-bit immediate
-        bool isM = isMval(parm); // M : (m)B 0<=m<=63 B=0|1 "m high B's followed by not-B's"
-        if(isI){
-            //KASE(4,"or OUT,"+jitdec(sext7)+",(0)1", parm==sext7);
-            ret.log="or OUT, "+jitdec(sext7)+",(0)1 # load: small I";
-        }else if(isM){
-            //KASE(5,"or OUT,0,"+jitimm(parm), isMval(parm));
-            ret.log="or OUT, 0,"+jitimm(parm)+"# load: (M){0|1}";
-        }
-        //if(isMval(parm&~0x3f)){...}
-        // KASE 6 subsumed by KASE 9 (equivalent I, M)
-        else if(isMval(parm|0x3f)){
-            assert( isMval(parm^sext7) ); // more general, but this is more readable
-            uint64_t const ival = (~parm &0x3f);
-            uint64_t const mval = parm|0x3f;
-            //KASE(7,"xor OUT, ~parm&0x3f "+jithex(ival)+", parm|0x3f "+jitimm(mval),
-            //        parm == (ival ^ mval) && isIval(ival) && isMval(mval));
-            ret.log="xor OUT, "+jithex(ival)+","+jitimm(mval)+"# load: xor(I,M)";
-        }else if(isMval(parm^sext7) ){ // xor rules don't depend on sign of lo7
-            // if A = B^C, then B = A^C and C = B^A (Generally true)
-            //int64_t const ival = sext7;
-            uint64_t const mval = parm^sext7;
-            //KASE(9,"xor OUT, "+jithex(ival)+","+jitimm(mval),
-            //        parm == (ival ^ mval) && isIval(ival) && isMval(mval));
-            ret.log="xor OUT, "+jitdec(sext7)+","+jitimm(mval)+"# load: xor(I,M)";
-        }
-        if(!ret.log.empty()) ret.log.append(" --> "+jithex(parm));
-    }
     { // shift left
         // search for an unsigned right-shift that can regenerate parm
         int oksr=0;
@@ -725,7 +741,11 @@ OpLoadregStrings opLoadregStrings( uint64_t const parm )
             if( isMval(mval) ){
                 //KASE(20,"addu.l OUT,"+jitdec(ival)+", "+jitimm(mval),
                 //        parm == ival + mval && isIval(ival) && isMval(mval));
-                ret.ari="addu.l OUT, "+jitdec(ival)+","+jitimm(parm-ival)+"# load: add(I,M)";
+                ret.ari="addu.l OUT, ";
+                ret.ari += jitdec(ival);
+                ret.ari += ",";
+                ret.ari += jitimm(parm-ival);
+                ret.ari += "# load: add(I,M)";
                 break;
             }
         }
@@ -734,7 +754,11 @@ OpLoadregStrings opLoadregStrings( uint64_t const parm )
             if( isMval(mval) ){
                 //KASE(21,"addu.l OUT,"+jitdec(ival)+","+jitimm(mval),
                 //        parm == ival + mval && isIval(ival) && isMval(mval));
-                ret.ari="addu.l OUT, "+jitdec(ival)+","+jitimm(parm-ival)+"# load: add(I,M)";
+                ret.ari="addu.l OUT, ";
+                ret.ari += jitdec(ival);
+                ret.ari += ",";
+                ret.ari += jitimm(parm-ival);
+                ret.ari += "# load: add(I,M)";
                 break;
             }
         }
@@ -747,7 +771,11 @@ OpLoadregStrings opLoadregStrings( uint64_t const parm )
                 //uint64_t out = (uint64_t)ival - (uint64_t)mval;
                 //KASE(22,"subu.l OUT,"+jitdec(ival)+","+jitimm(mval),
                 //        parm == out  && isIval(ival) && isMval(mval));
-                ret.ari="subu.l OUT, "+jitdec(ival)+","+jitimm(mval)+"# load: subu(I,M)";
+                ret.ari="subu.l OUT, ";
+                ret.ari += jitdec(ival);
+                ret.ari += ",";
+                ret.ari += jitimm(mval);
+                ret.ari += "# load: subu(I,M)";
                 break;
             }
         }
@@ -757,7 +785,11 @@ OpLoadregStrings opLoadregStrings( uint64_t const parm )
                 //uint64_t out = (uint64_t)ival - (uint64_t)mval;
                 //KASE(23,"subu.l OUT, "+jitdec(ival)+","+jitimm(mval),
                 //        parm == out  && isIval(ival) && isMval(mval));
-                ret.ari="subu.l OUT, "+jitdec(ival)+","+jitimm(mval)+"# load: subu(I,M)";
+                ret.ari="subu.l OUT, ";
+                ret.ari += jitdec(ival);
+                ret.ari += ",";
+                ret.ari += jitimm(mval);
+                ret.ari += "# load: subu(I,M)";
                 break;
             }
         }
