@@ -1,5 +1,6 @@
 #ifndef CJIT_H
 #define CJIT_H
+#warning "deprecated : see jitpage.h jitpage.c"
 
 #ifdef __cplusplus
 extern "C" {

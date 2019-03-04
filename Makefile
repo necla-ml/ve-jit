@@ -115,7 +115,8 @@ endif
 .PHONY: all-vejit-libs
 all-vejit-libs:
 	./mklibs.sh >& mklibs.log	# writes libs into vejit/lib/
-vejit.tar.gz: jitpage.h intutil.h throw.hpp \
+vejit.tar.gz: jitpage.h intutil.h \
+		intutil.hpp stringutil.hpp throw.hpp \
 		asmfmt_fwd.hpp asmfmt.hpp codegenasm.hpp velogic.hpp \
 		cblock.hpp dllbuild.hpp \
 		asmfmt.cpp cblock.cpp dllbuild.cpp jitpage.c intutil.c \

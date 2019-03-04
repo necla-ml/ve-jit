@@ -13,6 +13,7 @@
 #ifdef JITVVE_UTIL_H
 #error "Please do not mix up old jitve_util.h API with newer jitpage.h API"
 #endif
+#define JIT_DLFUNCS 1
 
 #include <stdint.h> // uint64_t
 #include <stddef.h> // size_t
@@ -91,7 +92,6 @@ extern "C" {
      */
     int strMconst(char *mconst, uint64_t const parm);
 
-#define JIT_DLFUNCS 1
 #if JIT_DLFUNCS
     /** safety-wrapper around dlopen, converting relpath to abspath
      * if necessary.
