@@ -51,9 +51,9 @@ FASTDIV_INLINE uint32_t fastmod_uB(uint32_t const a, uint64_t const M, uint32_t 
     return a - (M*a>>FASTDIV_C)*d;
 }
 #undef FASTDIV_CMAKE
-#undef FASTDIV_C
+//#undef FASTDIV_C
 //#undef FASTDIV_SAFEMAX
-#undef FASTDIV_B
+//#undef FASTDIV_B
 //@}
 
 #undef FASTDIV_INLINE

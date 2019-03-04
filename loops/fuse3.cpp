@@ -378,32 +378,6 @@ std::vector<Vab> ref_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
     }
     return vabs;
 }
-// see https://github.com/lemire/constantdivisionbenchmarks, "lkk" algorithm.
-// Issue #1 comments on 64-bit-only version similar to:
-#define B 21 /* B up to 21 is OK to keep all intermediates in 64-bit range */
-/** *_uB functions were verified for its SAFEMAX (took a while to run).
- * computeM_uB is two ops: divide + increment.  This might be fast enough
- * to precalculate routinely at runtime for use in loops. */
-#define SAFEMAX ((1U<<B)-1U)
-#define C (2*B)
-/* 23 zeros and rest (41 = C-1) ones */
-#define CMASK ((UINT64_C(1)<<C)-1)
-static inline uint64_t constexpr computeM_uB(uint32_t d) {
-    return CMASK / d + 1;
-}
-/** fastdiv_uB computes (a / d) given precomputed M for d>1.
- * \pre a,d < (1<<21). */
-static inline constexpr uint32_t fastdiv_uB(uint32_t const a, uint64_t const M) {
-    return M*a >> C; // 2 ops: mul, shr
-}
-/** fastmod_uB computes (a % d) given precomputed M.
- * Probably nicer to calc. uint64_t D=a/d using fastdiv_uB, and then R=a-D*d.
- * (retain "everythin" in u64 registers).
- * \pre a,d < (1<<21). */
-static inline uint32_t constexpr fastmod_uB(uint32_t const a, uint64_t const M, uint32_t const d) {
-    // ugly with 'lowbits' approach, nicer to just do the fastdiv followed by mul and sub :(
-    return a - (M*a>>C)*d; // 3-4 ops: mul, shr, mul-sub... AND get a/d too (i.e. divmod adds 1 op to the division)
-}
 typedef uint32_t u32;
 typedef int32_t s32;
 typedef uint64_t u64;
@@ -535,7 +509,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
         assert( (uint64_t)1<<jj_shift == (uint64_t)jj );
         cout<<" power of two shift is "<<jj_shift<<"    mask is "<<jj_minus_1;
     }else{
-        cout<<" jj_M="<<(void*)(intptr_t)jj_M<<" shift="<<C;
+        cout<<" jj_M="<<(void*)(intptr_t)jj_M<<" shift="<<FASTDIV_C;
     }
     cout<<endl;
 
@@ -544,7 +518,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     //     which has some optimizations for nice values of jj.
     // C++14: &vl=std::as_const(vl)
     auto v_divmod_vs = [&vl,&jj,&jj_M](/* in*/ VVlpi const& a, Vlpi const d, /*out*/ VVlpi& div, VVlpi& mod){
-        assert( (Ulpi)jj < SAFEMAX ); FOR(i,vl) assert( (Uvlpi)a[i] <= SAFEMAX );
+        assert( (Ulpi)jj < FASTDIV_SAFEMAX ); FOR(i,vl) assert( (Uvlpi)a[i] <= FASTDIV_SAFEMAX );
         FOR(i,vl) div[i] = jj_M * a[i] >> C;
         FOR(i,vl) mod[i] = a[i] - div[i]*jj;
     };
@@ -592,7 +566,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
         if (iloop == 0){
             if(nloop==1) assert(have_vl_over_jj==0);
             // now load the initial vector-loop registers:
-            // sq[i] and jj are < SAFEMAX, so we can avoid % and / operations
+            // sq[i] and jj are < FASTDIV_SAFEMAX, so we can avoid % and / operations
             FOR(i,vl) sq[i] = i;       // vseq_v
             if( jj==1 ){
                 if(verbose){cout<<" a";cout.flush();};
@@ -615,11 +589,11 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
                 if(verbose){cout<<" d";cout.flush();}
                 // 4 int ops (mul,shr, mul,sub)
                 //v_divmod_vs( sq, jj, /*sq[]/jj*/a, /*sq[]%jj*/b );
-                FOR(i,vl) a[i] = jj_M * sq[i] >> C;
+                FOR(i,vl) a[i] = jj_M * sq[i] >> FASTDIV_C;
                 FOR(i,vl) b[i] = sq[i] - a[i]*jj;
-                //  OK since sq[] and jj both <= SAFEMAX [(1<<21)-1]
-                assert( (uint64_t)jj+vl <= (uint64_t)SAFEMAX );
-                // use mul_add_shr (fastdiv) approach if jj+vl>SAFEMAX (1 more vector_add_scalar)
+                //  OK since sq[] and jj both <= FASTDIV_SAFEMAX [(1<<21)-1]
+                assert( (uint64_t)jj+vl <= (uint64_t)FASTDIV_SAFEMAX );
+                // use mul_add_shr (fastdiv) approach if jj+vl>FASTDIV_SAFEMAX (1 more vector_add_scalar)
                 if(nloop<=1) assert(have_bA_bD==0); assert(have_sq==1); assert(have_jj_shift==0);
                 ++cnt_sq; ++cnt_jj_M;
             }
@@ -691,7 +665,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
                 if(verbose){cout<<" i";cout.flush();}
                 if(0){
                     FOR(i,vl) bA[i] = vl0 + b[i];           // add_vsv
-                    FOR(i,vl) bD[i] = ((jj_M*bA[i]) >> C);  // fastdiv_uB   : mul_vvs, shr_vs
+                    FOR(i,vl) bD[i] = ((jj_M*bA[i]) >> FASTDIV_C);  // fastdiv_uB   : mul_vvs, shr_vs
                     FOR(i,vl) b [i] = bA[i] - bD[i]*jj;     // long-hand    : mul_vvs, sub_vvv
                     FOR(i,vl) a [i] = a[i] + bD[i];         // add_vvv
                 }else if(0){ // as VE alementary ops
@@ -701,7 +675,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
                     FOR(i,vl) bA[i] = vl0 + b[i];
 
                     FOR(i,vl) bD[i] = jj_M * bA[i]; // dep -1 simul if bD ?=? bD_prev + jj_M*vl, but would an extra op later
-                    FOR(i,vl) bD[i] = bD[i] >> C;  // dep -1
+                    FOR(i,vl) bD[i] = bD[i] >> FASTDIV_C;  // dep -1
 
                     FOR(i,vl) y[i] = bD[i]*jj;     // dep -1
                     FOR(i,vl) b[i] = bA[i] - y[i]; // dep -1
@@ -713,14 +687,14 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
                     // (Current libdivide and fastdiv suggests not,  check dev code, though)
                     FOR(i,vl) b [i] = vl0 + b[i];
                     FOR(i,vl) bD[i] = jj_M * b [i]; // dep -1 simul if bD ?=? bD_prev + jj_M*vl, but would an extra op later
-                    FOR(i,vl) bD[i] = bD[i] >> C;  // dep -1
+                    FOR(i,vl) bD[i] = bD[i] >> FASTDIV_C;  // dep -1
                     FOR(i,vl) y[i] = bD[i]*jj;     // dep -1
                     FOR(i,vl) a[i] = a[i] + bD[i];  // dep -2
                     FOR(i,vl) b[i] = b [i] - y[i]; // dep -2
                 }
                 ++cnt_bA_bD; ++cnt_jj_M;
                 assert(have_bA_bD); assert(have_sq==(jj>1&&jj<vl)); assert(!have_jj_shift);
-                assert(!have_vl_over_jj); assert( jj+vl < (int)SAFEMAX );
+                assert(!have_vl_over_jj); assert( jj+vl < (int)FASTDIV_SAFEMAX );
             }
 #if VL_UP==2
             // if confused about vl vs vl0, this is safe (but induce might use too-long vl0)
@@ -839,7 +813,7 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
             assert( (uint64_t)1<<jj_shift == (uint64_t)jj );
             cout<<" power of two shift is "<<jj_shift<<"    mask is "<<jj_minus_1;
         }else{
-            cout<<" jj_M="<<(void*)(intptr_t)jj_M<<" shift="<<C;
+            cout<<" jj_M="<<(void*)(intptr_t)jj_M<<" shift="<<FASTDIV_C;
         }
 
 #if 0
@@ -847,8 +821,8 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
         //     which has some optimizations for nice values of jj.
         // C++14: &vl=std::as_const(vl)
         auto v_divmod_vs = [&vl,&jj,&jj_M](/* in*/ VVlpi const& a, Vlpi const d, /*out*/ VVlpi& div, VVlpi& mod){
-            assert( (Ulpi)jj < SAFEMAX ); FOR(i,vl) assert( (Uvlpi)a[i] <= SAFEMAX );
-            FOR(i,vl) div[i] = jj_M * a[i] >> C;
+            assert( (Ulpi)jj < FASTDIV_SAFEMAX ); FOR(i,vl) assert( (Uvlpi)a[i] <= FASTDIV_SAFEMAX );
+            FOR(i,vl) div[i] = jj_M * a[i] >> FASTDIV_C;
             FOR(i,vl) mod[i] = a[i] - div[i]*jj;
         };
 #endif
@@ -1137,7 +1111,7 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
             fp.lcom("INIT_BLOCK:");
             if(nloop==1) assert(have_vl_over_jj==0);
             // now load the initial vector-loop registers:
-            // sq[i] and jj are < SAFEMAX, so we can avoid % and / operations
+            // sq[i] and jj are < FASTDIV_SAFEMAX, so we can avoid % and / operations
             if( jj==1 ){
                 tr+="init:iloop 1 jj==1";
                 FOR(i,vl) a[i] = i;    // sq/jj   or perhaps change have_sq?
@@ -1168,15 +1142,15 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
                 if(verbose)cout<<" d";
                 // 4 int ops (mul,shr, mul,sub)
                 //v_divmod_vs( sq, jj, /*sq[]/jj*/a, /*sq[]%jj*/b );
-                FOR(i,vl) a[i] = jj_M * sq[i] >> C;
+                FOR(i,vl) a[i] = jj_M * sq[i] >> FASTDIV_C;
                 FOR(i,vl) b[i] = sq[i] - a[i]*jj;
-                //  OK since sq[] and jj both <= SAFEMAX [(1<<21)-1]
-                assert( (uint64_t)jj+vl <= (uint64_t)SAFEMAX );
-                // use mul_add_shr (fastdiv) approach if jj+vl>SAFEMAX (1 more vector_add_scalar)
+                //  OK since sq[] and jj both <= FASTDIV_SAFEMAX [(1<<21)-1]
+                assert( (uint64_t)jj+vl <= (uint64_t)FASTDIV_SAFEMAX );
+                // use mul_add_shr (fastdiv) approach if jj+vl>FASTDIV_SAFEMAX (1 more vector_add_scalar)
                 if(nloop<=1) assert(have_bA_bD==0); assert(have_sq==1); assert(have_jj_shift==0);
                 ++cnt_sq; ++cnt_jj_M;
                 fp.ins("vmulu.l   vx, sq,jj_M",      "fast division by jj="+jitdec(jj));
-                fp.ins("vsrl.l.zx a, vx,"+jitdec(C), "  a[i] = sq[i]*jj_M >> "+jitdec(C));
+                fp.ins("vsrl.l.zx a, vx,"+jitdec(FASTDIV_C), "  a[i] = sq[i]*jj_M >> "+jitdec(FASTDIV_C));
                 fp.ins("vmulu.l   vy, a,jj",         "form sq[i]%jj");
                 fp.ins("vsubu.l   b, sq,vy",         "  b[i] = sq[i] - a[i]*jj");
             }
@@ -1392,12 +1366,12 @@ INDUCE:
                 tr+="induce: a[], b[] update via fastdiv";
                 if(verbose){cout<<" i";cout.flush();}
                 FOR(i,vl) bA[i] = vl0 + b[i];            // add_vsv
-                FOR(i,vl) bD[i] = ((jj_M*bA[i]) >> C);  // fastdiv_uB   : mul_vvs, shr_vs
+                FOR(i,vl) bD[i] = ((jj_M*bA[i]) >> FASTDIV_C);  // fastdiv_uB   : mul_vvs, shr_vs
                 FOR(i,vl) b [i] = bA[i] - bD[i]*jj;     // long-hand    : mul_vvs, sub_vvv
                 FOR(i,vl) a [i] = a[i] + bD[i];         // add_vvv
                 ++cnt_bA_bD; ++cnt_jj_M;
                 assert(have_bA_bD); assert(have_sq==(jj>1&&jj<vl0)); assert(!have_jj_shift);
-                assert(!have_vl_over_jj); assert( jj+vl0 < (int)SAFEMAX );
+                assert(!have_vl_over_jj); assert( jj+vl0 < (int)FASTDIV_SAFEMAX );
                 if(onceI){
                     //local regs: bA,vx,bD,vy    input/output regs: a, b
                     //AsmScope const block = {{"tmp2","%s41"}};
@@ -1405,14 +1379,14 @@ INDUCE:
                     if(0){//plain: output reg != input reg
                         fi.ins("vaddu bA,vl0,b",               "bA[i] = b[i] + vl0")
                             .ins("vmulu.l   vx,bA,jj_M")
-                            .ins("vsrl.l.zx bD,vx,"+jitdec(C), "bD[i]= bA[i]/[jj="+jitdec(jj)+"] fastdiv")
+                            .ins("vsrl.l.zx bD,vx,"+jitdec(FASTDIV_C), "bD[i]= bA[i]/[jj="+jitdec(jj)+"] fastdiv")
                             .ins("vmulu.l   vy,jj,bD")
                             .ins("vaddu.l   a, a,bD",          "a[i] += bD[i]")
                             .ins("vsubu.l   b, bA,vy",         "b[i] -= bD[i]*jj");
                     }else{//re-use regs
                         fi.ins("vaddu b ,vl0,b",               "b[i] = b[i] + vl0")
                             .ins("vmulu.l   bD,b ,jj_M")
-                            .ins("vsrl.l.zx bD,bD,"+jitdec(C), "bD[i]= bA[i]/[jj="+jitdec(jj)+"] fastdiv")
+                            .ins("vsrl.l.zx bD,bD,"+jitdec(FASTDIV_C), "bD[i]= bA[i]/[jj="+jitdec(jj)+"] fastdiv")
                             .ins("vmulu.l   vy,jj,bD")
                             .ins("vaddu.l   a, a,bD",          "a[i] += bD[i]")
                             .ins("vsubu.l   b, b ,vy",         "b[i] -= bD[i]*jj");
