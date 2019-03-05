@@ -9,7 +9,7 @@
  * \sa xxx.cpp for VE assembler output, introducing other header deps.
  */
 #include "exechash.hpp"
-#include "vechash.hpp"
+#include "../vechash.hpp"
 #include "../asmfmt.hpp"
 #include "../throw.hpp" // THROW(stuff to right of cout<<), adding fn and line number
 #include "../codegenasm.hpp"
@@ -61,108 +61,7 @@ struct Vab{
     VVlpi b;
     int vl;    // 0 < Vabs.back().vl < vlen
     uint64_t hash;
-#if 0
-    // THIS APPROACHED IS FLAWED.  I really want hash to be independent of any
-    // particular choice for the simd lengths, vl.
-    /** fold \c a[vl] and \c b[vl] with a prev [or seed] \c hash. \return new hash value. */
-    static uint64_t rehash(VVlpi const& a, VVlpi const& b, int const vl, uint64_t hash);
-    /** fold a[] and b[] into this->hash. \return updated this->hash */
-    uint64_t rehash() { return hash = rehash(a, b, vl, hash); }
-#endif
 };
-#if 0
-/** - va and vb are read-only.
- * - We assume va and vb are small values that might be repeated,
- * - so we first distribute them widely in an i-dependent manner
- *   by adding them to a pseudorandom vseq.
- * - Then we add two bit-scramblings (REHASH_A and REHASH_B) of these to produce a single vector,
- * - all of whose elements are XOR'ed together to make the final hash.
- *
- * - Programming model:
- *   - Init in some parent scope:
- *     - init hash register with seed value [0]
- *     - const vector and scalar registers
- *   - Calc:
- *     - using scratch regs, by some asm convention for any "no-call" code block
- *
- * Since we accept a pair of same-size vectors, we use different multiplicative randomizers
- * for each, and add before xoring.
- *
- * \b Warning: this hash depends on the choices you make for \c vl.  It is \b not a hash
- * purely representing the data of sequences \c a[] and \c b[].
- *
- * This is no problem if the purpose is to compare to a reference calculation that is supposed
- * to have exactly the same \c vl choices.  But in general it is more useful to NOT depend on
- * the choices made for \c vl.
- */
-inline uint64_t Vab::rehash(VVlpi const& va, VVlpi const& vb, int const vl, uint64_t hash){
-    // Init:
-    //   randomization constants
-    #define REHASH_A 7664345821815920749ULL
-    #define REHASH_B 1181783497276652981ULL
-    #define REHASH_C 3202034522624059733ULL
-    VVlpi vs(vl); // actually could re-use another mem area for all vl<256
-    {
-        uint64_t const r1 = REHASH_A;
-        FOR(i,vl) vs[i] = r1 * i;                   // vs = r1 * i (const data)
-    }
-    uint64_t const r2 = REHASH_B;
-    uint64_t const r3 = REHASH_C;
-
-    // Calc:
-    //   scratch vectors
-    VVlpi vx(vl), vy(vl);
-    //   dynamic values...
-    FOR(i,vl) vx[i] = r2*(va[i] + vs[i]);       // vx = r2 * (va + vs)
-    FOR(i,vl) vy[i] = r3*(vb[i] + vs[i]);       // vy = r3 * (vb + vs)
-    FOR(i,vl) vx[i] = vx[i] + vy[i];            // vx = vx + vy
-    FOR(i,vl) hash ^= vx[i];                    // hash = vx[0]^vx[1]^...^vx[vl-1]
-    return hash;
-}
-//#define REHASH_A 1181783497276652981ULL
-//#define REHASH_B 7664345821815920749ULL
-//#define REHASH_C 3202034522624059733ULL
-/** calculate scalar \c hash from vectors \c va and \c vb, tmp vector regs \c vx and \c vy and sequence register \c vs.
- * \pre \c hash is set (0 or a previous return value), and vl is set as desired.
- * \post \c a \c b unmodified, \c hash is calculated, and \c vx, \c vy and \c vs are trashed.
- * \return \c hash scalar register.
- *
- * - Faster would:
- *   - allocate in parent scope: hash and scratch regs vs and r0,r1,r2
- *   - init    %hash to zero
- *   - preload const %vs
- *   - preload const 742938285, 1181783497276652981ULL, 7664345821815920749ULL into scalar regs
- */
-std::string rehash_Vab_asm(std::string va, std::string vb, std::string hash ){
-    AsmFmtCols a;
-    a.lcom("rehash_Vab_asm BEGINS",
-            "  In: "+va+", "+vb,
-            "  InOut: "+hash+" (scalar reg)",
-            "  Const: vs[,r2,r3]",
-            "  Scratch: vx,vy,r"
-            );
-    AsmScope const block = {{"r","%s41"},{"vx","%v63"},{"vy","%v62"},{"vs","%v61"}};
-    a.scope(block,"rehash_Vab_asm");
-    a.ins(ve_load64_opt0("r", REHASH_A));
-    a.ins("vseq     vs");
-    a.ins("vmulu.l  vs, "+hash+", vs",                  "vs = REHASH_A * i");
-    a.ins(ve_load64_opt0("r", REHASH_B));   // ins(string) will strip comments: can use 'raw'
-    a.ins("vaddu.l   vx, "+va+", vs");
-    a.ins("vmulu.l   vx, r, vx",                        "vx = REHASH_B * (va+vs)");
-    a.ins(ve_load64_opt0("r", REHASH_C));
-    a.ins("vaddu.l   vy, "+vb+", vs");
-    a.ins("vmulu.l   vy, r, vy",                        "vy = REHASH_C * (vb+vs)");
-    a.com("reduce vx and vy...");
-    a.ins("vaddu.l   vx, vx, vy",                       "vx = vx + vy");
-    a.ins("vrxor     vy, vx",                           "vy[0] = vx[0]^vx[1]^...^vx[vl-1]");
-    a.ins("lvs       r, vx(0)",                         "r <-- vy[0]");
-    a.ins("xor       "+hash+", "+hash+", r",            " hash ^= r");
-    a.pop_scope();
-    a.lcom("rehash_Vab_asm DONE","");
-    return a.str();
-}
-#endif
-
 // - precalc may save ops when done outside some external enclosing loops
 //   - no precalc: induction always via formula
 //   - precalc and [partial?] unroll : induction by register sequence (maybe looped)
@@ -2211,5 +2110,98 @@ int main(int argc,char**argv){
     * Conclusion: Aurora does not allow a fast vlen ~ MVL rotation method
     *
     */
+#if 0 // replaced with vechash.hpp
+/** - va and vb are read-only.
+ * - We assume va and vb are small values that might be repeated,
+ * - so we first distribute them widely in an i-dependent manner
+ *   by adding them to a pseudorandom vseq.
+ * - Then we add two bit-scramblings (REHASH_A and REHASH_B) of these to produce a single vector,
+ * - all of whose elements are XOR'ed together to make the final hash.
+ *
+ * - Programming model:
+ *   - Init in some parent scope:
+ *     - init hash register with seed value [0]
+ *     - const vector and scalar registers
+ *   - Calc:
+ *     - using scratch regs, by some asm convention for any "no-call" code block
+ *
+ * Since we accept a pair of same-size vectors, we use different multiplicative randomizers
+ * for each, and add before xoring.
+ *
+ * \b Warning: this hash depends on the choices you make for \c vl.  It is \b not a hash
+ * purely representing the data of sequences \c a[] and \c b[].
+ *
+ * This is no problem if the purpose is to compare to a reference calculation that is supposed
+ * to have exactly the same \c vl choices.  But in general it is more useful to NOT depend on
+ * the choices made for \c vl.
+ */
+inline uint64_t Vab::rehash(VVlpi const& va, VVlpi const& vb, int const vl, uint64_t hash){
+    // Init:
+    //   randomization constants
+    #define REHASH_A 7664345821815920749ULL
+    #define REHASH_B 1181783497276652981ULL
+    #define REHASH_C 3202034522624059733ULL
+    VVlpi vs(vl); // actually could re-use another mem area for all vl<256
+    {
+        uint64_t const r1 = REHASH_A;
+        FOR(i,vl) vs[i] = r1 * i;                   // vs = r1 * i (const data)
+    }
+    uint64_t const r2 = REHASH_B;
+    uint64_t const r3 = REHASH_C;
+
+    // Calc:
+    //   scratch vectors
+    VVlpi vx(vl), vy(vl);
+    //   dynamic values...
+    FOR(i,vl) vx[i] = r2*(va[i] + vs[i]);       // vx = r2 * (va + vs)
+    FOR(i,vl) vy[i] = r3*(vb[i] + vs[i]);       // vy = r3 * (vb + vs)
+    FOR(i,vl) vx[i] = vx[i] + vy[i];            // vx = vx + vy
+    FOR(i,vl) hash ^= vx[i];                    // hash = vx[0]^vx[1]^...^vx[vl-1]
+    return hash;
+}
+//#define REHASH_A 1181783497276652981ULL
+//#define REHASH_B 7664345821815920749ULL
+//#define REHASH_C 3202034522624059733ULL
+/** calculate scalar \c hash from vectors \c va and \c vb, tmp vector regs \c vx and \c vy and sequence register \c vs.
+ * \pre \c hash is set (0 or a previous return value), and vl is set as desired.
+ * \post \c a \c b unmodified, \c hash is calculated, and \c vx, \c vy and \c vs are trashed.
+ * \return \c hash scalar register.
+ *
+ * - Faster would:
+ *   - allocate in parent scope: hash and scratch regs vs and r0,r1,r2
+ *   - init    %hash to zero
+ *   - preload const %vs
+ *   - preload const 742938285, 1181783497276652981ULL, 7664345821815920749ULL into scalar regs
+ */
+std::string rehash_Vab_asm(std::string va, std::string vb, std::string hash ){
+    AsmFmtCols a;
+    a.lcom("rehash_Vab_asm BEGINS",
+            "  In: "+va+", "+vb,
+            "  InOut: "+hash+" (scalar reg)",
+            "  Const: vs[,r2,r3]",
+            "  Scratch: vx,vy,r"
+            );
+    AsmScope const block = {{"r","%s41"},{"vx","%v63"},{"vy","%v62"},{"vs","%v61"}};
+    a.scope(block,"rehash_Vab_asm");
+    a.ins(ve_load64_opt0("r", REHASH_A));
+    a.ins("vseq     vs");
+    a.ins("vmulu.l  vs, "+hash+", vs",                  "vs = REHASH_A * i");
+    a.ins(ve_load64_opt0("r", REHASH_B));   // ins(string) will strip comments: can use 'raw'
+    a.ins("vaddu.l   vx, "+va+", vs");
+    a.ins("vmulu.l   vx, r, vx",                        "vx = REHASH_B * (va+vs)");
+    a.ins(ve_load64_opt0("r", REHASH_C));
+    a.ins("vaddu.l   vy, "+vb+", vs");
+    a.ins("vmulu.l   vy, r, vy",                        "vy = REHASH_C * (vb+vs)");
+    a.com("reduce vx and vy...");
+    a.ins("vaddu.l   vx, vx, vy",                       "vx = vx + vy");
+    a.ins("vrxor     vy, vx",                           "vy[0] = vx[0]^vx[1]^...^vx[vl-1]");
+    a.ins("lvs       r, vx(0)",                         "r <-- vy[0]");
+    a.ins("xor       "+hash+", "+hash+", r",            " hash ^= r");
+    a.pop_scope();
+    a.lcom("rehash_Vab_asm DONE","");
+    return a.str();
+}
+#endif
+
 
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break

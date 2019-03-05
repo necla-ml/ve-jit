@@ -1,8 +1,8 @@
 #ifndef VECHASH_HPP
 #define VECHASH_HPP
 
-#include "../asmfmt_fwd.hpp"
-#include "../throw.hpp"
+#include "asmfmt_fwd.hpp"
+#include "throw.hpp"
 #include <assert.h>
 
 #ifndef FOR
@@ -37,6 +37,7 @@ namespace scramble64 {
  *   - \c VecHashConstVl::hash_combine(v) is a faster version for constant \c vl==mvl.
  */
 class VecHash {
+  public:
     /** helper for generic vector hashing.
      * \p mvl limits vector length of incoming vectors.
      *
@@ -59,6 +60,10 @@ class VecHash {
     /// return current hash value (non-memoized xor-reduction)
     uint64_t u64() const {
         return hashVal;
+    }
+    /// set current hash value (for testing)
+    uint64_t u64(uint64_t const h) {
+        return hashVal = h;
     }
     int const mvl;
     /** basic hash_combiner for a vectorized sequence */
@@ -132,6 +137,10 @@ struct VecHash2 {
     /// return current hash value (non-memoized xor-reduction)
     uint64_t u64() const {
         return hashVal;
+    }
+    /// set current hash value (for testing)
+    uint64_t u64(uint64_t const h) {
+        return hashVal = h;
     }
     int const mvl;
     /** hash combine a pair of same-size vectorized sequences. */

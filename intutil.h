@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 #ifdef __cplusplus
-extern "C" {
+extern "C" { //}
 #if __cplusplus >= 201103L
 #define FASTDIV_INLINE inline constexpr
 #else
@@ -57,7 +57,7 @@ FASTDIV_INLINE uint32_t fastmod_uB(uint32_t const a, uint64_t const M, uint32_t 
 //@}
 
 #undef FASTDIV_INLINE
-#ifdef __cplusplus
+#ifdef __cplusplus //{
 }//extern "C"
 #endif
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break

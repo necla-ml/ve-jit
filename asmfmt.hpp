@@ -18,7 +18,7 @@ inline AsmFmtCols * AsmFmtCols::setParent( AsmFmtCols* p ) {
 }
 
 template<typename PAIRCONTAINER> inline
-std::size_t AsmFmtCols::scope( PAIRCONTAINER const& pairs, std::string block_name ){
+std::size_t AsmFmtCols::scope( PAIRCONTAINER const& pairs, std::string const& block_name ){
     assert( stack_defs.size() == stack_undefs.size() );
     // trimmed substitution --> macro strings
     StringPairs defs;

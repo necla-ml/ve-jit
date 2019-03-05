@@ -457,6 +457,9 @@ dlprt-ve: dlprt.c
 	nc++ -g2 $< -o $@ -ldl
 	{ ./$@ libm.so; echo "exit status $$?"; } >& dlprt-ve.log; \
 		echo "exit status $$?";
+test_vechash-x86: test_vechash.cpp vechash.cpp asmfmt.cpp jitpage.c intutil.c libjit1-x86.so
+	g++ ${CXXFLAGS} $(filter %.cpp,$^) $(filter %.c,$^) -o $@ -ldl #-L. -ljit1-x86
+	{ ./$@; echo "exit status $$?"; }
 #allsyms-x86: allsyms.cpp
 #	g++ -g2 -O2 -std=c++11 -D_GNU_SOURCE $< -o $@ -ldl
 #allsyms-ve: allsyms.cpp

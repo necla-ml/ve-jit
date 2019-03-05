@@ -58,10 +58,10 @@ inline std::string free_pfx( std::vector<std::string> const& exclude,
             trial.seekp(pfx_sz);    // position the 'put' pointer
             trial<<i;
             std::string t = trial.str();
-            std::cout<<" ?"<<t;
+            //std::cout<<" ?"<<t;
             if(std::find(exclude.begin(),exclude.end(),t) == exclude.end()){
                 // found one that is not excluded...
-                std::cout<<"\n free_pfx-->"<<t<<std::endl;
+                //std::cout<<"\n free_pfx-->"<<t<<std::endl;
                 return t;
             }
             if( i == end )

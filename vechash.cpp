@@ -1,6 +1,7 @@
 #include "vechash.hpp"
-#include "../codegenasm.hpp"
-#include "../stringutil.hpp"
+#include "codegenasm.hpp" // really?
+#include "stringutil.hpp"
+#include "asmfmt.hpp"
 #include <list>
 #include <utility>
 #include <string>
@@ -111,9 +112,10 @@ void VecHash2::kern_asm_begin( AsmFmtCols &ro_regs, AsmFmtCols &state,
         if(client_vs) block.push_back({"vh_vseq",client_vs}); // ideally 0,1,...,MVL-1
         else          vechash_vector ("vh_vseq",block,state);
         ro_regs.scope(block,"const: vechash2");
-        if(!client_vs)
-            ro_regs.ins("svl rnd64a; lea rnd64b,256; lvl rnd64b; vseq vh_vseq; lvl rnd64a"
-                    ,"0,1,..,MVL-1");
+        if(!client_vs){
+            ro_regs.ins("svl rnd64a#rnd* as tmp regs..; lea rnd64b,256; lvl rnd64b; vseq vh_vseq; lvl rnd64a"
+                    ,"..vh_vseq=0,1,..,MVL-1");
+        }
         ro_regs.ins(ve_load64("rnd64a", scramble64::r1),"scramble64::r1");
         ro_regs.ins(ve_load64("rnd64b", scramble64::r2),"scramble64::r2");
         ro_regs.ins(ve_load64("rnd64c", scramble64::r3),"scramble64::r3");
@@ -151,7 +153,7 @@ void VecHash2::kern_asm( AsmFmtCols &a,
     ve_propose_reg("vh2_vx",block,a,VECTOR_TMP);
     ve_propose_reg("vh2_vy",block,a,VECTOR_TMP);
     ve_propose_reg("vh2_vz",block,a,VECTOR_TMP);
-    a.scope(block,"vechash2::kern_asm");
+    a.scope(block,string{"vechash2::kern_asm"});
     a.ins("vmulu.l  vh2_vx, rnd64b, /**/"+va,       "scramble64::r2 * "+va+"[]");
     a.ins("vaddu.l  vh2_vy, vh2_j, vh2_vs",         "init for state j");
     a.ins("vmulu.l  vh2_vz, rnd64c, /**/"+vb,       "scramble64::r3 * "+vb+"[]");

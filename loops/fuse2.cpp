@@ -9,7 +9,7 @@
  * \sa xxx.cpp for VE assembler output, introducing other header deps.
  */
 #include "exechash.hpp"
-#include "vechash.hpp"
+#include "../vechash.hpp"
 #include "../asmfmt.hpp"
 #include "../throw.hpp" // THROW(stuff to right of cout<<), adding fn and line number
 #include "../codegenasm.hpp"

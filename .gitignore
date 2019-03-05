@@ -125,3 +125,4 @@ bug-ve
 bug-x86
 cblock
 *.diff
+test_*-x86

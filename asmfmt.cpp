@@ -5,6 +5,7 @@
 #include "throw.hpp"
 //#include "codegenasm.hpp"
 #include "stringutil.hpp"
+#include "jitpage.hpp"
 #include <iostream>
 #include <iomanip>
 #include <sstream>
@@ -138,8 +139,8 @@ std::vector<std::string>::size_type AsmFmtCols::pop_scope(){
         --sz;
         stack_undefs.resize(sz);
         stack_defs.resize(sz);
-        if(sz==0) (*a)<<setw(inwidth+opwidth+argwidth-9)<<""
-            <<"/* } END GLOBAL SCOPE */\n";
+        //if(sz==0) (*a)<<setw(inwidth+opwidth+argwidth-9)<<""
+        //    <<"/* (end scope) */\n";
         written = false;
     }
     return sz;
@@ -516,7 +517,7 @@ std::string AsmFmtCols::defs2undefs( StringPairs const& macs, std::string block_
     AsmFmtCols undefs;
     {
         std::string comment;
-        std::string end_comment = "} END";
+        std::string end_comment = "} END ";
         end_comment.append(block_name);
         auto const mend = macs.crend();
         auto       mdef = macs.crbegin();
@@ -532,7 +533,7 @@ std::string AsmFmtCols::defs2undefs( StringPairs const& macs, std::string block_
             rcom(end_comment);
         }
     }
-    return undefs.str();
+    return undefs.flush(); // equiv str() + clear
 }
 std::string uncomment_asm( std::string asmcode )
 {

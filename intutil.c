@@ -1,4 +1,7 @@
 #include "intutil.h"
+#ifdef __cplusplus
+extern "C" {
+#endif //}
 
 int const bitcount[256] = {
     0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4,
@@ -25,3 +28,7 @@ int const multiplyDeBruijnBitPosition2[32] =
     31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9
 };
 
+#ifdef __cplusplus //{
+} //extern "C"
+#endif
+// vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break

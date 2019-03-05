@@ -82,6 +82,7 @@ class AsmFmtCols {
        * \note This returns a temporary so that directly calling \c c_str()
        * on the return value results in a \b dangling pointer. */
       std::string str() const;
+      void clear() { a->str(""); a->clear(); }
       /** Silent pre-destructor \c write(), possibly with file output,
        * that returns the text as a std::string temporary. */
       std::string flush();
@@ -105,7 +106,7 @@ class AsmFmtCols {
        *      Ex. std::vector<std::string> vs = asm.match("^%v[:digit:]+.*"
        */
       template<typename PAIRCONTAINER>
-          std::size_t scope( PAIRCONTAINER const& pairs, std::string block_name="" );
+          std::size_t scope( PAIRCONTAINER const& pairs, std::string const& block_name="" );
       /** emit last set of #undefs. \return number of remaining stack-scopes
        * never errs (no-op if scope-stack is empty) */
       std::vector<std::string>::size_type pop_scope();
