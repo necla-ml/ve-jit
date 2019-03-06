@@ -22,8 +22,11 @@ using namespace std;
 typedef array<uint64_t,MVL> Vu64;
 #if 0
 // This would be nice, but unfortunately the wrapper call to the assembly code
-// needs actual strings within its code (I don't feel like JITing the
-// wrapper too).
+// needs actual strings within its code.
+//
+// Perhaps later we should JIT the wrapper call too (then even input registers can
+// be automatically handled).
+//
 void regs( AsmFmtCols &defs ){
     AsmScope block;
     ve_propose_reg("seed",block,defs,SCALAR);
@@ -36,7 +39,7 @@ void regs( AsmFmtCols &defs ){
     //block.push_back("hab","tmp");
     defs.scope(block, vechash2::test_vechash);
 }
-#else
+#endif
 void regs( AsmFmtCols &defs ){
     AsmScope block = {
         {"seed",    "%s0"},
@@ -94,8 +97,6 @@ void sim_ab( uint64_t const seed, int const vl, Vu64& a, Vu64& b ){
     FOR(i,vl) b[i] ^= a[i];
     FOR(i,vl) b[i] *= u;
 }
-
-#endif
 struct Sim {
     uint64_t const s;   // seed for a[], b[]
     uint64_t const vl;  // vector length
@@ -104,6 +105,20 @@ struct Sim {
     Vu64 b;             // OUT: vector b[vl]
     uint64_t h2;        // hash_out
 };
+void quickout(Sim const& sim){    
+    // output results
+    int const vl = sim.vl;
+    int len = vl;
+    char const* ending = " }";
+    if( sim.vl > 8 ){
+        len = 8;
+        ending = " ...}";
+    }
+    cout<<" a["<<vl<<"]={"; FOR(i,len) cout<<" "<<setw(18)<<jithex(sim.a[i]); cout<<ending<<endl;
+    cout<<" b["<<vl<<"]={"; FOR(i,len) cout<<" "<<setw(18)<<jithex(sim.b[i]); cout<<ending<<endl;
+    cout<<" hash 0x"<<hex<<sim.h<<" --> hash' = 0x"<<sim.h2
+        <<dec<<endl;
+}
 void sim_vechash2( Sim& sim ){
     sim_ab(sim.s, sim.vl, sim.a, sim.b);      // generate a[], b[] "rand" vectors
     VecHash2 vh(MVL);                            // we'll use the default VecHash2 seed
@@ -111,7 +126,7 @@ void sim_vechash2( Sim& sim ){
     vh.hash_combine( (uint64_t const*)&sim.a[0], (uint64_t const*)&sim.b[0], sim.vl );
     sim.h2 = vh.u64();
 }
-std::string asm_vechash2( Sim& sim ){
+std::string asm_vechash2( Sim const& sim ){
     VecHash2 vh(MVL);                            // we'll use the default VecHash2 seed
     AsmFmtCols def, gen, hsh;
     regs( def );
@@ -138,7 +153,10 @@ std::string asm_vechash2( Sim& sim ){
     return code;
 }
 
-void run_vechash( Sim& sim, std::string code ){
+void run_vechash2( Sim& sim, std::string code ){
+#if !defined(__ve) // just run the x86 version once more...
+    sim_vechash2(sim);
+#else
     string asmFile("tmp_test_vechash.S");
     {
         ofstream ofs(asmFile);
@@ -157,20 +175,40 @@ void run_vechash( Sim& sim, std::string code ){
         void *page_addr = page.addr();
         cout<<" going to bsic into page @ "<<page_addr<<endl;
         cout<<" "<<binFile<<" call using extended asm to set/get register args\n"<<endl;
-        uint64_t ret;
+        // jit inputs: %s0(sim.s) %s1(sim.hash) %s2(sim.vlen)
+        // jit outputs
+        uint64_t *a = &sim.a[0];        // %v0
+        uint64_t *b = &sim.b[0];        // %v1
         asm("### AAA");
-        asm("ld %s12, %[page]\n"
-                "bsic %lr,(,%s12)\n"
-                "or %[ret],0,%s0 # // move asm %s0 return value into C register of 'ret'\n"
-                :[seed]"=r"(ret)
-                :[page]"m"(page_addr)
-                :"%s12","%s0","%s1","%s2","%s3","%s4");
+        asm(
+                "xor    %s0,0,%[seed]\n"
+                "addu.l %s1,0,%[hash]\n"
+                "xor    %s2,0,%[vlen]\n"
+                "ld     %s12, %[page]\n"
+                "bsic   %lr,(,%s12)\n"
+                "or     %[h2],0,%s3     # // save hash_combine return value\n"
+                "vst    %v0,8,%[a_addr] # // store a[]\n"
+                "vst    %v1,8,%[b_addr] # // store b[]\n"
+                // outputs
+                : [h2]"=r"(sim.h2)
+                , [a_addr]"=r"(a)
+                , [b_addr]"=r"(b)
+                // inputs (actually const...)
+                : [page]"m"(page_addr)
+                , [seed]"r"(sim.s)     // seed %s0
+                , [hash]"r"(sim.h)     // hash %s1
+                , [vlen]"r"(sim.vl)    // vector len %s2
+                // clobbers
+                :"%s12","%s0","%s1","%s2","%s3","%s4","%s5","%s6","%s7","%v0","%v1");
         // Notes:
         //      illegal to clobber %lr, apparently:)
         //      ncc silently ignores the assembler code if you try [page]"m"(page.addr())
         asm("### BBB");
-        printf("... and we actually returned, return value %08lx = %ld\n",ret,ret); fflush(stdout);
+        cout<<"... BACK FROM JIT! return hash "<<hex<<sim.h2<<" = "<<dec<<sim.h2<<endl;
+        cout.flush();
     }
+#endif
+}
 
 
 
@@ -260,31 +298,15 @@ int main(int argc,char**argv)
     cout<<" test_vechash VLEN("<<vl<<") SEED("<<seed<<")"<<endl;
     Sim sim = {seed, vlu64, 0UL, {0}, {0}, 0UL};
     sim_vechash2(sim);
-    // output results
-    int len = vl;
-    char const* ending = " }";
-    if( vl > 8 ){
-        len = 8;
-        ending = " ...}";
-    }
-    cout<<" a["<<vl<<"]={"; FOR(i,len) cout<<" "<<setw(18)<<jithex(sim.a[i]); cout<<ending<<endl;
-    cout<<" b["<<vl<<"]={"; FOR(i,len) cout<<" "<<setw(18)<<jithex(sim.b[i]); cout<<ending<<endl;
-    cout<<" hash' = "<<hex<<sim.h2<<endl;
-    asm_vechash2(sim);
-#if !defined(__ve)
-    // just run the same thing twice.  It will always pass
-    {
-        Sim sim2 = {seed, vlu64, 0UL, {0}, {0}, 0UL};
-        sim_vechash2(sim2);
-        FOR(i,vl) assert( sim2.s == sim.s );
-        FOR(i,vl) assert( sim2.vl == sim.vl );
-        FOR(i,vl) assert( sim2.h == sim.h );
-        FOR(i,vl) assert( sim2.a[i] == sim.a[i] );
-        FOR(i,vl) assert( sim2.b[i] == sim.b[i] );
-        FOR(i,vl) assert( sim2.h2 == sim.h2 );
-    }
-#else
-#warning"running the jit assembly TBD"
-#endif
+    quickout(sim);
+    Sim sim2(sim);
+    std::string code = asm_vechash2(sim2); // jit string, sim2 const
+    run_vechash2(sim2, code); // if not VE, will just run sim_vechash2 a second time
+    FOR(i,vl) assert( sim2.s == sim.s );
+    FOR(i,vl) assert( sim2.vl == sim.vl );
+    FOR(i,vl) assert( sim2.h == sim.h );
+    FOR(i,vl) assert( sim2.a[i] == sim.a[i] );
+    FOR(i,vl) assert( sim2.b[i] == sim.b[i] );
+    FOR(i,vl) assert( sim2.h2 == sim.h2 );
 }
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
