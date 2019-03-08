@@ -65,6 +65,10 @@ struct ExecutablePage {
  *
  * - \ref cblock.hpp (to output C code) uses a tree-of-nodes with path-name
  *   lookups, a slightly different approach (allows nicely indented code output)
+ *
+ * \todo remove output file support (and 'cout' support too) since keeping
+ * everything as string is really the best default policy.  Get rid of
+ * 'write' and 'flush' and simplify the counterproductive 'written' state logic.
  */
 class AsmFmtCols {
   public: // utility
@@ -74,6 +78,15 @@ class AsmFmtCols {
        * to grab the output only as std::string */
       AsmFmtCols(std::string const& fname);
       ~AsmFmtCols();  ///< write to cout if !this->written, or constructor fname if there is one
+      /** default is to allow any same-named variables to alias.
+       * this is a "root" property, so is we have a parent, we
+       * propagate this setting to everyone.
+       * \todo this is a root property that is \e inherited by
+       * children (but we do not have a proper tree set up yet).
+       */
+      bool allow_alias() const { return this->_allow_alias; }
+      bool allow_alias(bool const b) { return this->_allow_alias = b; }
+
       /** Can force a pre-destructor write (destructor won't write);
        * Any subsequent non-const function calls will throw an error.
        * To kill this formatter \em skipping cout, use \c flush(). */
@@ -239,6 +252,7 @@ class AsmFmtCols {
        */
       std::vector<StringPairs> stack_defs;
       AsmFmtCols *parent;             ///< optional scope parent to support \c def_words_starting
+      bool _allow_alias; ///< probably should end up as a tree Root property?
 };
 
 /** add VE-specific optimizations */

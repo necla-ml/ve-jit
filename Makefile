@@ -21,6 +21,7 @@ OBJCOPY:=objcopy
 SHELL:=/bin/bash
 CFLAGS:=-O2 -g2 -pthread
 CFLAGS+=-Wall -Werror
+CFLAGS+=-Wno-unknown-pragmas
 CXXFLAGS:=$(CFLAGS) -std=c++11
 LIBVELI_TARGETS:=libveli-x86.a
 LIBJIT1_TARGETS:=libjit1-x86.a libjit1-x86.so
@@ -459,7 +460,7 @@ dlprt-ve: dlprt.c
 		echo "exit status $$?";
 test_vechash-x86: test_vechash.cpp vechash.cpp asmfmt.cpp jitpage.c intutil.c libjit1-x86.so
 	g++ ${CXXFLAGS} $(filter %.cpp,$^) $(filter %.c,$^) -o $@ -ldl #-L. -ljit1-x86
-	{ ./$@; echo "exit status $$?"; }
+	#{ ./$@; echo "exit status $$?"; }
 test_vechash-ve: test_vechash.cpp vechash.cpp asmfmt.cpp jitpage.c intutil.c
 	${CXX} ${CXXFLAGS} -E $< -o test_vechash.i
 	${CXX} ${CXXFLAGS} -S $(filter %.cpp,$^) $(filter %.c,$^)

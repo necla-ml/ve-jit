@@ -9,7 +9,11 @@
 #include <iomanip>
 
 #ifndef FOR
-#define FOR(VAR,VLEN) _Pragma("_NEC shortloop") for(int VAR=0; (VAR) < (VLEN); ++VAR)
+#include <type_traits>
+#define FOR(VAR,VLEN) _Pragma("_NEC shortloop") for( \
+        std::remove_cv<decltype(VLEN)>::type VAR=0; \
+        (VAR) < (VLEN); \
+        ++(VAR) )
 #endif
 
 namespace scramble64 {

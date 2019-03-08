@@ -94,7 +94,8 @@ int const            AsmFmtCols::argwidth = 44;
 AsmFmtCols::AsmFmtCols()
     : a(new ostringstream()), written(false), of(nullptr)
       //, stack_undefs{std::string("")}, stack_defs{std::string("")}
-      , stack_undefs(), stack_defs(), parent(nullptr)
+      , stack_undefs(), stack_defs(),
+      parent(nullptr), _allow_alias(true)
 {
     (*a) << left;
     a->fill(' ');
@@ -479,11 +480,22 @@ AsmFmtCols& AsmFmtCols::undef(std::string const& symbol,std::string const& name)
     // XXX remove from stack_[un]defs[0]
     return *this;
 }
+std::vector<std::pair<std::string,std::string>> AsmFmtCols::def_macs() const {
+    vector<pair<string,string>> ret;
+    if(parent)
+        ret = parent->def_macs();
+    for(auto const& vmac: stack_defs){
+        for(auto const& d: vmac){       // d ~ vector<symbol,subst>
+            ret.push_back(d);
+        }
+    }
+    return ret;
+}
 std::vector<string> AsmFmtCols::def_words_starting(std::string with) const {
     std::vector<string> ret;
     if(parent)
         ret = parent->def_words_starting(with);
-    size_t with_sz = with.size();
+    size_t const with_sz = with.size();
     for(auto const& vmac: stack_defs){
         for(auto const& d: vmac){                // d ~ vector<symbol,subst>
             std::string const& s = d.second;
@@ -572,9 +584,9 @@ AsmFmtVe& AsmFmtVe::set_vector_length(uint64_t const vl){
     if(vl > 127){
         AsmScope block;
         ve_propose_reg("tmp",block,*this,SCALAR_TMP);
-        scope(block);
+        if(!block.empty()) scope(block);
         ins("lea tmp, "+sN+"; lvl tmp");
-        pop_scope();
+        if(!block.empty()) pop_scope();
     }else{
         ins("lvl "+sN);
     }
@@ -844,11 +856,33 @@ std::string ve_load64(std::string s, uint64_t v){
             choose(opLoadregStrings(v)));
 }
 
-/** /todo return {var,subst} PAIRS, because same_name and same_reg
- *       might be nice to coagulate (presume identical content) */
+/** This is the lowest-level worker routine. */
 void ve_propose_reg( std::string variable, AsmScope& block, AsmFmtCols const& a,
         std::string prefix,
         std::vector<std::pair<int,int>> const search_order){
+    if(a.allow_alias()){
+        // 1. is \c variable already defined? Can we alias it based on name?
+        size_t const prefix_sz = prefix.size();
+        // vps ~ vector pair strings
+        auto vps = a.def_macs(); // all known macros
+        //cout<<" ("<<vps.size()<<" known macs)";
+        for(auto const& ps: vps){
+            //cout<<" "<<ps.first;
+            if(ps.first == variable){
+                //cout<<" macro name MATCH! ("<<ps.first<<","<<ps.second<<")";
+                //cout<<" ? compat with "<<prefix<<" sz "<<prefix_sz<<"]?";
+                if(0 == ps.second.compare(0,prefix_sz,prefix)){
+                    cout<<" Compatible alias found: "<<ps.first
+                        <<" already defined as "<<ps.second<<endl;
+                    return;
+                }
+            }
+        }
+        //cout<<"\n("<<variable<<" is new)";
+    }
+    // 2. amongst all existing registers (macro definition strings)
+    //    beginning with prefix, select a new one by adding numeric
+    //    suffix using search_order {pair[lo,hi]} inclusive ranges.
     auto vs = a.def_words_starting(prefix); // anything already within scope*s*?
     for(auto const& pre: block){ // for things we ARE GOING TO allocate
         // would this be a macro redefine?
@@ -877,17 +911,7 @@ void ve_propose_reg( std::string variable, AsmScope& block, AsmFmtCols const& a,
       case(VECTOR_TMP): pfx="%v"; order=&vector_order_bwd; break;
     }
     assert( order != nullptr );
-#if 0
-    auto vs = a.def_words_starting(pfx); // anything already within scopes?
-    for(auto const& pre: block){ // for things we ARE GOING TO allocate
-        vs.push_back( pre.second );
-    }
-    std::string register_name = free_pfx(vs,pfx,*order);
-    if(register_name.empty()) THROW("Out of registers");
-    block.push_back({variable,register_name});
-#else
     ve_propose_reg( variable, block, a, pfx, *order );
-#endif
 }
 #endif //CODEREMOVE < 1
 

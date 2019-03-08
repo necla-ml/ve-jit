@@ -51,34 +51,36 @@ void regs( AsmFmtVe &defs ){
         {"a",       "%v0"},
         {"b",       "%v1"},
         // const locals (aliased to same consts of VecHash2 kernel)
-        {"u", "rnd64a"},
-        {"v", "rnd64b"},
-        {"w", "rnd64c"},
+        //  In this case, we KNOW we'll use the VecHash2 kernel,
+        //  so these constants will [later] be defined.
+        {"Ca", "rnd64a"},
+        {"Cb", "rnd64b"},
+        {"Cc", "rnd64c"},
     };
     ve_propose_reg("tmp",block,defs,SCALAR_TMP);
     defs.scope(block);
 }
 /** \b In seed
  * \b Out a[], b[] pseudorandom
- * \b Const u,v,w u64 scramblers. */
+ * \b Const Ca,Cb,Cc u64 scramblers. */
 void gen_ab( AsmFmtVe &gen ){
-    gen.lcom(" gen_ab: IN:seed OUT:a,b, CONST:u,v,w");
+    gen.lcom("gen_ab(IN:seed OUT:a[],b[], CONST:Ca,Cb,Cc) @ current VL");
     // Note: Instead, could use rnd64{a,b,c} const variables
     //       with opportunistic register sharing based on name.
-    //       (because u,v loads are already in rnd64a, rnd64b, rnd64c)
+    //       (because Ca,Cb loads are already in rnd64a, rnd64b, rnd64c)
     gen.ins("vseq    a");
     gen.ins("vseq    b");
-    // using 3 const registers, u,v,w, aliased/shared with other kernels
-    gen.ins("vaddu.l a,u,a");       // a[] += u
-    gen.ins("vmulu.l a,u,a");       // a[] *= u
-    gen.ins("vaddu.l a,seed,a");    // a[] += seed
+    // using 3 const registers, Ca,Cb,Cc, aliased/shared with other kernels
+    gen.ins("vaddu.l a,Ca,a");          // a[] += Ca
+    gen.ins("vmulu.l a,Ca,a");          // a[] *= Ca
+    gen.ins("vaddu.l a,seed,a");        // a[] += seed
 
-    gen.ins("vaddu.l b,v,b");       // b[] += v
-    gen.ins("vmulu.l b,v,b");       // b[] *= v
+    gen.ins("vaddu.l b,Cb,b");          // b[] += Cb
+    gen.ins("vmulu.l b,Cb,b");          // b[] *= Cb
 
-    gen.ins("vmulu.l  a,w,a");      // a[] *= u
-    gen.ins("vxor     b,a,b");      // b[] ^= a[]
-    gen.ins("vmulu.l  b,w,b");      // b[] *= u
+    gen.ins("vmulu.l  a,Cc,a");         // a[] *= Cc
+    gen.ins("vxor     b,a,b");          // b[] ^= a[]
+    gen.ins("vmulu.l  b,Cc,b");         // b[] *= Cc
     gen.lcom("");
 }
 void sim_ab( uint64_t const seed, int const vl, Vu64& a, Vu64& b ){
@@ -169,21 +171,29 @@ std::string asm_vechash2( Sim const& sim ){
 }
 
 #if defined(__ve)
-void wrap_vechash( Sim& sim, ExecutablePage& page ){
+/** returns a bogus value to avoid unused vars (that are in asm clause) */
+int wrap_vechash( Sim& sim, ExecutablePage& page ){
         void *page_addr = page.addr();
-        uint64_t volatile *a = &sim.a[0];        // %v0
-        uint64_t volatile *b = &sim.b[0];        // %v1
-        uint64_t volatile *z = &sim.z[0];        // %v1
-        cout<<" sim@"<<(void*)&sim<<" a@"<<(void*)a<<" b@"<<(void*)b<<endl;
-        uint64_t bogus = a[0]+b[0];
+#define WVH_DEBUG 1
         uint64_t seed = sim.s;
         uint64_t hash = sim.h;
         uint64_t vlen = sim.vl;
         uint64_t volatile h2=0;
+#if WVH_DEBUG >= 1
+        uint64_t volatile *a = &sim.a[0];        // %v0
+        uint64_t volatile *b = &sim.b[0];        // %v1
+        cout<<" sim@"<<(void*)&sim<<" a@"<<(void*)a<<" b@"<<(void*)b<<endl;
+        uint64_t bogus = a[0]+b[0];
+#if WVH_DEBUG >= 2
+        uint64_t volatile *z = &sim.z[0];        // %v1
         uint64_t vx0=0, vy0=0, vz0=0;
         uint64_t xor_red=0;
-        //Vu64 vx;
-        //uint64_t *vx_addr = &vx[0];
+#if WVH_DEBUG >= 3
+        Vu64 vx;
+        uint64_t *vx_addr = &vx[0];
+#endif
+#endif
+#endif
         // jit inputs: %s0(sim.s) %s1(sim.hash) %s2(sim.vlen)
         // jit outputs
         asm("### AAA");
@@ -194,32 +204,43 @@ void wrap_vechash( Sim& sim, ExecutablePage& page ){
                 "ld     %s12, %[page]\n"
                 "bsic   %lr,(,%s12)\n"
                 "or     %[h2],0,%s3     # // save hash_combine return value\n"
+#if WVH_DEBUG >= 1 // debug... (print to compare)
                 "vst    %v0,8,%[a_addr] # // store a[]\n"
-                //"vst    %v40,8,%[a_addr] # // store vh_vs[]\n"
-                //"vst    %v61,8,%[a_addr] # // store vh2_vz[]\n"
                 "vst    %v1,8,%[b_addr] # // store b[]\n"
+#if WVH_DEBUG >= 2 // more debug...
                 "vst    %v61,8,%[z_addr] # // store z[]\n"
                 "lvs    %[vz0], %v61(0)\n"   // vh2_vz
                 "lvs    %[vy0], %v62(0)\n"   // vh2_vy
                 "lvs    %[vx0], %v63(0)\n"   // vh2_vx
-                //"lvs    %[vx0], %v62(1)\n"   // vh2_vy
-                "or    %[xor_red],0,%s4\n" // vh2_r
-                //"vst    %v63,8,%[vx_addr] # // store vx[]\n"
+                "or     %[xor_red],0,%s62\n"  // vh2_r
+#if WVH_DEBUG >= 3
+                "vst    %v63,8,%[vx_addr] # // store vx[]\n"
+#endif
+#endif
+#endif
                 // outputs
                 : [h2]"=r"(h2)
+#if WVH_DEBUG >= 1
                 , [vx0]"=r"(vx0)
                 , [vy0]"=r"(vy0)
                 , [vz0]"=r"(vz0)
                 , [xor_red]"=r"(xor_red)
+#endif
                 // inputs (actually const...)
                 : [page]"m"(page_addr)
                 , [seed]"r"(seed)   // seed %s0
                 , [hash]"r"(hash)   // hash %s1
                 , [vlen]"r"(vlen)   // vector len %s2
+#if WVH_DEBUG >= 1
                 , [a_addr]"r"(a)
                 , [b_addr]"r"(b)
+#if WVH_DEBUG >= 2
                 , [z_addr]"r"(z)
-                //, [vx_addr]"r"(vx_addr)
+#if WVH_DEBUG >= 3
+                , [vx_addr]"r"(vx_addr)
+#endif
+#endif
+#endif
                 // clobbers
                 :"%s12","%s0","%s1","%s2","%s3","%s4","%s5","%s6","%s7","%v0","%v1",
                 "%s40","%s41","%s42","%s43",
@@ -237,30 +258,35 @@ void wrap_vechash( Sim& sim, ExecutablePage& page ){
         sim.h2 = sim.h ^ r;
 #if 1
         std::cout<<" xor-reduce r="<<std::hex<<r<<std::dec<<std::endl;
-        cout<<hex<<a[0]<<", "<<b[0]<<", "<<hash<<", "<<sim.h2<<", bogus="<<bogus<<endl;
-        cout<<" vx0="<<hex<<vx0
-            <<" vy0="<<hex<<vy0
-            <<" vz0="<<hex<<vz0<<endl;
-        cout<<", xor_red="<<hex<<xor_red
-            <<", ~xor_red="<<hex<<~xor_red
-            <<dec<<endl;
-        //FOR(i,vlen){ cout<<" vx["<<i<<"]= "<<hex<<vx[i]<<endl; }
-        cout<<endl;
+        cout<<hex<<hash<<", "<<sim.h2<<", bogus="<<bogus;
+#if WVH_DEBUG >= 1
+        cout<<"\na[0] = "<<a[0]<<" b[0] = "<<b[0];
+#if WVH_DEBUG >= 2
+        cout<<"\nvx0="<<vx0<<" vy0="<<vy0<<" vz0="<<vz0;
+        cout<<"\n, xor_red="<<hex<<xor_red <<", ~xor_red="<<hex<<~xor_red
+#if WVH_DEBUG >= 3
+        FOR(i,vlen){ cout<<" vx["<<i<<"]= "<<hex<<vx[i]<<endl; }
 #endif
+#endif
+#endif
+#endif
+        cout<<dec<<endl;
+        return bogus;
 }
 #endif
 
 void run_vechash2( Sim& sim, std::string code ){
-#if !defined(__ve) // just run the x86 version once more...
-    sim_vechash2(sim);
-#else
-    string asmFile("tmp_test_vechash.S");
+    string asmFile("tmp_test_vechash_vl"+jitdec(sim.vl)+".S");
     {
         ofstream ofs(asmFile);
         ofs<<"/* Autogenerated by  test_vechash.cpp */\n";
         ofs<<code;
         ofs.close();
     }
+#if !defined(__ve) // just run the x86 version once more...
+    if(1){ cout<<"VE assembler --> file "<<asmFile<<endl; }
+    sim_vechash2(sim);
+#else
     if(1){ cout<<"asm2bin(\""<<asmFile<<"\",verbose)..."; }
     auto bytes_bin = asm2bin( asmFile, 0/*verbose*/ );                  // .S --> .bin
     if(1){ cout<<" binary blob of "<<bytes_bin<<" bytes"<<endl; }
