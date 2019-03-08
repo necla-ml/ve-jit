@@ -14,8 +14,9 @@
 #include <algorithm>    // min
 #define STR0(...) #__VA_ARGS__
 #define STR(...) STR0(__VA_ARGS__)
+
 #ifndef FOR
-#define FOR(VAR,VLEN) for(int VAR=0; (VAR) < (VLEN); ++VAR)
+#define FOR(VAR,VLEN) _Pragma("_NEC shortloop") for(int VAR=0; (VAR) < (VLEN); ++VAR)
 #endif
 
 using namespace std;
@@ -28,7 +29,7 @@ typedef array<volatile uint64_t,MVL> Vu64;
 // Perhaps later we should JIT the wrapper call too (then even input registers can
 // be automatically handled).
 //
-void regs( AsmFmtCols &defs ){
+void regs( AsmFmtVe &defs ){
     AsmScope block;
     ve_propose_reg("seed",block,defs,SCALAR);
     ve_propose_reg("hash",block,defs,SCALAR);
@@ -41,7 +42,7 @@ void regs( AsmFmtCols &defs ){
     defs.scope(block, vechash2::test_vechash);
 }
 #endif
-void regs( AsmFmtCols &defs ){
+void regs( AsmFmtVe &defs ){
     AsmScope block = {
         {"seed",    "%s0"},
         {"hash",    "%s1"},
@@ -49,49 +50,35 @@ void regs( AsmFmtCols &defs ){
         {"h2",      "%s3"},
         {"a",       "%v0"},
         {"b",       "%v1"},
-        // locals (tmp scalars)
-        //{"u",       "%s4"},
-        //{"v",       "%s5"}, // tmp for a[],b[] generation
+        // const locals (aliased to same consts of VecHash2 kernel)
         {"u", "rnd64a"},
         {"v", "rnd64b"},
         {"w", "rnd64c"},
     };
+    ve_propose_reg("tmp",block,defs,SCALAR_TMP);
     defs.scope(block);
 }
-void gen_ab( AsmFmtCols &gen ){
-    gen.lcom(" gen_ab: IN:seed,vlen OUT:a,b, TMP:u,v");
+/** \b In seed
+ * \b Out a[], b[] pseudorandom
+ * \b Const u,v,w u64 scramblers. */
+void gen_ab( AsmFmtVe &gen ){
+    gen.lcom(" gen_ab: IN:seed OUT:a,b, CONST:u,v,w");
     // Note: Instead, could use rnd64{a,b,c} const variables
     //       with opportunistic register sharing based on name.
     //       (because u,v loads are already in rnd64a, rnd64b, rnd64c)
-    gen.ins("svl     vlen");
     gen.ins("vseq    a");
     gen.ins("vseq    b");
-#if 0
-    gen.ins(ve_load64("u",scramble64::r1));           // u = r1
-    gen.ins("vaddu.l  a,u,a");                        // a[] += u
-    gen.ins("vmulu.l  a,u,a");                        // a[] *= u
-    gen.ins("vaddu.l  a,seed,a");                     // a[] += seed
+    // using 3 const registers, u,v,w, aliased/shared with other kernels
+    gen.ins("vaddu.l a,u,a");       // a[] += u
+    gen.ins("vmulu.l a,u,a");       // a[] *= u
+    gen.ins("vaddu.l a,seed,a");    // a[] += seed
 
-    gen.ins(ve_load64("v",scramble64::r2));           // v = r2
-    gen.ins("vaddu.l b,v,b");                         // b[] += v
-    gen.ins("vmulu.l  b,v,b");                        // b[] *= v
+    gen.ins("vaddu.l b,v,b");       // b[] += v
+    gen.ins("vmulu.l b,v,b");       // b[] *= v
 
-    gen.ins(ve_load64("u",scramble64::r3));           // u = r3
-    gen.ins("vmulu.l  a,u,a");                        // a[] *= u
-    gen.ins("vxor  b,a,b");                         // b[] ^= a[]
-    gen.ins("vmulu.l  b,u,b");                        // b[] *= u
-#else
-    gen.ins("vaddu.l  a,u,a");                        // a[] += u
-    gen.ins("vmulu.l  a,u,a");                        // a[] *= u
-    gen.ins("vaddu.l  a,seed,a");                     // a[] += seed
-
-    gen.ins("vaddu.l b,v,b");                         // b[] += v
-    gen.ins("vmulu.l  b,v,b");                        // b[] *= v
-
-    gen.ins("vmulu.l  a,w,a");                        // a[] *= u
-    gen.ins("vxor  b,a,b");                         // b[] ^= a[]
-    gen.ins("vmulu.l  b,w,b");                        // b[] *= u
-#endif
+    gen.ins("vmulu.l  a,w,a");      // a[] *= u
+    gen.ins("vxor     b,a,b");      // b[] ^= a[]
+    gen.ins("vmulu.l  b,w,b");      // b[] *= u
     gen.lcom("");
 }
 void sim_ab( uint64_t const seed, int const vl, Vu64& a, Vu64& b ){
@@ -153,19 +140,19 @@ void sim_vechash2( Sim& sim ){
 }
 std::string asm_vechash2( Sim const& sim ){
     VecHash2 vh(MVL);                            // we'll use the default VecHash2 seed
-    AsmFmtCols def, gen, hsh;
-    regs( def );
-
+    AsmFmtVe def, gen, hsh;
+    regs(def);
     gen.setParent(&def);
+    gen.set_vector_length(sim.vl);
     gen_ab( gen );
 
     hsh.setParent(&gen);
     hsh.ins("xor h2,0,hash", "prior hash value");
     vh.kern_asm_begin( def, gen, 0, sim.s );
-    vh.kern_asm( hsh, "a", "b", "vlen", "h2");
+    vh.kern_asm( hsh, "a", "b", "vlen", "h2", "tmp");
     vh.kern_asm_end( hsh );
 
-    AsmFmtCols endcode;
+    AsmFmtVe endcode;
     endcode.ins("b.l (,%lr)", "return!");
     endcode.lcom("finished jit asm code " __FILE__);
 
@@ -247,8 +234,9 @@ void wrap_vechash( Sim& sim, ExecutablePage& page ){
         //sim.h2 = h2; // avoid buggy assembler vrxor op
         uint64_t r = 0;
         FOR(i,sim.vl) r ^= z[i];
-        std::cout<<" xor-reduce r="<<std::hex<<r<<std::dec<<std::endl;
         sim.h2 = sim.h ^ r;
+#if 1
+        std::cout<<" xor-reduce r="<<std::hex<<r<<std::dec<<std::endl;
         cout<<hex<<a[0]<<", "<<b[0]<<", "<<hash<<", "<<sim.h2<<", bogus="<<bogus<<endl;
         cout<<" vx0="<<hex<<vx0
             <<" vy0="<<hex<<vy0
@@ -258,6 +246,7 @@ void wrap_vechash( Sim& sim, ExecutablePage& page ){
             <<dec<<endl;
         //FOR(i,vlen){ cout<<" vx["<<i<<"]= "<<hex<<vx[i]<<endl; }
         cout<<endl;
+#endif
 }
 #endif
 
@@ -303,7 +292,7 @@ void test_vechash(){
     //   - and xor the result back into hash (%s1)
     string asmFile("tmp_jitve_test_hello.S");  // file extension required
     {
-        AsmFmtCols kernel_vechash(asmFile); // assembler line pretty printer
+        AsmFmtVe kernel_vechash(asmFile); // assembler line pretty printer
         kernel_vechash
             .lcom(STR(VecHash(IN:seed,vlen, INOUT: hash, OUT: a[vlen],b[vlen])))
             .lcom(STR( seed, vlen, hash   : %s0, %s1, %s2 ))

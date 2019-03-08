@@ -557,6 +557,30 @@ std::string uncomment_asm( std::string asmcode )
     }
     return oss.str();
 }
+/** optimized (may not need to use a register) */
+std::string ve_set_vector_length(uint64_t immN, std::string tmp){
+    if(immN > 256) THROW("VE vector length must in [0,256]");
+    std::string sN = jitdec(immN);
+    if(immN > 127){
+        return "lea "+tmp+", "+sN+"; lvl "+tmp;
+    }
+    return "lvl "+sN;
+}
+AsmFmtVe& AsmFmtVe::set_vector_length(uint64_t const vl){
+    if(vl > 256) THROW("VE vector length must in [0,256]");
+    std::string sN = jitdec(vl);
+    if(vl > 127){
+        AsmScope block;
+        ve_propose_reg("tmp",block,*this,SCALAR_TMP);
+        scope(block);
+        ins("lea tmp, "+sN+"; lvl tmp");
+        pop_scope();
+    }else{
+        ins("lvl "+sN);
+    }
+    return *this;
+}
+
 std::string ve_load64_opt0(std::string s, uint64_t v){
     uint32_t const vlo = uint32_t(v);
     uint32_t const vhi = uint32_t(uint32_t(v>>32) + ((int32_t)v<0? 1: 0));
@@ -825,8 +849,9 @@ std::string ve_load64(std::string s, uint64_t v){
 void ve_propose_reg( std::string variable, AsmScope& block, AsmFmtCols const& a,
         std::string prefix,
         std::vector<std::pair<int,int>> const search_order){
-    auto vs = a.def_words_starting(prefix); // anything already within scopes?
+    auto vs = a.def_words_starting(prefix); // anything already within scope*s*?
     for(auto const& pre: block){ // for things we ARE GOING TO allocate
+        // would this be a macro redefine?
         vs.push_back( pre.second );
     }
     std::string register_name = free_pfx(vs,prefix,search_order);

@@ -9,7 +9,7 @@
 #include <iomanip>
 
 #ifndef FOR
-#define FOR(I,VL) for(int I=0;I<VL;++I)
+#define FOR(VAR,VLEN) _Pragma("_NEC shortloop") for(int VAR=0; (VAR) < (VLEN); ++VAR)
 #endif
 
 namespace scramble64 {
@@ -172,7 +172,8 @@ struct VecHash2 {
     static void kern_asm_begin( AsmFmtCols &ro_regs, AsmFmtCols &state,
             char const* client_vs=nullptr, uint32_t const seed=0 );
     static void kern_asm( AsmFmtCols &parent,
-            std::string va, std::string vb, std::string vl, std::string hash );
+            std::string va, std::string vb, std::string vl, std::string hash,
+            std::string tmp );
     static void kern_asm_end( AsmFmtCols &a );
   private:
     void init(){

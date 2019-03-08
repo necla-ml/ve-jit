@@ -123,6 +123,9 @@ class AsmFmtCols {
       /** like \c def_words_starting, but return cpp macros {name,word}s
        * instead of just words (words begin \c with). */
       std::vector<std::pair<std::string,std::string>> def_macs_starting(std::string with) const;
+      /** all defined macros (this and parent[s]) */
+      std::vector<std::pair<std::string,std::string>> def_macs() const;
+
       /** Set scoping parent, returning old pointer [default=NULL].
        * You can arrange AsmFmtCols as a nesting of scopes, so we can
        * consult \c parent to know about other in-scope \c def macros.
@@ -237,6 +240,13 @@ class AsmFmtCols {
       std::vector<StringPairs> stack_defs;
       AsmFmtCols *parent;             ///< optional scope parent to support \c def_words_starting
 };
+
+/** add VE-specific optimizations */
+struct AsmFmtVe : public AsmFmtCols
+{
+    static unsigned const MVL=256;
+    AsmFmtVe& set_vector_length(uint64_t const vl);
+};
 #if 0
 /** extend AsmFmtCols with scoped symbolic register names */
 class AsmFmt : protected AsmFmtCols {
@@ -314,11 +324,14 @@ inline bool OpLoadregStrings::one_op() const {
 }
 
 /** \b NOT optimized -- reduce dependence on other headers!
- * \c s is a VE register, v is the constant to load. */
+ * \c s is a VE register, \c v is the constant to load. */
 std::string ve_load64_opt0(std::string s, uint64_t v);
 
-/** choose with easier interface (and no context) */
+/** load reg \c s with value \c v, optimized (but w/o context) */
 std::string ve_load64(std::string s, uint64_t v);
+
+/** set vector length (local \c tmp register if immN out of 0-127 range). */
+std::string ve_set_vector_length(uint64_t immN, std::string tmp);
 
 /** A common pattern is to pre-select any required registers into an \c AsmScope block,
  * and then shove all the assignments into AsmFmtCols::scope(block,name) */

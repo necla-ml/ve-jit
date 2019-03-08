@@ -51,7 +51,7 @@ void VecHash::kern_asm_begin( AsmFmtCols &a, char const* client_vs/*=nullptr*/,
     // const regs
     if(!client_vs){
         // vh_vs really should be 0..MVL-1, for most safety.
-        a.ins("svl rnd64a; lea rnd64b,256; lvl rnd64b; vseq vh_vs; lvl rnd64a"
+        a.ins("lvl rnd64a; lea rnd64b,256; svl rnd64b; vseq vh_vs; lvl rnd64a"
                 ,"vh_vs=0,1,..,MVL-1");
     }
     a.ins(ve_load64("rnd64a", scramble64::r1));
@@ -113,7 +113,7 @@ void VecHash2::kern_asm_begin( AsmFmtCols &ro_regs, AsmFmtCols &state,
         else          vechash_vector ("vh_vs",block,state);
         ro_regs.scope(block,"const: vechash2");
         if(!client_vs){
-            ro_regs.ins("svl rnd64a#rnd* as tmp regs..; lea rnd64b,256; lvl rnd64b; vseq vh_vs; lvl rnd64a"
+            ro_regs.ins("svl rnd64a#rnd* as tmp regs..; lea rnd64b,256; lvl rnd64b; vseq vh_vs; svl rnd64a"
                     ,"..vh_vs=0,1,..,MVL-1");
         }
         ro_regs.ins(ve_load64("rnd64a", scramble64::r1),"scramble64::r1");
@@ -139,9 +139,11 @@ void VecHash2::kern_asm_begin( AsmFmtCols &ro_regs, AsmFmtCols &state,
 /** input strings are registers.
  * \c va, \c vb (vectors) of length \c vl (scalar) are to be mixed in
  * with our current hash context. The resulting hash value is placed into
- * \c hash (scalar). */
+ * \c hash (scalar). Client gives us one \c tmp reg (which will hold the
+ * xor-reduction value upon exit). */
 void VecHash2::kern_asm( AsmFmtCols &a,
-        std::string va, std::string vb, std::string vl, std::string hash ){
+        std::string va, std::string vb, std::string vl, std::string hash,
+        std::string tmp ){
     a.lcom("vechash2 : kernel begins",
             "  in: "+va+", "+vb+", "+vl,
             "  inout: "+hash+" (scalar reg)",
@@ -151,59 +153,33 @@ void VecHash2::kern_asm( AsmFmtCols &a,
           );
     AsmScope block; // empty
     //ve_propose_reg("vh2_r" ,block,a,SCALAR_TMP);
-    ve_propose_reg("vh2_r" ,block,a,SCALAR);
+    ve_propose_reg("vh2_r" ,block,a,SCALAR_TMP);
     ve_propose_reg("vh2_vx",block,a,VECTOR_TMP);
     ve_propose_reg("vh2_vy",block,a,VECTOR_TMP);
     ve_propose_reg("vh2_vz",block,a,VECTOR_TMP);
     a.scope(block,string{"vechash2::kern_asm"});
-#if 0
-    // testing only...
-    a.ins("vbrd vh2_vx,0; vbrd vh2_vy,0");
-    a.ins("lea vh2_r,0xfeed; vbrd vh2_vz,vh2_r");
-    a.ins("lea vh2_r,1; svl vh2_r # vl=1");
-#else
-    // actual vector-hash
+    // a[], b[] --> vector hash for a,b at sequence position j
     a.ins("vmulu.l  vh2_vx, rnd64b, /**/"+va,       "scramble64::r2 * "+va+"[]");
     a.ins("vaddu.l  vh2_vy, vh2_j, vh_vs",          "init for state j");
     a.ins("vmulu.l  vh2_vz, rnd64c, /**/"+vb,       "scramble64::r3 * "+vb+"[]");
     a.ins("vmulu.l  vh2_vy, rnd64a, vh2_vy",        "scramble64::r1 * (j+vs[])");
     a.ins("vaddu.l  vh2_vx, vh2_vx, vh2_vz");
     a.ins("vaddu.l  vh2_vz, vh2_vx, vh2_vy",        "vz ~ sum xyz scrambles");
-#endif
-    // vrxor and vxsum seem to depend on details of VE hardware state.
-    // So while some of the following gave good results with some
-    // values of vx,vy,vz, changing preceding instructions make things
-    // not work again1
-#if 0
+    //
+    // ---------------- BEWARE -------------------
+    //
+    // I had a tough bug to crack once, here.
+    // LVL = "Load Vector Length"  <-- use this to set the vector length
+    // SVL = "Save Vector Length"  ( **not** "Set" )
+    //
+    // In gdb, you can double-check vl with "info reg vl"
+    //
+    // vector hash --> scalar hash (xor-reduce)
     a.ins("vrxor    vh2_vx, vh2_vz",                "vy[0] = vz[0]^vz[1]^...");
-    // following lvs gives wrong vsum result without 2nd vrxor AND fence
-    //a.ins("vrxor    vh2_vy, vh2_vz",                "vy[0] = vz[0]+vz[1]+...");
-    //a.ins("vrxor    vh2_vy, vh2_vz",                "vy[0] = vz[0]^vz[1]^...");
-    //a.ins("fencei");
     a.ins("lvs      vh2_r, vh2_vx(0)",              "r = xor-reduction(vx)");
-#elif 0
-    a.ins("vrxor     vh2_vx, vh2_vz",                "vy[0] = vz[0]^vz[1]^...");
-    // following lvs gives wrong vsum result without vsum AND fence
-    a.ins("vsum.l    vh2_vy, vh2_vz",                "vy[0] = vz[0]+vz[1]+...");
-    a.ins("fencei");
-    a.ins("lvs      vh2_r, vh2_vx(0)",              "r = xor-reduction(vx)");
-#elif 0
-    a.ins("vrxor     vh2_vx, vh2_vz",                "vy[0] = vz[0]^vz[1]^...");
-    a.ins("vrxor     vh2_vx, vh2_vz",                "vy[0] = vz[0]^vz[1]^...");
-    a.ins("vbrd vh2_vy,0; vaddu.l vh2_vx,vh2_vy,vh2_vx");
-    a.ins("fencei");
-    a.ins("lvs      vh2_r, vh2_vx(0)",              "r = xor-reduction(vx)");
-#else
-#endif
-#if 0
-    // VE reductions are NO GOOD. so just save the vector to memory
-    // and do a scalar reduction in your C/C++ code
-    a.ins("addu.l   vh2_j, "+vl+", vh2_j",              "state j += vl");
+    a.ins("addu.l   vh2_j, "+vl+", vh2_j",          "state j += vl (seq pos)");
     a.com("output: modified hash value "+hash);
     a.ins("xor      /**/"+hash+", "+hash+", vh2_r", hash+" ^= r");
-#else
-    a.lcom("VE reductions ops do not work. Return the scrambled vector instead");
-#endif
     a.pop_scope();
     a.lcom("vechash2 : kernel done");
 }
