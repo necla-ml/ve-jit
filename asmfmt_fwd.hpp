@@ -82,7 +82,7 @@ class AsmFmtCols {
        * \note This returns a temporary so that directly calling \c c_str()
        * on the return value results in a \b dangling pointer. */
       std::string str() const;
-      void clear() { a->str(""); a->clear(); }
+      void clear();
       /** Silent pre-destructor \c write(), possibly with file output,
        * that returns the text as a std::string temporary. */
       std::string flush();

@@ -126,3 +126,7 @@ bug-x86
 cblock
 *.diff
 test_*-x86
+bug0 bug1 bug2
+nld.help
+nobjcopy.info objcopy.info
+nld.help nobjcopy.help

@@ -166,12 +166,11 @@ std::string AsmFmtCols::flush(){
                 cout<<" ERROR: could not write to output file!"<<endl;
             }
             //delete of;  of = nullptr;
-            a->str("");
-            a->clear();
         }
-        this->written = true;
+        this->clear(); // return ostringstream *a to 'empty'
         //delete a; a = nullptr;
     }
+    this->written = true;
     return ret;
 }
 void AsmFmtCols::write(){

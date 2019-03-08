@@ -4,6 +4,9 @@
 #include "asmfmt_fwd.hpp"
 #include "throw.hpp"
 #include <assert.h>
+// tmp debug
+#include <iostream>
+#include <iomanip>
 
 #ifndef FOR
 #define FOR(I,VL) for(int I=0;I<VL;++I)
@@ -130,6 +133,7 @@ struct VecHash2 {
     {
         if(!mem) THROW("Out of memory");
         init();
+        std::cout<<"+vh2: seed="<<seed<<" j="<<std::hex<<j<<std::dec<<std::endl;
     }
     ~VecHash2(){
         delete[](mem);
@@ -153,13 +157,18 @@ struct VecHash2 {
         FOR(i,vl) vz[i] = r3 * w[i];            // hash w[]
         FOR(i,vl) vy[i] = r1 * vy[i];           // hash vs[]=j..j+vl-1
         FOR(i,vl) vx[i] = vx[i] + vz[i];        // hash_v[] + hash_w[]
-        FOR(i,vl) vx[i] = vx[i] + vy[i];        // add hash_vs[]
+        FOR(i,vl) vz[i] = vx[i] + vy[i];        // add hash_vs[]
+        std::cout<<" pre-xor-reduce vx[0]="<<std::hex<<vx[0]<<std::dec<<std::endl;
+        std::cout<<" pre-xor-reduce vy[0]="<<std::hex<<vy[0]<<std::dec<<std::endl;
+        std::cout<<" pre-xor-reduce vz[0]="<<std::hex<<vz[0]<<std::dec<<std::endl;
         r = 0;
-        FOR(i,vl) r ^= vx[i];
+        FOR(i,vl) r ^= vz[i];
+        std::cout<<" xor-reduce r="<<std::hex<<r<<std::dec<<std::endl;
         hashVal ^= r;                           // hashVal ^= vx[0]^vx[1]^...^vx[vl-1]
         j += vl;
         return hashVal;
     }
+    uint64_t* getVhash() const { return &vz[0]; }
     static void kern_asm_begin( AsmFmtCols &ro_regs, AsmFmtCols &state,
             char const* client_vs=nullptr, uint32_t const seed=0 );
     static void kern_asm( AsmFmtCols &parent,

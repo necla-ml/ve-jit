@@ -7,8 +7,13 @@
 #include <assert.h>
 
 #if ASMFMTREMOVE < 1
+inline void AsmFmtCols::clear()
+{
+    a->str("");
+    a->clear();
+}
 inline std::string AsmFmtCols::str() const {
-    return (*a).str();
+    return a->str();
 }
 
 inline AsmFmtCols * AsmFmtCols::setParent( AsmFmtCols* p ) {

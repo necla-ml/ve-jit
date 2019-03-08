@@ -460,6 +460,10 @@ dlprt-ve: dlprt.c
 test_vechash-x86: test_vechash.cpp vechash.cpp asmfmt.cpp jitpage.c intutil.c libjit1-x86.so
 	g++ ${CXXFLAGS} $(filter %.cpp,$^) $(filter %.c,$^) -o $@ -ldl #-L. -ljit1-x86
 	{ ./$@; echo "exit status $$?"; }
+test_vechash-ve: test_vechash.cpp vechash.cpp asmfmt.cpp jitpage.c intutil.c
+	#${CXX} ${CXXFLAGS} -S $(filter %.cpp,$^) $(filter %.c,$^) # -ldl #-L. -ljit1-x86
+	${CXX} ${CXXFLAGS} $(filter %.cpp,$^) $(filter %.c,$^) -o $@ -ldl #-L. -ljit1-x86
+	#{ ./$@; echo "exit status $$?"; }
 #allsyms-x86: allsyms.cpp
 #	g++ -g2 -O2 -std=c++11 -D_GNU_SOURCE $< -o $@ -ldl
 #allsyms-ve: allsyms.cpp
