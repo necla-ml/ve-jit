@@ -81,7 +81,7 @@ void test_loadreg(char const* const cmd, unsigned long const parm, int const opt
     {
         printf("// create the JIT assembly code\n");
         fflush(stdout);
-        AsmFmtCols prog("");
+        AsmFmtCols prog;
         prog.lcom(STR(Input:    None))
             .lcom(STR(Output:   %s0 : loaded with some jit constant))
             .lcom(STR(Clobbers: %s0, maybe %s1))

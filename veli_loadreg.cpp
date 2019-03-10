@@ -233,7 +233,7 @@ void emit_case(AsmFmtCols& prog, uint64_t case_num, uint64_t const t){
 template<typename SET>
 std::string getBigTest(SET const& tvals){
     // see veliFoo.cpp for suggestions about macros
-    AsmFmtCols prog("");
+    AsmFmtCols prog;
     prog.lcom(STR0(__FUNCTION__) " (tvals.size() = "+jitdec(tvals.size()));
     // we use labels...
     string funcname("LRBIG");

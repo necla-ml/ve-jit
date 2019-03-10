@@ -8,6 +8,11 @@
 #include <regex>
 #include <list>
 
+// identify deprecated features...
+#ifndef ASMFMT_USE_DEPRECATED
+#define ASMFMT_USE_DEPRECATED 0
+#endif
+
 #if ASMFMTREMOVE < 2
 /* terminal .S --> .bin or throw */
 std::string fname_bin( std::string const& fname_S );
@@ -73,10 +78,12 @@ struct ExecutablePage {
 class AsmFmtCols {
   public: // utility
       AsmFmtCols();                           ///< destructor writes to cout
+#if ASMFMT_USE_DEPRECATED
       /** destructor write to file instead of cout.
        * Use an empty string for no file/cout output when you want
        * to grab the output only as std::string */
       AsmFmtCols(std::string const& fname);
+#endif //ASMFMT_USE_DEPRECATED
       ~AsmFmtCols();  ///< write to cout if !this->written, or constructor fname if there is one
       /** default is to allow any same-named variables to alias.
        * this is a "root" property, so is we have a parent, we
@@ -87,21 +94,33 @@ class AsmFmtCols {
       bool allow_alias() const { return this->_allow_alias; }
       bool allow_alias(bool const b) { return this->_allow_alias = b; }
 
-      /** Can force a pre-destructor write (destructor won't write);
-       * Any subsequent non-const function calls will throw an error.
-       * To kill this formatter \em skipping cout, use \c flush(). */
-      void write();
       /** return copy of internal ostringstream.
        * \note This returns a temporary so that directly calling \c c_str()
        * on the return value results in a \b dangling pointer. */
       std::string str() const;
+
+      /** Forcibly empty the output buffer */
       void clear();
+#if ASMFMT_USE_DEPRECATED
       /** Silent pre-destructor \c write(), possibly with file output,
        * that returns the text as a std::string temporary. */
       std::string flush();
-      /** Flush any code, and also output the \c stack_undefs. \return a temporary string */
+#else
+      /** Same as str(), with an implied clear() */
+      std::string flush(){ std::string ret=str(); flush(); return ret; }
+#endif
+      /** Flush any code, \b and also output the \c stack_undefs.
+       * \return a temporary string */
       std::string flush_all() { pop_scopes(); return flush(); }
-      //std::string flush_undefs(); // old name
+
+#if ASMFMT_USE_DEPRECATED
+      /** Can force a pre-destructor write (destructor won't write);
+       * Any subsequent non-const function calls will throw an error.
+       * To kill this formatter \em skipping cout, use \c flush(). */
+      void write();
+#endif //ASMFMT_USE_DEPRECATED
+
+      //
       /** output #define text for these string pairs, and push a corresponding
        * string of #undef onto a scope-stack.
        * \return number of #defines in this scope (which could be zero)
@@ -163,9 +182,10 @@ class AsmFmtCols {
        * 1) cannot \em uncover a previous definition?
        * 2) might spit out duplicate undef lines?
        * Is this fn necesary?  Can \c push_scope, \c pop_scope do everything you need?
-       * \deprecated
+       * POSSIBLY useful for non-register macros.
        */
       AsmFmtCols& undef(std::string const& symbol, std::string const& name="");
+      //@}
       AsmFmtCols& raw(std::string const& anything);    ///< use this for stuff like cpp macros or output from other AsmFmtCols 'kernels'
       AsmFmtCols& lcom(std::string const& comment);    ///< left <// comment>
       AsmFmtCols& com(std::string const& comment);     ///< mid <// comment>
@@ -213,7 +233,6 @@ class AsmFmtCols {
       std::string fmt_def(std::string const& symbol, std::string const& subst, std::string const& name="");
       std::string fmt_undef(std::string const& symbol, std::string const& name);
   private:
-      friend void throw_if_written( AsmFmtCols const* asmfmt, std::string const& cannot );
       std::ostringstream *a;          ///< [cpp +] assembler code
       static char const* const ws;    ///< =" \t\r" within-statement whitespace (newline separates statement)
       static char const* const indent; ///< = "    ";
@@ -221,8 +240,11 @@ class AsmFmtCols {
       static int const opwidth;       ///< = 12-1;
       //static std::streampos const argwidth;      ///< = 24-1;
       static int const argwidth;
+#if ASMFMT_USE_DEPRECATED
+      friend void throw_if_written( AsmFmtCols const* asmfmt, std::string const& cannot );
       bool written;                   ///< track if user forced an early \c write();
       std::ofstream *of;              ///< optional file output (instread of cout)
+#endif //ASMFMT_USE_DEPRECATED
       /** push with \c scope, pop with \c pop_scopes or pop_scope.
        * Each element is a multiline-string (one or more '\#undef') */
       std::vector<std::string> stack_undefs;
@@ -278,7 +300,8 @@ std::string uncomment_asm( std::string asmcode );
 
 /// \group VE assembler helpers
 //@{
-/** \c out = replicated MSB (sign bit) of \c in (0 or -1) */
+/** \c out = replicated MSB (sign bit) of \c in.
+ * \return code setting \c out to 0 or -1. */
 std::string ve_signum64(std::string out, std::string in);
 /** \c out = absolute value of int64_t \c in */
 std::string ve_abs64(std::string out, std::string in);
@@ -289,6 +312,7 @@ std::string ve_abs64(std::string out, std::string in);
  * \p bp assembler register (Ex. %s33)
  * \p name of func (Ex. foo)*/
 void ve_set_base_pointer( AsmFmtCols & a, std::string bp="%s34", std::string name="foo" );
+
 /** \group VE load scalar register with constant */
 //@{
 struct OpLoadregStrings{

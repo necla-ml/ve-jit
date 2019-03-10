@@ -50,7 +50,7 @@ std::string prgiFoo(uint64_t start)
 {
     //int kase = 0; // for simple stuff, don't need execution path machinery.
     string program;
-    AsmFmtCols prog("");
+    AsmFmtCols prog;
     prog.lcom(STR(__FUNCTION__) " (i="+jithex(start)+" = "+jitdec(start));
     string func("Foo");
     if(1){ // if you need relative addressing ...
@@ -640,7 +640,7 @@ std::string prgiLoadreg(uint64_t start)
     uint64_t const parm = start;
     //int kase = 0; // for simple stuff, don't need execution path machinery.
     string program;
-    AsmFmtCols prog("");
+    AsmFmtCols prog;
     prog.lcom(func+"( i = "+jithex(start)+" = "+jitdec(start)+" )");
 
     string chosen; // which impl?

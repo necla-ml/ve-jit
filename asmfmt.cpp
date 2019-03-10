@@ -91,18 +91,35 @@ int const            AsmFmtCols::opwidth = 12;
 //std::streampos const AsmFmtCols::argwidth = 24;
 int const            AsmFmtCols::argwidth = 44;
 
+#if ASMFMT_USE_DEPRECATED
+static inline void throw_if_written( AsmFmtCols const* asmfmt, string const& cannot ){
+    if( asmfmt->written ){
+        throw runtime_error( string{"AsmFmtCols already written - cannot "} + cannot );
+    }
+}
+#else
+static inline void throw_if_written( AsmFmtCols const* asmfmt, string const& cannot ){
+    /* NOP */
+}
+#endif
+
 AsmFmtCols::AsmFmtCols()
-    : a(new ostringstream()), written(false), of(nullptr)
-      //, stack_undefs{std::string("")}, stack_defs{std::string("")}
-      , stack_undefs(), stack_defs(),
-      parent(nullptr), _allow_alias(true)
+    : a(new ostringstream()),
+#if ASMFMT_USE_DEPRECATED
+    written(false), of(nullptr),
+#endif //ASMFMT_USE_DEPRECATED
+    //, stack_undefs{std::string("")}, stack_defs{std::string("")}
+    stack_undefs(), stack_defs(),
+    parent(nullptr), _allow_alias(true)
 {
     (*a) << left;
     a->fill(' ');
 }
+#if ASMFMT_USE_DEPRECATED
 AsmFmtCols::AsmFmtCols( string const& fname )
-    : a(new ostringstream()), written(false)
-      , of(nullptr), stack_undefs(), stack_defs(), parent(nullptr)
+    : a(new ostringstream()),
+    written(false), of(nullptr),
+    stack_undefs(), stack_defs(), parent(nullptr)
 {
     //of->rdbuf()->pubsetbuf(charBuffer,BUFFER_SIZE); // opt
     if(fname.size()){
@@ -112,8 +129,10 @@ AsmFmtCols::AsmFmtCols( string const& fname )
     (*a) << left;
     a->fill(' ');
 }
+#endif //ASMFMT_USE_DEPRECATED
 AsmFmtCols::~AsmFmtCols(){
     //std::cout<<"~AsmFmtCols,"<<stack_undefs.size()<<"undefs "; std::cout.flush();
+#if ASMFMT_USE_DEPRECATED
     while(stack_undefs.size()){
         //std::cout<<" destructor pop_scope"; std::cout.flush();
         this->pop_scope();
@@ -125,12 +144,15 @@ AsmFmtCols::~AsmFmtCols(){
         this->write();
     }
     if(of){ of->flush(); of->close(); delete of; of = nullptr; }
-    delete a;    a = nullptr;
-}
-inline void throw_if_written( AsmFmtCols const* asmfmt, string const& cannot ){
-    if( asmfmt->written ){
-        throw runtime_error( string{"AsmFmtCols already written - cannot "} + cannot );
+#else
+    if( !a->str().empty() ){
+        cout<<" Warning: unused AsmFmtCols code:\n"<<a->str()<<endl;
     }
+    if( stack_undefs.size() ){
+        cout<<" Warning: un-popped stack_undefs!"<<endl;
+    }
+#endif //ASMFMT_USE_DEPRECATED
+    delete a;    a = nullptr;
 }
 std::vector<std::string>::size_type AsmFmtCols::pop_scope(){
     auto sz = stack_undefs.size();
@@ -140,9 +162,11 @@ std::vector<std::string>::size_type AsmFmtCols::pop_scope(){
         --sz;
         stack_undefs.resize(sz);
         stack_defs.resize(sz);
+#if ASMFMT_USE_DEPRECATED
         //if(sz==0) (*a)<<setw(inwidth+opwidth+argwidth-9)<<""
         //    <<"/* (end scope) */\n";
         written = false;
+#endif //ASMFMT_USE_DEPRECATED
     }
     return sz;
 }
@@ -151,6 +175,7 @@ void AsmFmtCols::pop_scopes(){
         this->pop_scope();
     }
 }
+#if ASMFMT_USE_DEPRECATED
 std::string AsmFmtCols::flush(){
     // \pre a is not null
     string ret("// AsmFmtCols empty!");
@@ -196,6 +221,7 @@ void AsmFmtCols::write(){
     //delete of;  of = nullptr;
     //delete a;   a  = nullptr;
 }
+#endif //ASMFMT_USE_DEPRECATED
 AsmFmtCols& AsmFmtCols::raw(string const& anything){
     throw_if_written(this,__FUNCTION__);
     (*a) << anything << endl;
@@ -961,10 +987,18 @@ int main(int,char**){
         a.ins("fence","this has no args and a comment");
         a.ins("fence","this is a useless","second copy of fence","with multiple comments");
         //a.scope(block,"opt_block_name");
-        a.write();
+#if ASMFMT_USE_DEPRECATED
+        a.write();                      // XXX DEPRECATED
+#else
+        cout<<a.flush()<<endl;
+#endif
         cout<<"pop_scopes..."<<endl;
+#if ASMFMT_USE_DEPRECATED
         a.pop_scopes();
-        a.write();
+        a.write();                      // XXX DEPRECATED
+#else
+        a.flush_all();
+#endif
     }
     cout<<"\nGoodbye"<<endl;
 }
