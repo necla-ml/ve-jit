@@ -7,6 +7,7 @@
 
 #include <iostream>
 #include <iomanip>
+#include <fstream>
 #define STR0(...) #__VA_ARGS__
 #define STR(...) STR0(__VA_ARGS__)
 
@@ -42,7 +43,7 @@ void test_hello(){
 #endif
     string asmFile("tmp_jitve_test_hello.S");  // file extension required
     {
-        AsmFmtCols kernel_hello(asmFile); // assembler line pretty printer
+        AsmFmtCols kernel_hello; // assembler line pretty printer
         kernel_hello
             .lcom(STR(print out a Hello World 'debug' string as we exit))
             .lcom(STR(relocatable no-symbols version of write(1,"Hello world\n",2)))
@@ -80,9 +81,11 @@ void test_hello(){
             .undef("REL")
             .undef("BP")
             ;
-        auto kh = kernel_hello.flush();
-        //auto kh = kernel_hello.str(); // side-effect: clears the ostringstream
-        //auto kh = kernel_hello.flush(); // write AND get a copy of the string
+        auto kh = kernel_hello.flush(); // kh.str() with an implied kh.clear()
+        std::ofstream ofs(asmFile);
+        ofs<<kh;
+        if(!ofs.good()) cout<<" Issues writing "<<asmFile<<"?\n"<<endl;
+        ofs.close();
         cout<<"kernel_hello.str():   also in "<<asmFile<<"\n"<<kh<<endl;
     }
     if(0){ cout<<"asm2bin(\""<<asmFile<<"\",verbose)..."; }

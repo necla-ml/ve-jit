@@ -107,7 +107,7 @@ class AsmFmtCols {
       std::string flush();
 #else
       /** Same as str(), with an implied clear() */
-      std::string flush(){ std::string ret=str(); flush(); return ret; }
+      std::string flush(){ std::string ret=str(); clear(); return ret; }
 #endif
       /** Flush any code, \b and also output the \c stack_undefs.
        * \return a temporary string */
