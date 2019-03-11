@@ -223,16 +223,16 @@ jitve0: jitve0.c bin.mk
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
 jitve_util.o: jitve_util.c jitve_util.h
 	$(CC) -O2 -c $< -o $@
-test_strMconst: test_strMconst.c jitpage.o
+test_strMconst: test_strMconst.c jitpage-ve.o
 	$(CC) $(CFLAGS) -O2 $^ -o $@ -ldl
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
-jitve_hello: jitve_hello.c jitpage.o
+jitve_hello: jitve_hello.c jitpage-ve.o
 	$(CC) $(CFLAGS) -O2 -E -dD $< >& $(patsubst %.c,%.i,$<)
 	$(CC) $(CFLAGS) -O2 $^ -o $@ -ldl
 	$(CC) $(CFLAGS) -Wa,-adhln -c $< >& $(patsubst %.c,%.asm,$<)
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
 .PRECIOUS: jitve_math
-jitve_math: jitve_math.c jitpage.o
+jitve_math: jitve_math.c jitpage-ve.o
 	$(CC) $(CFLAGS) -O2 -E -dD $< >& $(patsubst %.c,%.i,$<)
 	$(CC) $(CFLAGS) -O2 $^ -o $@ -ldl
 	$(CC) $(CFLAGS) -Wa,-adhln -c $< >& $(patsubst %.c,%.asm,$<)
@@ -245,11 +245,11 @@ jitve_math: jitve_math.c jitpage.o
 #
 # NEW: CMakeLists.txt + mklibs.sh to build variants of libjit1
 #
-.PRECIOUS: asmfmt.o intutil.o jitpage.o
+.PRECIOUS: asmfmt-ve.o intutil-ve.o jitpage-ve.o
 #%-omp.o: %.c: $(CC) ${CFLAGS} -O2 -c $< -o $@
 #%-omp-ftrace1.o: %.c: $(CC) ${CFLAGS} -O2 -c $< -o $@
-libjit1.a: asmfmt.o jitpage.o intutil.o \
-		cblock-ve.o dllbuild-ve.o bin.mk-ve.lo
+libjit1.a: asmfmt-ve.o jitpage-ve.o intutil-ve.o \
+	vechash-ve.o cblock-ve.o asmblock-ve.o dllbuild-ve.o bin.mk-ve.lo
 	rm -f $@
 	$(AR) rcs $@ $^
 	readelf -h $@
@@ -258,33 +258,43 @@ libjit1.a: asmfmt.o jitpage.o intutil.o \
 #// nc++ only has a .a version std:: C++ library?
 #// dlrt-ve needs -lnc++ before dlopen would succeed !
 # C things	
-intutil.o: intutil.c intutil.h
+intutil-ve.o: intutil.c intutil.h
 	$(CC) ${CFLAGS} -O2 -c $< -o $@
-jitpage.o: jitpage.c jitpage.h
+jitpage-ve.o: jitpage.c jitpage.h
 	$(CC) $(CFLAGS) -D_GNU_SOURCE -c $< -o $@ -ldl
 # C++ things...	
-asmfmt.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
+asmfmt-ve.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
 	$(CXX) ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
+vechash-ve.o: vechash.cpp vechash.hpp asmfmt_fwd.hpp vfor.h throw.hpp
+	$(CXX) ${CXXFLAGS} -O2 -c vechash.cpp -o $@
 cblock-ve.o: cblock.cpp cblock.hpp
-	$(CXX) -Wall -g2 -std=c++11 -c $< -o $@
+	$(CXX) ${CXXFLAGS} -c $< -o $@
+asmblock-ve.o: asmblock.cpp asmblock.hpp
+	$(CXX) ${CXXFLAGS} -c $< -o $@
 dllbuild-ve.o: dllbuild.cpp
-	$(CXX) -o $@ $(CXXFLAGS) -Wall -Werror -c $<
+	$(CXX) $(CXXFLAGS) -Wall -Werror -c $< -o $@
 libjit1.so: jitpage.lo intutil.lo bin.mk-ve.lo \
-	asmfmt.lo cblock-ve.lo dllbuild-ve.lo # C++ things
+	asmfmt.lo asmblock-ve.lo cblock-ve.lo dllbuild-ve.lo # C++ things
 	$(CXX) -o $@ -shared -Wl,-trace -wL,-verbose $^ #-ldl #-lnc++
 	readelf -h $@
 	readelf -d $@
 intutil.lo: intutil.c intutil.h
 	$(CC) ${CFLAGS} -fPIC -O2 -c $< -o $@
 jitpage.lo: jitpage.c jitpage.h
-	$(CXX) $(CXXFLAGS) -fPIC -c $< -o $@ -ldl
+	$(CXX) $(CXXFLAGS) -fPIC -O2 -c $< -o $@ -ldl
 asmfmt.lo: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
 	$(CXX) ${CXXFLAGS} -fPIC -O2 -c asmfmt.cpp -o $@
+vechash.lo: vechash.cpp vechash.hpp throw.hpp vfor.h
+	$(CXX) ${CXXFLAGS} -fPIC -O2 -c vechash.cpp -o $@
 cblock-ve.lo: cblock.cpp cblock.hpp
-	$(CXX) -fPIC -Wall -g2 -std=c++11 -c $< -o $@
+	$(CXX) ${CXXFLAGS} -fPIC -c $< -o $@
+asmblock-ve.lo: asmblock.cpp asmblock.hpp
+	$(CXX) ${CXXFLAGS} -fPIC -c $< -o $@
 dllbuild-ve.lo: dllbuild.cpp
-	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -c $<
+	$(CXX) $(CXXFLAGS) -fPIC -Wall -Werror -c $< -o $@
 
+asmblock-ve: asmblock.cpp asmblock.hpp asmfmt-ve.o jitpage-ve.o intutil-ve.o
+	$(CXX) ${CXXFLAGS} -DMAIN_ASMBLOCK $(filter %.cpp,$^) $(filter %.o,$^) -o $@ -ldl
 libvenobug.so: \
 	jitpage.lo \
 	intutil.lo \
@@ -403,13 +413,15 @@ dllvebug14: dllbug.cpp libvebug.so
 	echo "Exit status $$?"
 
 libjit1-x86.a: asmfmt-x86.o jitpage-x86.o intutil-x86.o \
-		cblock-x86.o dllbuild-x86.o bin.mk-x86.lo
+		cblock-x86.o dllbuild-x86.o bin.mk-x86.lo \
+		vechash-x86.o asmblock-x86.o
 	rm -f $@
 	ar rcs $@ $^
 	readelf -h $@
 	readelf -d $@
 libjit1-x86.so: asmfmt-x86.lo jitpage-x86.lo intutil-x86.lo \
-		cblock-x86.lo dllbuild-x86.lo bin.mk-x86.lo
+		cblock-x86.lo dllbuild-x86.lo bin.mk-x86.lo \
+		vechash-x86.o asmblock-x86.lo
 	gcc -o $@ -shared $^ # -ldl
 	readelf -h $@
 	readelf -d $@
@@ -430,6 +442,14 @@ jitpage-x86.lo: jitpage.c jitpage.h
 cblock-x86.o: cblock.cpp cblock.hpp
 	g++ ${CXXFLAGS} -g2 -std=c++11 -c $< -o $@
 cblock-x86.lo: cblock.cpp cblock.hpp
+	g++ ${CXXFLAGS} -fPIC -c $< -o $@
+asmblock-x86.o: asmblock.cpp asmblock.hpp
+	g++ ${CXXFLAGS} -g2 -std=c++11 -c $< -o $@
+asmblock-x86.lo: asmblock.cpp asmblock.hpp
+	g++ ${CXXFLAGS} -fPIC -c $< -o $@
+vechash-x86.o: vechash.cpp vechash.hpp
+	g++ ${CXXFLAGS} -g2 -std=c++11 -c $< -o $@
+vechash-x86.lo: vechash.cpp vechash.hpp
 	g++ ${CXXFLAGS} -fPIC -c $< -o $@
 dllbuild-x86.o: dllbuild.cpp dllbuild.hpp
 	g++ -o $@ $(CXXFLAGS) -Wall -Werror -c $<
@@ -502,7 +522,7 @@ veliFoo.o: veliFoo.cpp velogic.hpp
 asmfmt-x86: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp intutil.c intutil.h jitpage.c jitpage.h
 	g++ $(CXXFLAGS) -O2 -E -dD $< >& $(patsubst %,%.i,$@)
 	g++ ${CXXFLAGS} -Wall -D_MAIN asmfmt.cpp jitpage.c intutil.c -o $@ -ldl
-asmfmt-ve: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp jitpage.o
+asmfmt-ve: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp jitpage-ve.o
 	$(CXX) $(CXXFLAGS) -O2 -E -dD $< >& $(patsubst %,%.i,$@)
 	#$(CXX) $(CXXFLAGS) -O2 -D_MAIN $(filter-out %.hpp,$^) -o $@
 	$(CXX) ${CXXFLAGS} -D_MAIN -Wall asmfmt.cpp jitpage.c intutil.c -o $@ -ldl
@@ -513,7 +533,7 @@ asmfmt-ve: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp jitpage.o
 # it also returns a very lucky value (7).
 #
 .PRECIOUS: jitpp_hello
-jitpp_hello: jitpp_hello.cpp asmfmt.o intutil.o jitpage.o
+jitpp_hello: jitpp_hello.cpp asmfmt-ve.o intutil-ve.o jitpage-ve.o
 	$(CXX) $(CFLAGS) -O2 -E -dD $< >& $(patsubst %.cpp,%.i,$<)
 	$(CXX) $(CFLAGS) -O2 $^ -o $@ $(LDFLAGS)
 	$(CXX) $(CFLAGS) -Wa,-adhln -c $^ >& $(patsubst %.cpp,%.asm,$<)
@@ -535,7 +555,7 @@ msk: msk.cpp
 	$(OBJDUMP) -d $@ >& msk.dis
 	$(VE_EXEC) ./$@ 2>&1 | tee msk.log
 endif
-jitpp_loadreg: jitpp_loadreg.cpp asmfmt.o jitpage.o intutil.o
+jitpp_loadreg: jitpp_loadreg.cpp asmfmt-ve.o jitpage-ve.o intutil-ve.o
 	-$(CXX) $(CXXFLAGS) -O2 -E -dD $< >& $(patsubst %.cpp,%.i,$<) && echo YAY || echo OHOH for jitpp_loadreg.i
 	$(CXX) $(CXXFLAGS) -O2 $^ -o $@ $(LDFLAGS)
 	$(CXX) $(CXXFLAGS) -Wa,-adhln -c $^ >& $(patsubst %.cpp,%.asm,$<)

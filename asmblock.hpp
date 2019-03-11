@@ -1,5 +1,6 @@
 #ifndef ASMBLOCK_HPP
 #define ASMBLOCK_HPP
+#include "asmfmt.hpp"
 #include "throw.hpp"
 /** \file
  * Arange statements (std::string) into blocks.
@@ -120,14 +121,14 @@ inline std::ostream& operator<<(std::ostream& os, AsmbmanipBase & cbmanip){
 struct Asmblock : AsmFmtVe {
     /// Empty Asmblock constructor (placeholder)
     Asmblock(Asmunit *root, std::string name="root")
-        : AsmFmtVE(),
+        : AsmFmtVe(),
         _root(root), _parent(this), _name(name), _type(""),
         // _parent==this means we are _root
         _premanip(nullptr), _code(""), _sub(), _postmanip(nullptr),
         _nwrites(0), _maxwrites(1)
         {}
     Asmblock(Asmblock *parent, std::string name="")
-        : AsmFmtVE(),
+        : AsmFmtVe(),
         _root(parent->_root), _parent(parent), _name(name), _type(""),
         _premanip(nullptr), _code(""), _sub(), _postmanip(nullptr),
         _nwrites(0), _maxwrites(1)
@@ -280,9 +281,9 @@ struct Asmblock : AsmFmtVe {
     //Asmblock *_prev;
     int _nwrites;   // counter
     int _maxwrites; // limit for _nwrites
-    friend Asmblock& operator<<(Asmblock& cb, PostIndent const& postIndent);
-    friend Asmblock& operator<<(Asmblock& cb, PreIndent const& preIndent);
-    //friend Asmblock& operator<<(Asmblock& cb, Endl<Asmblock> const&);
+    friend Asmblock& operator<<(Asmblock& ab, PostIndent const& postIndent);
+    friend Asmblock& operator<<(Asmblock& ab, PreIndent const& preIndent);
+    //friend Asmblock& operator<<(Asmblock& ab, Endl<Asmblock> const&);
     template<class T> friend T& Endl(T& t);
 };
 template<> inline Asmblock& Endl<Asmblock>(Asmblock& cblock){
@@ -319,7 +320,7 @@ inline std::string Asmunit::tree(){
     oss<<std::endl;
     return oss.str();
 }
-inline Asmunit* AsmbmanipBase::getRoot() const {return cb->_root;}
+inline Asmunit* AsmbmanipBase::getRoot() const {return ab->_root;}
 
 struct IndentSpec {
     IndentSpec(int const indent_adjust, char const fill=' ')
@@ -329,10 +330,10 @@ struct IndentSpec {
 };
 
 struct Cbin : public AsmbmanipBase, public IndentSpec {
-    Cbin(Asmblock& cb, int const adj, char const fill=' ')
-        : AsmbmanipBase(cb), IndentSpec(adj,fill) {}
-    Cbin(Asmblock& cb, IndentSpec const& indentSpec)
-        : AsmbmanipBase(cb), IndentSpec(indentSpec) {}
+    Cbin(Asmblock& ab, int const adj, char const fill=' ')
+        : AsmbmanipBase(ab), IndentSpec(adj,fill) {}
+    Cbin(Asmblock& ab, IndentSpec const& indentSpec)
+        : AsmbmanipBase(ab), IndentSpec(indentSpec) {}
     virtual ~Cbin() {}
     std::ostream& write(std::ostream& os) override {
         std::string& in = getRoot()->indent;
@@ -397,17 +398,17 @@ inline std::string Asmblock::fullpath() const {
     std::string out;
     out.reserve(256);
     int ncomp=0; // number of path components
-    for(Asmblock const * cb=this; cb!=nullptr; cb  = cb->_parent){
-        ASMBLOCK_DBG(v,1," fp:"<<cb->_name<<" parent:"<<(cb->_parent? cb->_parent->_name: "NULL"));
-        if( cb->isRoot() ){
+    for(Asmblock const * ab=this; ab!=nullptr; ab  = ab->_parent){
+        ASMBLOCK_DBG(v,1," fp:"<<ab->_name<<" parent:"<<(ab->_parent? ab->_parent->_name: "NULL"));
+        if( ab->isRoot() ){
             ASMBLOCK_DBG(v,1," isRoot");
             out.insert(0,"/");
             break;
         }else{
             ASMBLOCK_DBG(v,1," notRoot");
             ASMBLOCK_DBG(v,1," _name["<<_name<<"]"<<std::endl);
-            size_t const cbsz = cb->_name.size();
-            out.insert(0,cb->_name.c_str(),cbsz+1); // include terminal null
+            size_t const cbsz = ab->_name.size();
+            out.insert(0,ab->_name.c_str(),cbsz+1); // include terminal null
             out.replace(cbsz,1,1,'/');
             ASMBLOCK_DBG(v,1," _name["<<cbsz<<"] --> out="<<out);
         }
@@ -440,15 +441,15 @@ inline Asmblock& Asmblock::unlink() {
     return *this;
 }
 
-inline Asmblock& operator<<(Asmblock& cb, PostIndent const& postIndent){
+inline Asmblock& operator<<(Asmblock& ab, PostIndent const& postIndent){
     std::cout<<"+PostIndent";
-    cb._postmanip = new Cbin(cb, postIndent);
-    return cb;
+    ab._postmanip = new Cbin(ab, postIndent);
+    return ab;
 }
-inline Asmblock& operator<<(Asmblock& cb, PreIndent const& preIndent){
+inline Asmblock& operator<<(Asmblock& ab, PreIndent const& preIndent){
     std::cout<<"+PreIndent";
-    cb._premanip = new Cbin(cb, preIndent);
-    return cb;
+    ab._premanip = new Cbin(ab, preIndent);
+    return ab;
 }
 /** find/create subblock.
  * If p is a component (not a path), then

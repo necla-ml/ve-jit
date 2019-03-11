@@ -77,14 +77,14 @@ struct ExecutablePage {
  */
 class AsmFmtCols {
   public: // utility
-      AsmFmtCols();                           ///< destructor writes to cout
+      AsmFmtCols();
 #if ASMFMT_USE_DEPRECATED
       /** destructor write to file instead of cout.
        * Use an empty string for no file/cout output when you want
        * to grab the output only as std::string */
       AsmFmtCols(std::string const& fname);
 #endif //ASMFMT_USE_DEPRECATED
-      ~AsmFmtCols();  ///< write to cout if !this->written, or constructor fname if there is one
+      ~AsmFmtCols(); ///< warn if content or scopes remain
       /** default is to allow any same-named variables to alias.
        * this is a "root" property, so is we have a parent, we
        * propagate this setting to everyone.

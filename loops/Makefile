@@ -31,20 +31,21 @@ endif
 
 COMMON_HDRS:=../stringutil.hpp ../codegenasm.hpp ../asmfmt_fwd.hpp ../asmfmt_fwd.hpp
 fuse2 fuse3 fuse2-ve fuse3-ve: $(COMMON_HDRS)
-fuse2: fuse2.cpp vechash.cpp ../libjit1-x86.a ../libveli-x86.a
+fuse2: fuse2.cpp ../libjit1-x86.a ../libveli-x86.a
+	echo "CC=${CC}"
+	echo "LDLIBS=${LDLIBS}"
+	#g++ -Wall -Wno-unknown-pragmas -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
+	g++ -Wall -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
+fuse3: fuse3.cpp ../libjit1-x86.a ../libveli-x86.a
 	echo "CC=${CC}"
 	echo "LDLIBS=${LDLIBS}"
 	g++ -Wall -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
-fuse3: fuse3.cpp vechash.cpp ../libjit1-x86.a ../libveli-x86.a
-	echo "CC=${CC}"
-	echo "LDLIBS=${LDLIBS}"
-	g++ -Wall -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
-fuse2-ve: fuse2.cpp vechash.cpp ../libjit1-x86.a ../libveli-x86.a
+fuse2-ve: fuse2.cpp ../libjit1.a ../libveli.a
 	echo "CC=${CC}"
 	echo "LDLIBS=${LDLIBS}"
 	$(CXX) -Wall -Werror -std=c++11 -g2 -O3 $(filter-out %.hpp,$^) -o $@ ${CXXFLAGS} ${LDLIBS}
 fuse3-ve: ../stringutil.hpp ../codegenasm.hpp ../asmfmt_fwd.hpp ../asmfmt_fwd.hpp
-fuse3-ve: fuse3.cpp vechash.cpp ../libjit1-x86.a ../libveli-x86.a
+fuse3-ve: fuse3.cpp ../libjit1.a ../libveli.a
 	echo "CC=${CC}"
 	echo "LDLIBS=${LDLIBS}"
 	$(CXX) -Wall -Werror -std=c++11 -g2 -O3 $(filter-out %.hpp,$^) -o $@ ${CXXFLAGS} ${LDLIBS}

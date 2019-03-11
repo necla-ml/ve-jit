@@ -150,6 +150,9 @@ AsmFmtCols::~AsmFmtCols(){
     }
     if( stack_undefs.size() ){
         cout<<" Warning: un-popped stack_undefs!"<<endl;
+        for(auto const&u: stack_undefs){
+            cout<<"Stack item:\n"<<u<<endl;
+        }
     }
 #endif //ASMFMT_USE_DEPRECATED
     delete a;    a = nullptr;

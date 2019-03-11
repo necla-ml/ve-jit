@@ -853,6 +853,7 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
             if(nloop>1 && (iijj%vl0) )      block_alloc_scalar("vl");
             if(SAVE_RESTORE_VLEN)           block_alloc_scalar("vl_save");
             if(HASH_KERNEL) ve_propose_reg("reg_hash",block,fd,SCALAR);
+            if(HASH_KERNEL) ve_propose_reg("tmp",block,fd,SCALAR_TMP);
 
             // ii and jj usage ends pretty early, so [hand-optimization...]
             // we can re-use some always-there regs...
@@ -1343,7 +1344,7 @@ KERNEL_BLOCK:
             // Ex 2:  sq register can be hoisted (AND combined with our sq?)
             //        instead of being recalculated
             if( HASH_KERNEL ){
-                VecHash2::kern_asm(fk,"a","b","vl","reg_hash"); 
+                VecHash2::kern_asm(fk,"a","b","vl","reg_hash","tmp"); 
             }
         }
 
@@ -1445,14 +1446,18 @@ KERNEL_BLOCK:
         // XXX fX do not automatically form a tree. Would be nice not to have to think about
         //     ordering and where pop_scope should really occur.
         cout<<"##### Final program ################################"<<endl;
-        fd.write();
-        fp.write();
-        fi.write();
-        fk.write();
-        fl.write();
-        fz.write();
-        VecHash2::kern_asm_end(fd);
-        fd.pop_scope();
+        std::string prog;
+        {
+            cout<<fd.flush();
+            cout<<fp.flush();
+            cout<<fi.flush();
+            cout<<fk.flush();
+            cout<<fl.flush();
+            cout<<fz.flush();
+            VecHash2::kern_asm_end(fd); // adds to current (empty) fd string
+            cout<<fp.flush_all(); // kern_asm has some scope here, now
+            cout<<fd.flush_all();
+        }
         cout<<"##### End of program ################################"<<endl;
         // XXX multiple scope write/destroy has issues! (missing #undefs for fd right now)
         //fd.pop_scope();     // TODO: destructors should auto-pop any AsmFmtCols scopes!!!
