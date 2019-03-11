@@ -157,6 +157,8 @@ class AsmFmtCols {
       std::vector<std::pair<std::string,std::string>> def_macs_starting(std::string with) const;
       /** all defined macros (this and parent[s]) */
       std::vector<std::pair<std::string,std::string>> def_macs() const;
+      /** return macro mapping of \c macname, or empty string (no throw) */
+      std::string mac_lookup(std::string macname) const;
 
       /** Set scoping parent, returning old pointer [default=NULL].
        * You can arrange AsmFmtCols as a nesting of scopes, so we can
@@ -281,7 +283,10 @@ class AsmFmtCols {
 struct AsmFmtVe : public AsmFmtCols
 {
     static unsigned const MVL=256;
+    /** LVL as 1 or 2 ops */
     AsmFmtVe& set_vector_length(uint64_t const vl);
+    /** LVL as 1 op if vlen is register, o/w try vlen as u64 string */
+    AsmFmtVe& set_vector_length(std::string vlen_reg);
 };
 #if 0
 /** extend AsmFmtCols with scoped symbolic register names */

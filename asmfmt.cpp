@@ -517,6 +517,24 @@ std::vector<std::pair<std::string,std::string>> AsmFmtCols::def_macs() const {
     }
     return ret;
 }
+std::string AsmFmtCols::mac_lookup(std::string macname) const {
+    std::string ret;
+    if(parent){
+        ret=parent->mac_lookup(macname);
+        if(!ret.empty())
+            return ret;
+    }
+    for(auto const& vmac: stack_defs){
+        for(auto const d: vmac){   // d ~ vector<symbol,subst>
+            //cout<<" mac_lookup for "<<macname<<" d=("<<d.first<<","<<d.second<<")"<<endl;
+            if(d.first==macname){
+                ret = d.second;
+                return ret;
+            }
+        }
+    }
+    return ret;
+}
 std::vector<string> AsmFmtCols::def_words_starting(std::string with) const {
     std::vector<string> ret;
     if(parent)
@@ -595,21 +613,13 @@ std::string uncomment_asm( std::string asmcode )
     }
     return oss.str();
 }
-/** optimized (may not need to use a register) */
-std::string ve_set_vector_length(uint64_t immN, std::string tmp){
-    if(immN > 256) THROW("VE vector length must in [0,256]");
-    std::string sN = jitdec(immN);
-    if(immN > 127){
-        return "lea "+tmp+", "+sN+"; lvl "+tmp;
-    }
-    return "lvl "+sN;
-}
 AsmFmtVe& AsmFmtVe::set_vector_length(uint64_t const vl){
     if(vl > 256) THROW("VE vector length must in [0,256]");
     std::string sN = jitdec(vl);
     if(vl > 127){
         AsmScope block;
         ve_propose_reg("tmp",block,*this,SCALAR_TMP);
+        cout<<" --> block.size="<<block.size();
         if(!block.empty()) scope(block);
         ins("lea tmp, "+sN+"; lvl tmp");
         if(!block.empty()) pop_scope();
@@ -617,6 +627,20 @@ AsmFmtVe& AsmFmtVe::set_vector_length(uint64_t const vl){
         ins("lvl "+sN);
     }
     return *this;
+}
+/** always 1-op if vlen is known to be in a register. */
+AsmFmtVe& AsmFmtVe::set_vector_length(std::string vlen){
+    if(vlen.compare(0,2,"%s")==0){
+        ins("lvl "+vlen);
+        return *this;
+    }
+    // also ok to pass a string constant.
+    std::istringstream iss(vlen);
+    uint64_t vl64;
+    iss>>vl64;
+    if(iss.fail()) THROW("vlen must start with %s or be an integer [0,"<<MVL<<"]");
+    if(vl64 > MVL) THROW("vlen "<<vl64<<" out of range [0,"<<MVL<<"]");
+    return set_vector_length(vl64);
 }
 
 std::string ve_load64_opt0(std::string s, uint64_t v){
@@ -891,12 +915,12 @@ void ve_propose_reg( std::string variable, AsmScope& block, AsmFmtCols const& a,
         size_t const prefix_sz = prefix.size();
         // vps ~ vector pair strings
         auto vps = a.def_macs(); // all known macros
-        //cout<<" ("<<vps.size()<<" known macs)";
+        cout<<" ("<<vps.size()<<" known macs)";
         for(auto const& ps: vps){
-            //cout<<" "<<ps.first;
+            cout<<" "<<ps.first;
             if(ps.first == variable){
-                //cout<<" macro name MATCH! ("<<ps.first<<","<<ps.second<<")";
-                //cout<<" ? compat with "<<prefix<<" sz "<<prefix_sz<<"]?";
+                cout<<" macro name MATCH! ("<<ps.first<<","<<ps.second<<")";
+                cout<<" ? compat with "<<prefix<<" sz "<<prefix_sz<<"]?";
                 if(0 == ps.second.compare(0,prefix_sz,prefix)){
                     cout<<" Compatible alias found: "<<ps.first
                         <<" already defined as "<<ps.second<<endl;
@@ -904,7 +928,7 @@ void ve_propose_reg( std::string variable, AsmScope& block, AsmFmtCols const& a,
                 }
             }
         }
-        //cout<<"\n("<<variable<<" is new)";
+        cout<<"\n("<<variable<<" is new)";
     }
     // 2. amongst all existing registers (macro definition strings)
     //    beginning with prefix, select a new one by adding numeric

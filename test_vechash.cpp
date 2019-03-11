@@ -140,12 +140,28 @@ void sim_vechash2( Sim& sim ){
     std::cout<<" xor-reduce r="<<std::hex<<r<<std::dec<<std::endl;
     sim.h2 = sim.h ^ r;
 }
-std::string asm_vechash2( Sim const& sim ){
+/** \c vlen_reg is allowed to be empty */
+std::string asm_vechash2( Sim const& sim, std::string vlen_reg="" ){
     VecHash2 vh(MVL);                            // we'll use the default VecHash2 seed
     AsmFmtVe def, gen, hsh;
     regs(def);
     gen.setParent(&def);
-    gen.set_vector_length(sim.vl);
+    cout<<" given vlen_reg=<"<<vlen_reg<<">"<<endl;
+    if( vlen_reg.empty() ){
+        // look up the 'vlen' macro mapping (this is vlen_reg)
+        // if 'defs' has register mapping for vlen, use it
+        vlen_reg = def.mac_lookup("vlen");
+        cout<<" found vlen_reg=<"<<vlen_reg<<">"<<endl;
+    }
+    // if we are pased a string vlen_reg (which might be empty)
+    if(vlen_reg.empty()){
+        cout<<" using immN or tmp reg..."<<endl;
+        gen.set_vector_length(sim.vl);
+    }else{
+        cout<<" using vlen_reg=<"<<vlen_reg<<">"<<endl;
+        gen.set_vector_length(vlen_reg);
+    }
+
     gen_ab( gen );
 
     hsh.setParent(&gen);
@@ -185,7 +201,7 @@ int wrap_vechash( Sim& sim, ExecutablePage& page ){
         cout<<" sim@"<<(void*)&sim<<" a@"<<(void*)a<<" b@"<<(void*)b<<endl;
         uint64_t bogus = a[0]+b[0];
 #if WVH_DEBUG >= 2
-        uint64_t volatile *z = &sim.z[0];        // %v1
+        uint64_t volatile *z_addr = &sim.z[0];        // %v1
         uint64_t vx0=0, vy0=0, vz0=0;
         uint64_t xor_red=0;
 #if WVH_DEBUG >= 3
@@ -220,7 +236,7 @@ int wrap_vechash( Sim& sim, ExecutablePage& page ){
 #endif
                 // outputs
                 : [h2]"=r"(h2)
-#if WVH_DEBUG >= 1
+#if WVH_DEBUG >= 2 // added outputs
                 , [vx0]"=r"(vx0)
                 , [vy0]"=r"(vy0)
                 , [vz0]"=r"(vz0)
@@ -231,11 +247,11 @@ int wrap_vechash( Sim& sim, ExecutablePage& page ){
                 , [seed]"r"(seed)   // seed %s0
                 , [hash]"r"(hash)   // hash %s1
                 , [vlen]"r"(vlen)   // vector len %s2
-#if WVH_DEBUG >= 1
+#if WVH_DEBUG >= 1 // added inputs
                 , [a_addr]"r"(a)
                 , [b_addr]"r"(b)
 #if WVH_DEBUG >= 2
-                , [z_addr]"r"(z)
+                , [z_addr]"r"(z_addr)
 #if WVH_DEBUG >= 3
                 , [vx_addr]"r"(vx_addr)
 #endif
@@ -243,7 +259,7 @@ int wrap_vechash( Sim& sim, ExecutablePage& page ){
 #endif
                 // clobbers
                 :"%s12","%s0","%s1","%s2","%s3","%s4","%s5","%s6","%s7","%v0","%v1",
-                "%s40","%s41","%s42","%s43",
+                "%s40","%s41","%s42","%s43","%s60","%s61","%s62","%s63",
                 "%v40","%v41","%v63","%v62","%v61","%v60",
                 "memory"
            );
@@ -252,12 +268,15 @@ int wrap_vechash( Sim& sim, ExecutablePage& page ){
         //      ncc silently ignores the assembler code if you try [page]"m"(page.addr())
         asm("### BBB");
         bogus += a[0] + b[0];
-        //sim.h2 = h2; // avoid buggy assembler vrxor op
+#if 0 && WVH_DEBUG >= 2
         uint64_t r = 0;
         FOR(i,sim.vl) r ^= z[i];
+        cout<<" xor-reduce r="<<hex<<r<<dec<<endl;
         sim.h2 = sim.h ^ r;
+#else
+        sim.h2 = h2;
+#endif
 #if 1
-        std::cout<<" xor-reduce r="<<std::hex<<r<<std::dec<<std::endl;
         cout<<hex<<hash<<", "<<sim.h2<<", bogus="<<bogus;
 #if WVH_DEBUG >= 1
         cout<<"\na[0] = "<<a[0]<<" b[0] = "<<b[0];
