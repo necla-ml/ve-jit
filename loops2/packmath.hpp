@@ -34,6 +34,8 @@
 /** 12-bit integer ops via floating point.
  * A packed floating point vector f[512] can do many packed integer
  * ops exactly if each float is really a uf12.
+ * Simulating with float also allows new ops, since VE fixed point packed
+ * ops have * +,-,cmp,max,min but \e no packed *,/,fma .
  *
  * - Speed is not a goal here.
  * - Intent is to develop and test algorithms,

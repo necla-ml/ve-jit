@@ -26,40 +26,37 @@ using namespace std;
  * - Notice that begin/middle/end constructs are awkward.
  */
 void test_asmblock_basic(){
-    Asmunit pr("program");
-    pr.v = 3;
+    Asmunit pr("asm");
+    pr.v = 2; // 3 is actually hard to grok
     pr["comments"]>>"// Asmunit output from "<<__FILE__;
+
+    // asm has its own snippet-formatting helper, "AsmFmtCols"
+    AsmFmtCols f_root;
+    AsmFmtCols f_init;
+    AsmFmtCols f_calc;
+    // set scope w/ register mappings for input vars
+    f_root.scope(AsmScope{{"i","%s0"},{"j","%s1"}});
+    // init registers
+    f_init.ins("lea i,3; lea j,5");
+    // add JIT calc, either add or subtract
+    std::string calc="add";
+    f_root.def("OP",(calc=="add"?"adx":"sbx"));  // jit add or subtract
+    f_calc.ins("OP i,j");
+
+    // arrange the AsmFmtCols into final program
+    pr.dump(cout); cout.flush();
+
     // Very important to use 'auto&' instead of plain 'auto'
-    pr["includes"];
-    auto& macros = pr["macros"];
-    auto& extern_c = pr["extern_C"];
-    extern_c["beg"]
-        <<"\n#ifdef __cplusplus"    // can appen w/ embedded newlines
-        "\nextern \"C\" {"
-        >>"#endif //C++";           // Note: >> auto-supplies initial newline
-    pr["extern_C"]["end"]
-        >>"ifdef __cplusplus"
-        >>"extern \"C\""
-        >>"endif //C++";
-    //auto& functions = (pr["functions"].after(extern_c["beg"]));
-    auto& functions = extern_c["beg"]["functions"]; // simpler equiv
-    // '\:' --> '\\:'
-    pr["end"]<<"// vim: ts=4 sw=4 et cindent cino=^=l0,\\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\\:,0#,!^F,o,O,e,0=break";
-    pr["includes"]<<"#include <stdio.h>";
-    macros<<"#define MSG \"hello\"";    // easy to add to previously defined code blocks
-    macros>>CSTR(#define MSG2 "hello"); // Note: CSTR to auto-escape embeded '"'
-    auto& foo = functions["foo"];
-    // Klunky beg/middle/end w/ manipulator to adjust write context
-    foo["beg"]<<"int foo() {"<<PostIndent(+2);
-    foo["mid"]<<"return 7;";
-    foo["end"]<<"}"<<PreIndent(-2);
-    functions["bar"]<<"int bar(){ return 43; }\n";
+    auto& body = mk_scope(pr,"root").after("/")["body"];
 
-    // output order can be adjusted with after: (subtree move)
-    functions["foo"].after(functions["bar"]);
-
-    //main.after("extern_C/open");
-    pr.v = 0;
+    pr.dump(cout); cout.flush();
+    cout<<" f_root is now <<<"<<f_root.str()<<">>>"<<endl;
+    // f_root has defines, and pop_scopes has the undefs
+    pr["/root/beg"]<<f_root.flush();
+    pr["/root/end"]<<f_root.flush_all();
+    // add init and calc assembly to 'body' location.
+    body<<f_init.flush_all();
+    body<<f_calc.flush_all();
     cout<<string(80,'-')<<endl;
     pr.write(cout);
     cout<<string(80,'-')<<endl;
@@ -356,7 +353,7 @@ void test_asmblock_macros(){
 #endif
 int main(int,char**){
     test_asmblock_basic();
-#if 0
+#if 0 // most test were removed!
     test_asmblock_path();
     test_asmblock_short();
     test_asmblock_short2();

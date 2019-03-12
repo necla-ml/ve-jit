@@ -1,6 +1,6 @@
 SHELL=/bin/bash	
 .PHONY: all more force force-lib mega1-sample.log mega1
-all: fuse2 fuse2lin mega1-sample.log
+all: fuse2 fuse2lin fuse3 mega1-sample.log
 	@echo 'ALL DONE with make all'
 	@echo ' extra targets:'
 	@echo '    more  force-lib ../libjit1[-x86].a'

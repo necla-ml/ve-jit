@@ -91,23 +91,12 @@ int const            AsmFmtCols::opwidth = 12;
 //std::streampos const AsmFmtCols::argwidth = 24;
 int const            AsmFmtCols::argwidth = 44;
 
-#if ASMFMT_USE_DEPRECATED
-static inline void throw_if_written( AsmFmtCols const* asmfmt, string const& cannot ){
-    if( asmfmt->written ){
-        throw runtime_error( string{"AsmFmtCols already written - cannot "} + cannot );
-    }
-}
-#else
 static inline void throw_if_written( AsmFmtCols const* asmfmt, string const& cannot ){
     /* NOP */
 }
-#endif
 
 AsmFmtCols::AsmFmtCols()
     : a(new ostringstream()),
-#if ASMFMT_USE_DEPRECATED
-    written(false), of(nullptr),
-#endif //ASMFMT_USE_DEPRECATED
     //, stack_undefs{std::string("")}, stack_defs{std::string("")}
     stack_undefs(), stack_defs(),
     parent(nullptr), _allow_alias(true)
@@ -115,36 +104,8 @@ AsmFmtCols::AsmFmtCols()
     (*a) << left;
     a->fill(' ');
 }
-#if ASMFMT_USE_DEPRECATED
-AsmFmtCols::AsmFmtCols( string const& fname )
-    : a(new ostringstream()),
-    written(false), of(nullptr),
-    stack_undefs(), stack_defs(), parent(nullptr)
-{
-    //of->rdbuf()->pubsetbuf(charBuffer,BUFFER_SIZE); // opt
-    if(fname.size()){
-        of = new ofstream(fname, std::ios::out);
-        (*of) <<"// auto-generated via AsmFmtCols!\n";
-    }
-    (*a) << left;
-    a->fill(' ');
-}
-#endif //ASMFMT_USE_DEPRECATED
 AsmFmtCols::~AsmFmtCols(){
     //std::cout<<"~AsmFmtCols,"<<stack_undefs.size()<<"undefs "; std::cout.flush();
-#if ASMFMT_USE_DEPRECATED
-    while(stack_undefs.size()){
-        //std::cout<<" destructor pop_scope"; std::cout.flush();
-        this->pop_scope();
-        //std::cout<<" destructor write"; std::cout.flush();
-        //this->write();
-    }
-    if( !written ){
-        //std::cout<<" destructor write"; std::cout.flush();
-        this->write();
-    }
-    if(of){ of->flush(); of->close(); delete of; of = nullptr; }
-#else
     if( !a->str().empty() ){
         cout<<" Warning: unused AsmFmtCols code:\n"<<a->str()<<endl;
     }
@@ -154,7 +115,6 @@ AsmFmtCols::~AsmFmtCols(){
             cout<<"Stack item:\n"<<u<<endl;
         }
     }
-#endif //ASMFMT_USE_DEPRECATED
     delete a;    a = nullptr;
 }
 std::vector<std::string>::size_type AsmFmtCols::pop_scope(){
@@ -165,11 +125,6 @@ std::vector<std::string>::size_type AsmFmtCols::pop_scope(){
         --sz;
         stack_undefs.resize(sz);
         stack_defs.resize(sz);
-#if ASMFMT_USE_DEPRECATED
-        //if(sz==0) (*a)<<setw(inwidth+opwidth+argwidth-9)<<""
-        //    <<"/* (end scope) */\n";
-        written = false;
-#endif //ASMFMT_USE_DEPRECATED
     }
     return sz;
 }
@@ -178,53 +133,6 @@ void AsmFmtCols::pop_scopes(){
         this->pop_scope();
     }
 }
-#if ASMFMT_USE_DEPRECATED
-std::string AsmFmtCols::flush(){
-    // \pre a is not null
-    string ret("// AsmFmtCols empty!");
-    if(a){
-        ret = (*a).str();
-        if( of && a ){
-            try{
-                //cout<<"AsmFmtCols::write-->of"<<endl;
-                //(*of) << a->rdbuf(); // not working? ???
-                (*of) << ret;
-                of->flush();
-                //of->close();
-            }catch(...){
-                cout<<" ERROR: could not write to output file!"<<endl;
-            }
-            //delete of;  of = nullptr;
-        }
-        this->clear(); // return ostringstream *a to 'empty'
-        //delete a; a = nullptr;
-    }
-    this->written = true;
-    return ret;
-}
-void AsmFmtCols::write(){
-    throw_if_written(this,__FUNCTION__);
-    if( of ){
-        //cout<<"AsmFmtCols::write-->of"<<endl;
-        (*of) << a->rdbuf();
-        of->flush();
-        //of->close();
-    }else{
-        //cout<<"AsmFmtCols::write-->cout"<<endl;
-        //(*a) << "\n// Goodbye\n";
-        cout << a->str(); //a->rdbuf(); <-- for stringstream?
-        cout.flush();
-        //cout<<"AsmFmtCols::write-->cout DONE"<<endl;
-    }
-    this->written = true;
-    // reset ostringstream for further output (like from pop_scope)
-    a->clear();
-    a->str("");
-    // There is valid reason for allowing pop_scope to run during the destructor
-    //delete of;  of = nullptr;
-    //delete a;   a  = nullptr;
-}
-#endif //ASMFMT_USE_DEPRECATED
 AsmFmtCols& AsmFmtCols::raw(string const& anything){
     throw_if_written(this,__FUNCTION__);
     (*a) << anything << endl;
@@ -263,23 +171,12 @@ AsmFmtCols::AsmLine AsmFmtCols::parts(std::string const& instruction){
     int const v=0;
     AsmLine ret;
     if(v)cout<<"parts.."<<instruction<<endl;
-#if 0
-    auto inst = instruction;
-    assert( string(" nop").find_first_not_of(ws,0) == 1 );
-    assert( string("nop").find_first_not_of(ws,0) == 0 );
-    auto opbeg = inst.find_first_not_of(ws,0);
-    if( opbeg == string::npos ){
-        if(v)cout<<"DONE"<<endl;
-        return ret;
-    }
-#else
     auto inst = reduce(trim(instruction)); // again?
     auto opbeg = inst.find_first_not_of(" \t\r\n",0);
     if( opbeg == string::npos ){
         if(v)cout<<"DONE"<<endl;
         return ret;
     }
-#endif
     if(v)cout<<"     .."<<inst<<endl;
     //
     // TODO: comment "//...\n"
@@ -387,21 +284,6 @@ AsmFmtCols& AsmFmtCols::ins(string const& instruction, string const& asmcomment)
     std::string comment;
     while( remain.size() ){
         auto const p = parts(remain);
-#if 0
-        (*a) << left;
-        if(p.op.size() == 0){
-            (*a) << setw(inwidth+opwidth+argwidth) << "";
-        }else{
-            (*a) << indent;
-            if(p.args.size() == 0){
-                (*a) << setw(opwidth+argwidth) << p.op;
-            }else{
-                (*a) << setw(opwidth-1) << p.op << " "
-                    << setw(argwidth-1) << p.args << " ";
-            }
-        }
-        (*a) << "#  " << asmcomment <<endl;
-#elif 1
         comment = p.comment;
         if( p.remain.empty() && p.comment.empty() ){
             comment = asmcomment;
@@ -433,7 +315,6 @@ AsmFmtCols& AsmFmtCols::ins(string const& instruction, string const& asmcomment)
         if( comment.size() ){
             (*a) << "# " << comment << endl;
         }
-#endif
         remain = p.remain;
         //cout<<" iterate: remain = "<<remain<<endl;
     }
@@ -1014,18 +895,9 @@ int main(int,char**){
         a.ins("fence","this has no args and a comment");
         a.ins("fence","this is a useless","second copy of fence","with multiple comments");
         //a.scope(block,"opt_block_name");
-#if ASMFMT_USE_DEPRECATED
-        a.write();                      // XXX DEPRECATED
-#else
         cout<<a.flush()<<endl;
-#endif
         cout<<"pop_scopes..."<<endl;
-#if ASMFMT_USE_DEPRECATED
-        a.pop_scopes();
-        a.write();                      // XXX DEPRECATED
-#else
-        a.flush_all();
-#endif
+        cout<<a.flush_all();  // write to cout, pop scopes to cout, leave 'a' fully empty.
     }
     cout<<"\nGoodbye"<<endl;
 }

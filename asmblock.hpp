@@ -5,6 +5,10 @@
 /** \file
  * Arange statements (std::string) into blocks.
  *
+ * \todo this was forked from \ref cblock.hpp, but it would be nice
+ *       to implement the Cunit.flavor=="asm" so we don't duplicate
+ *       code to maintain a DAG of code snippets.
+ *
  * Problem Description:
  *
  * - JIT units generate vector<string> Asmblock for operations.
@@ -570,11 +574,17 @@ inline Asmblock& mk_cpp_if(Asmunit& cunit, std::string name, std::string cond){
     return block;
 }
 /** create a "beg{..}" block with subblock named "body" properly indented */
-inline Asmblock& mk_scope(Asmunit& cunit, std::string name, std::string beg, std::string end="}"){
+inline Asmblock& mk_scope(Asmunit& cunit, std::string name, std::string beg="", std::string end=""){
     Asmblock& block = *(new Asmblock(&cunit,name));
-    block["beg"]<<beg<<" { // "<<name<<PostIndent(+2);
+    auto& b = block["beg"];
     block["body"]; // empty
-    block["end"]<<"}//"<<name<<PreIndent(-2);
+    auto& e = block["end"];
+    if(!beg.empty())  b<<beg;
+    if(!name.empty()) b<<"// { BEGIN "<<name<<"\n";
+    b<<PostIndent(+2);
+    if(!end.empty())  e<<end;
+    if(!name.empty()) e<<"// } END "<<name<<"...\n";
+    e<<PreIndent(-2);
     return block;
 }
 #if 0 // this is just an instance of mk_scope

@@ -13,7 +13,7 @@ ifneq ($(CC:ncc%=ncc),ncc)
 # only a few things can compile for x86...
 #
 TARGETS:=test_strMconst asmfmt-x86 jitpp_loadreg veliFoo.o
-TARGETS+=veliFoo.o veli_loadreg-x86 dlprt-x86
+TARGETS+=veliFoo.o veli_loadreg-x86 dlprt-x86 cblock-x86 asmblock-x86
 VE_EXEC:=time
 OBJDUMP:=objdump
 OBJDUMP:=objdump
@@ -53,7 +53,8 @@ TARGETS=asmkern0.asm libjit1.a libjit1-x86.a asmfmt-ve\
 	jitpp_hello test_naspipe-x86 test_vejitpage_sh-x86 \
 	jitpp_loadreg \
 	asmfmt-x86 veli_loadreg-x86 veli_loadreg \
-	dlprt-x86 dlprt-ve
+	dlprt-x86 dlprt-ve \
+	cblock-x86 asmblock-x86 cblock-ve asmblock-ve
 # slow!
 #TARGETS+=test_naspipe test_vejitpage_sh
 #CC?=ncc-1.5.1
@@ -101,7 +102,7 @@ all: $(TARGETS) liblist
 SHELL:=LC_ALL=C /bin/bash
 .PHONY: liblist force
 liblist:
-	@ls -l lib*.a
+	@ls -l lib*.a lib*.so
 force: # force libs to be recompiled
 	rm -f libjit1*.a asmfmt*.o jitpage*.o intutil*.o
 	rm -f libveli*.a prgiFoo.o wrpiFoo.o
@@ -293,8 +294,17 @@ asmblock-ve.lo: asmblock.cpp asmblock.hpp
 dllbuild-ve.lo: dllbuild.cpp
 	$(CXX) $(CXXFLAGS) -fPIC -Wall -Werror -c $< -o $@
 
+cblock-x86: cblock.cpp cblock.hpp
+	g++ ${CXXFLAGS} -DMAIN_CBLOCK -c $< -o cblock.o
+	g++ ${CXXFLAGS} -DMAIN_CBLOCK -E $< -o cblock.i
+	g++ -Wall -g2 -DMAIN_CBLOCK cblock.o -o $@
 asmblock-ve: asmblock.cpp asmblock.hpp asmfmt-ve.o jitpage-ve.o intutil-ve.o
 	$(CXX) ${CXXFLAGS} -DMAIN_ASMBLOCK $(filter %.cpp,$^) $(filter %.o,$^) -o $@ -ldl
+asmblock-x86: asmblock.cpp asmblock.hpp asmfmt-x86.o jitpage-x86.o intutil-x86.o
+	g++ ${CXXFLAGS} -DMAIN_ASMBLOCK $(filter %.cpp,$^) $(filter %.o,$^) -o $@ -ldl
+asmblock-ve: asmblock.cpp asmblock.hpp asmfmt-x86.o jitpage-x86.o intutil-x86.o
+	${CXX} ${CXXFLAGS} -DMAIN_ASMBLOCK $(filter %.cpp,$^) $(filter %.o,$^) -o $@ -ldl
+
 libvenobug.so: \
 	jitpage.lo \
 	intutil.lo \
@@ -421,7 +431,7 @@ libjit1-x86.a: asmfmt-x86.o jitpage-x86.o intutil-x86.o \
 	readelf -d $@
 libjit1-x86.so: asmfmt-x86.lo jitpage-x86.lo intutil-x86.lo \
 		cblock-x86.lo dllbuild-x86.lo bin.mk-x86.lo \
-		vechash-x86.o asmblock-x86.lo
+		vechash-x86.lo asmblock-x86.lo
 	gcc -o $@ -shared $^ # -ldl
 	readelf -h $@
 	readelf -d $@
@@ -454,10 +464,6 @@ vechash-x86.lo: vechash.cpp vechash.hpp
 dllbuild-x86.o: dllbuild.cpp dllbuild.hpp
 	g++ -o $@ $(CXXFLAGS) -Wall -Werror -c $<
 
-cblock: cblock.cpp cblock.hpp
-	g++ -Wall -g2 -std=c++11 -E $< -o cblock.i
-	g++ -Wall -g2 -std=c++11 -c $< -o cblock.o
-	g++ -Wall -g2 cblock.o -o $@
 # x86 tool to dlopen and walk symbol table	
 .PHONY: dlprt dlprt-clean dlprt-do
 dlprt: dlprt-clean dlprt-do

@@ -396,7 +396,8 @@ string cjitConvolutionForward00( int const verbosity=0 /*struct param const* con
 //#define CONST1(var) >>("int64_t const " #var " = "+asDec(var))
 // #define is better, because is is definitely usable with 'C' compiler
 #define CONST1(var) >>("#define " #var " "+asDec(var))
-    auto& fn_const = fn["const"]
+    //auto& fn_const =
+    fn["const"]
         CONST1(batch            )
         CONST1(group            )
         CONST1(inChannel        )
@@ -433,7 +434,8 @@ string cjitConvolutionForward00( int const verbosity=0 /*struct param const* con
         >>"float * restrict pOut = pDataOut;"
         ;
 
-    auto& fn_vec_init = fn["vec_init"]
+    //auto& fn_vec_init =
+    fn["vec_init"]
         >>"_ve_lvl(VLEN);"
         >>"const __vr vzeros = _ve_vbrdu_vs_f32(0.0f); // lower 32-bits are zero bits, so same as _ve_pvbrd_vs_i64(0UL)"
         >>"const __vr vrseq = _ve_vseq_v();"

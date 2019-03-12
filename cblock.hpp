@@ -83,7 +83,7 @@ template<class T> inline T& operator<<(T& t, T& (*manip)(T&) ){ return manip(t);
 template<class T> inline T& Endl(T& t){ return t<<"\n"; }
 
 /** Base Cblock/Cunit manipulator class.
- * Cunit may store "context", like current indent for \c write operations,
+ * Cunit may store "context", like current indent,
  * so allow access to "/".
  * Possible overkill (maybe Cblock::getRoot() is all that's needed?)
  * OTOH, maybe this way eases 'friend' decls.
@@ -117,16 +117,12 @@ struct Cblock {
         _premanip(nullptr), _code(""), _sub(), _postmanip(nullptr),
         _nwrites(0), _maxwrites(1)
         {}
+    /// Sub-block constructor
     Cblock(Cblock *parent, std::string name="")
         : _root(parent->_root), _parent(parent), _name(name), _type(""),
         _premanip(nullptr), _code(""), _sub(), _postmanip(nullptr),
         _nwrites(0), _maxwrites(1)
         {}
-    //Cblock(Cblock &&s) = default;
-    //Cblock(Cblock &&s) : _root(s._root), _name(s._name), _type(s._type),
-    //                     _code(s._code), _sub(s._sub),
-    //                     _nwrites(s._nwrites), _maxwrites(s._maxwrites)
-    //{}
 
     /** Find \c p in \c sub -Cblocks, or appending a new Cblock to \c _sub
      * when \c p is a single <em>path component</em> \c p;
@@ -145,23 +141,7 @@ struct Cblock {
      * we add a newline (tweak for C-code readability). */
     Cblock& append(std::string codeline);
     /** \c codeline append to \c _code (\c Cblock appends to \c _sub) */
-    Cblock& append(Cblock &cb){
-        int const v=0;
-        CBLOCK_DBG(v,3," append! "<<std::endl);
-        assert(_parent != nullptr );
-        CBLOCK_DBG(v,10," this@"<<_parent->_name<<"/"<<_name<<" append");
-        CBLOCK_DBG(v,10," (cb@"<<cb._name<<")\n");
-        cb._parent = this;
-        _sub.push_back(&cb);
-        CBLOCK_DBG(v,10," this@"<<_parent->_name<<"/"<<_name<<"{");
-        for(auto s: _sub) std::cout<<" "<<s->_name;
-        CBLOCK_DBG(v,10,"}"<<std::endl);
-#if 0
-        return *this;
-#else
-        return cb; // new behaviour
-#endif
-    }
+    Cblock& append(Cblock &cb);
     // shorten append usage...
     //Cblock& operator<<=(Cblock &cb) {return this->append(cb); }
     //Cblock& operator<<(std::initializer_list il);
@@ -254,8 +234,6 @@ struct Cblock {
     std::string _code;
     std::vector<Cblock*> _sub;
     CbmanipBase* _postmanip;
-    //Cblock *_next;
-    //Cblock *_prev;
     int _nwrites;   // counter
     int _maxwrites; // limit for _nwrites
     friend Cblock& operator<<(Cblock& cb, PostIndent const& postIndent);
@@ -273,8 +251,15 @@ struct Cunit {
     Cblock root;
     int v; // verbosity
     std::string indent;                             ///< internal Cblock::write context
+    std::string const flavor;                       ///< [WIP] "C" or "asm"
+    int shiftwidth;
     //std::map<std::string, Cblock*> blk;
-    Cunit(std::string name) : name(name), root(this,name), v(2), indent() {}
+    Cunit(std::string name, std::string flavor="C" )
+        : name(name), root(this,name), v(2),
+        indent(), flavor(flavor), shiftwidth(flavor=="C"? 2: 0)
+    {}
+    // Should we warn if anything in DAG is un-emitted?
+    // Do we make temporary copies that should silently destruct?
     ~Cunit() { root.clear(); }
     std::ostream& write(std::ostream& os) {return root.write(os);}  ///< write the program unit
     Cblock *find(std::string path);                 ///< absolute \c path down from \c root
@@ -283,7 +268,6 @@ struct Cunit {
     void dump(std::ostream& os);                    ///< dump the tree
     std::string tree();                             ///< tree structure of root
     Cblock & operator[](std::string name) { return root[name]; }
-
 };
 inline void Cunit::dump(std::ostream& os){
     root.dump(os);
@@ -368,6 +352,19 @@ Cblock& Cblock::append(std::string codeline){
         _code.append(codeline);
     }
     return *this;
+}
+inline Cblock& Cblock::append(Cblock &cb){
+    int const v=0;
+    CBLOCK_DBG(v,3," append! "<<std::endl);
+    assert(_parent != nullptr );
+    CBLOCK_DBG(v,10," this@"<<_parent->_name<<"/"<<_name<<" append");
+    CBLOCK_DBG(v,10," (cb@"<<cb._name<<")\n");
+    cb._parent = this;
+    _sub.push_back(&cb);
+    CBLOCK_DBG(v,10," this@"<<_parent->_name<<"/"<<_name<<"{");
+    for(auto s: _sub) std::cout<<" "<<s->_name;
+    CBLOCK_DBG(v,10,"}"<<std::endl);
+    return cb; // new behaviour
 }
 inline std::string Cblock::fullpath() const {
     int const v=0;
@@ -546,37 +543,46 @@ inline Cblock& mk_cpp_if(Cunit& cunit, std::string name, std::string cond){
     block["end"]<<"#endif // "<<cond;
     return block;
 }
-/** create a "beg{..}" block with subblock named "body" properly indented */
-inline Cblock& mk_scope(Cunit& cunit, std::string name, std::string beg, std::string end="}"){
+/** [beg]~"\#if cond" + [body] + [else]~"\#else" + [end]~"\#endif". */
+inline Cblock& mk_cpp_ifelse(Cunit& cunit, std::string name, std::string cond){
     Cblock& block = *(new Cblock(&cunit,name));
-    block["beg"]<<beg<<" { // "<<name<<PostIndent(+2);
+    block["beg"]<<"\n#if "<<cond;
     block["body"]; // empty
-    block["end"]<<"}//"<<name<<PreIndent(-2);
+    block["else"]<<"\n#else // !( "<<cond<<"\n";
+    block["end"]<<"#endif // "<<cond;
     return block;
 }
-#if 0 // this is just an instance of mk_scope
+/** create a "beg{..}" block with subblock named "body" properly indented.
+ * - For 'C' \c beg could, for example, be an "if(...){" clause.
+ * - For 'asm', \c beg and \c end could be [verbatim] comment strings.
+ * - default \c beg and \c end selected according to _root->flavor
+ * - after mk_scope, usually want to position the code \e before or \e after
+ *   some existing Cblock.
+ */
+inline Cblock& mk_scope(Cunit& cunit, std::string name, std::string beg="", std::string end=""){
+    Cblock& block = *(new Cblock(&cunit,name));
+    if(cunit.flavor!="asm"){
+        if(cunit.flavor!="C"){
+            std::cout<<" Warning: unknown Cblock flavor \""<<cunit.flavor
+                <<"\". Assuming \"C\""<<std::endl;
+        }
+        block["beg"]<<beg<<"{ // "<<name<<PostIndent(+cunit.shiftwidth);
+        block["body"]; // empty
+        if(!end.empty()) block["end"]<<end<<" ";
+        block["end"]<<"} //"<<name<<PreIndent(-cunit.shiftwidth);
+    }else{ // "asm"}
+        block["beg"]<<"// BLOCK "<<name<<PostIndent(+cunit.shiftwidth);
+        if(!beg.empty()) block["beg"]<<beg<<"\n";
+        block["body"]; // empty
+        if(!end.empty()) block["end"]<<end<<"\n";
+        block["end"]<<"// END "<<name<<PreIndent(-cunit.shiftwidth);
+    }
+    return block;
+}
 /** \c name is for Cblock lookup, \c decl is 'int foo()' [no { or ;]. */
-inline Cblock& mk_func(Cunit& cunit, std::string name, std::string decl){
-    Cblock& block = *(new Cblock(&cunit,name));
-    block["decl"]<<"\n"<<decl<<" {"<<PostIndent(+2); // name path code always gets a newline
-    block["body"]; // empty
-    block["end"]<<"}"<<PreIndent(-2);
-    // because the tmp Cblock _parent is itself, its fullpath is just "/".
-    // It is NOT a member of Cunit::root.
-    //int const v=1;
-    //CBLOCK_DBG(v,1," mk_func-->Cblock["<<block.getName()<<"] "<<block.fullpath()<<" @ "<<(void*)&block);
-
-    // It would not hurt to force to be, I suppose,
-    // It would be safer, and never leak.
-    // But would be more ops if standard usage is to root it elsewhere via .after(locn)
-    //cunit.root.append(block); // <-- OPTIONAL, undecided
-    return block;
-}
-#else
 inline Cblock& mk_func(Cunit& cunit, std::string name, std::string decl){
     return mk_scope(cunit, name, decl);
 }
-#endif
 /** for simple scopes (terminate with just "}", and with a "body" sub-block...
  * - if AFTER is a cblock, we could just use AFTER.getRoot() and save an argument
  * - general case is a bit more flexible, but macro is fairly readable if combined with indenting
