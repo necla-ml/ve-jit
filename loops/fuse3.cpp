@@ -161,7 +161,7 @@ std::string str(UnrollSuggest const& u, std::string const& pfx=""){
     if( u.vll != 0 ){
         assert( u.vll > 0 );
         assert( u.vll <= vl );
-        vl = u.vll;
+        // vl = u.vll; NO -- this makes later assertions fail.
     }
     oss<<"vl,ii,jj="<<u.vl<<","<<u.ii<<","<<u.jj<<" "<<u.suggested;
     if(u.vl>0 && u.ii>0 && u.jj>0 && u.suggested!=UNR_UNSET && u.b_period_max>0){
@@ -169,7 +169,15 @@ std::string str(UnrollSuggest const& u, std::string const& pfx=""){
         int const lcm_vljj = lcm(vl,u.jj);
         int const b_period = lcm_vljj / vl;
         int const bcyc_regs = (nloop<b_period? nloop: b_period);
-
+        if(0){ // debug
+            cout<<" vl,ii,jj="<<u.vl<<"["<<u.vll<<"],"<<u.ii<<","<<u.jj;
+            cout<<" iijj="<<iijj;
+            cout<<" nloop="<<u.nloop;
+            cout<<" b_period="<<b_period;
+            cout<<" bcyc_regs="<<bcyc_regs
+                <<" u.unroll="<<u.unroll<<endl;
+            cout.flush();
+        }
         oss<<" nloop="<<u.nloop;
         oss<<" b_period="<<b_period;
         int const unroll_any = min(nloop,u.b_period_max);
@@ -194,6 +202,7 @@ std::string str(UnrollSuggest const& u, std::string const& pfx=""){
           case(UNR_DIVMOD): oss<<" unroll("<<unroll_any<<")"; break;
         }
     }
+    if(u.vll) oss<<" [Alt vll="<<u.vll;
     oss<<"\n";
     return oss.str();
 }
@@ -448,13 +457,13 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
 
     int const b_period_max = 8; // how many regs can you spare?
     //int const b_period = unroll_suggest( vl, jj, b_period_max );
-    auto u = unroll_suggest( vl,ii,jj, b_period_max );
+    auto u = unroll_suggest( vl,ii,jj, b_period_max, 0/*verbose*/ );
     // This is pinned at [max] vl, even if it may be "inefficient".
     //auto uAlt =
-    unroll_suggest(u);
-
-    cout<<" Using "<<u.suggested<<"("<<(int)u.suggested<<") for vl,ii,jj="
-        <<vl<<","<<ii<<","<<jj<<endl;
+    unroll_suggest(u);  // suggest an alternat nice vector length, sometimes.
+    cout<<" Using "<<u.suggested<<" for vl,ii,jj="
+        <<vl<<","<<ii<<","<<jj<<" unroll("<<u.unroll<<")"
+        <<" [Alt vll="<<u.vll<<"]"<<endl;
 
     register uint64_t cnt = 0UL;
     for( ; cnt < iijj; cnt += vl )
@@ -668,13 +677,20 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj){ // for 
 
         int const b_period_max = 8; // how many regs can you spare?
         //int const b_period = unroll_suggest( vl, jj, b_period_max );
-        auto u = unroll_suggest( vl,ii,jj, b_period_max );
+        auto u = unroll_suggest( vl,ii,jj, b_period_max, 0/*verbose*/ );
         // This is pinned at [max] vl, even if it may be "inefficient".
         //auto uAlt =
         unroll_suggest(u);
-
-        cout<<" Using "<<u.suggested<<"("<<(int)u.suggested<<") for vl,ii,jj="
-            <<vl<<","<<ii<<","<<jj<<endl;
+        cout<<" Using "<<u.suggested<<" for vl,ii,jj="
+            <<vl<<","<<ii<<","<<jj<<" unroll("<<u.unroll<<")"
+            <<" [Alt vll="<<u.vll<<"]"<<endl;
+        // Include the suggested strategy into the exechash, for future
+        // productions that do unrolling (want better coverage)
+        {
+            std::ostringstream oss;
+            oss<<"strategy "<<u.suggested;
+            tr+=oss.str();
+        }
 
         //cout<<"Verify-------"<<endl;
         // generate reference index outputs
@@ -1758,26 +1774,24 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int cons
     //    - have jj%vl==0
     // Precalc for a jj_pow2 case may or may not be good.
     if( nloop == 1 ){
-        strategy = UNR_NLOOP1;
+        ret.suggested = strategy = UNR_NLOOP1;
         if(v)cout<<" A.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
             <<strategy<<"\n\t"
             <<", b_period="<<b_period<<b_period_pow2<<" no loop [precalc, no unroll]"<<endl;
-        ret.suggested = strategy;
         //ret.vll = 0; // unchanged
         //ret.nloop = // unchanged
         //ret.unroll = 0; // unchanged (0 = "any" unroll is ok, so maybe b_period_max is a good choice)
     }else if( vl%jj == 0 ){
-        strategy = UNR_VLMODJJ;
+        ret.suggested = strategy = UNR_VLMODJJ;
         if(v)cout<<" B.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
             <<strategy<<"\n\t"
             <<", b_period="<<b_period
             <<" has a trivial vl%jj==0 update [no precalc, any small unroll]"
             <<endl;
         //assert( !have_b_period );
-        ret.suggested = strategy;
     }else if( jj%vl == 0 ){
         //unroll = UNR_JJMODVL_NORESET; // XXX FIXME fastest case
-        strategy = UNR_JJMODVL_RESET; // XXX FIXME
+        ret.suggested = strategy = UNR_JJMODVL_RESET; // XXX FIXME
         if(v)cout<<" C.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
             <<strategy<<"\n\t"
             <<", b_period="<<b_period<<b_period_pow2
@@ -1785,47 +1799,45 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int cons
             <<endl;
         //assert( !have_b_period );
         //assert("Never got case B"==nullptr);
-        ret.suggested = strategy;
     }else if( jj_pow2 ){
         if(nloop < b_period_max){
-            strategy = UNR_JJPOW2_NLOOP;
+            // VE compiles this incorrectly if ret is changed after the cout !!!
+            ret.suggested = strategy = UNR_JJPOW2_NLOOP;
+            ret.unroll = nloop;
             if(v)cout<<" D.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
                 <<strategy<<"\n\t"
                 <<", b_period="<<b_period<<b_period_pow2<<", bcyc_regs="<<bcyc_regs
                 <<" has jj=2^"<<jj_shift<<" with precalc unroll(nloop="<<nloop<<")"
                 <<endl;
         }else if(bcyc_regs < b_period_max){
-            strategy = UNR_JJPOW2_CYC;
+            ret.suggested = strategy = UNR_JJPOW2_CYC;
             if(v)cout<<" E.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
                 <<strategy<<"\n\t"
                 <<", b_period="<<b_period<<b_period_pow2<<", bcyc_regs="<<bcyc_regs
                 <<" has jj=2^"<<jj_shift<<" with precalc unroll(bcyc_regs="<<bcyc_regs<<")"
                 <<endl;
             //assert( have_b_period );
-            ret.suggested = strategy;
-            ret.unroll = nloop;
+            ret.unroll = bcyc_regs;
         }else{
-            strategy = UNR_JJPOW2_BIG;
+            ret.suggested = strategy = UNR_JJPOW2_BIG;
             if(v)cout<<" F.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
                 <<strategy<<"\n\t"
                 <<", b_period="<<b_period<<b_period_pow2<<", bcyc_regs="<<bcyc_regs
                 <<" has jj=2^"<<jj_shift<<" easy update, but large period [no precalc, any small unroll]"
                 <<endl;
-            ret.suggested = strategy;
         }
     }else if( nloop < b_period_max ){ // small nloop, any b_period
-        strategy = UNR_NLOOP;
+        ret.suggested = strategy = UNR_NLOOP;
         if(v)cout<<" G.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
             <<strategy<<"\n\t"
             <<", b_period="<<b_period<<b_period_pow2
             <<" suggest full precalc unroll(nloop="<<nloop<<")\n"
             <<"     Then a[]-b[] induction is 2 ops total, mov/mov from precalc regs to working"
             <<endl;
-        ret.suggested = strategy;
         ret.unroll = nloop;
         // no. also ok for non-cyclic and low nloop ... assert( have_b_period );
     }else if( bcyc_regs < b_period_max ){ // small b_period, high nloop
-        strategy = UNR_CYC;
+        ret.suggested = strategy = UNR_CYC;
         if(v)cout<<" H.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
             <<strategy<<"\n\t"
             <<", b_period="<<b_period<<b_period_pow2
@@ -1835,16 +1847,14 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int cons
             <<endl;
         // no...assert( have_b_period );
         //assert(" never get to H"==nullptr);
-        ret.suggested = strategy;
         ret.unroll = b_period; // XXX or maybe b_period * N < b_period_max ??? XXX
     }else{ // nloop and b_period both high OR this is a simpler case
-        strategy = UNR_DIVMOD;
+        ret.suggested = strategy = UNR_DIVMOD;
         if(v)cout<<" I.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
             <<strategy<<"\n\t"
             <<", b_period="<<b_period<<b_period_pow2<<" both high:"
             <<" full unroll(nloop="<<nloop<<") [no precalc] still possible"
             <<endl;
-        ret.suggested = strategy;
         assert( !have_b_period );
     }
 #endif
@@ -1891,6 +1901,9 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int cons
         }
     }
 #endif
+    //cout<<" dbg: "<<strategy<<"  sugg "<<ret.suggested<<" vl,ii,jj "
+    //    <<ret.vl<<","<<ret.ii<<","<<ret.jj<<" unroll "<<ret.unroll<<endl;
+    assert(ret.suggested != UNR_UNSET);
     return ret;
 }
 /** Scan vl (or vl-1) to \c vl_min for an efficient loop induction.
@@ -1906,7 +1919,9 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int cons
  * \post if a nicer alt is found, \c u.vll records this reduce \c u.vl
  */
 UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
-    assert( u.suggested != UNR_UNSET );
+    if( u.suggested != UNR_UNSET ){
+        cout<<" Note: alt suggestion. Probably original is OK"<<endl;
+    }
     double const f=0.90;
     int const vl = u.vl;
     int const vl_max = max(1,vl-1);
@@ -1950,12 +1965,12 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
     u.vll = 0;                           //             and u.vll is zero
     cout<<"Checking vll "; cout.flush();
     for( int vll = vl_max; vll >= vl_min; --vll){
-        cout<<" "<<vl; cout.flush();
-        UnrollSuggest us = unroll_suggest(vll, u.ii, u.jj, u.b_period_max, 0/*verbose*/);
+        cout<<" "<<vll; cout.flush();
+        UnrollSuggest us = unroll_suggest(vll, u.ii, u.jj, u.b_period_max, 1/*verbose*/);
         if( us.suggested != UNR_DIVMOD ){
             ret = us;    // return the nice alt
             cout<<"\nALTERNATE strategy at vll="<<vll<<" ("
-                <<int(vll*1000./vl)*0.1<<"% of vl)\n  "<<ret<<endl;
+                <<int(vll*1000./vl)*0.1<<"% of vl)\n  "<<us<<endl;
             u.vll = vll; // also record existence-of-alt into u
             break;
         }

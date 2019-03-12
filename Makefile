@@ -298,12 +298,12 @@ cblock-x86: cblock.cpp cblock.hpp
 	g++ ${CXXFLAGS} -DMAIN_CBLOCK -c $< -o cblock.o
 	g++ ${CXXFLAGS} -DMAIN_CBLOCK -E $< -o cblock.i
 	g++ -Wall -g2 -DMAIN_CBLOCK cblock.o -o $@
-asmblock-ve: asmblock.cpp asmblock.hpp asmfmt-ve.o jitpage-ve.o intutil-ve.o
-	$(CXX) ${CXXFLAGS} -DMAIN_ASMBLOCK $(filter %.cpp,$^) $(filter %.o,$^) -o $@ -ldl
+cblock-ve: cblock.cpp cblock.hpp
+	${CXX} ${CXXFLAGS} -DMAIN_CBLOCK $< -o $@
 asmblock-x86: asmblock.cpp asmblock.hpp asmfmt-x86.o jitpage-x86.o intutil-x86.o
 	g++ ${CXXFLAGS} -DMAIN_ASMBLOCK $(filter %.cpp,$^) $(filter %.o,$^) -o $@ -ldl
-asmblock-ve: asmblock.cpp asmblock.hpp asmfmt-x86.o jitpage-x86.o intutil-x86.o
-	${CXX} ${CXXFLAGS} -DMAIN_ASMBLOCK $(filter %.cpp,$^) $(filter %.o,$^) -o $@ -ldl
+asmblock-ve: asmblock.cpp asmblock.hpp asmfmt-ve.o jitpage-ve.o intutil-ve.o
+	$(CXX) ${CXXFLAGS} -DMAIN_ASMBLOCK $(filter %.cpp,$^) $(filter %.o,$^) -o $@ -ldl
 
 libvenobug.so: \
 	jitpage.lo \

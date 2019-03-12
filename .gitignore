@@ -130,3 +130,5 @@ bug0 bug1 bug2
 nld.help
 nobjcopy.info objcopy.info
 nld.help nobjcopy.help
+asmblock-ve asmblock-ve.lo asmblock-ve.o asmblock-x86 asmblock-x86.lo asmblock-x86.o
+cblock-ve cblock-ve.lo cblock-ve.o cblock-x86 cblock-x86.lo cblock-x86.o
