@@ -162,6 +162,67 @@ struct Cblock {
         return after(at(abspath));
     }
 
+#if 0
+    /// \group define/undef scoping
+    /**
+     * WIP: both asm and C need #defines. Reimplement AsmFmtCols 'scope'
+     *      concept within Cblock [more powerfully].
+     *
+     *   Cblock                         | AsmFmtCols
+     *   ======================================================================
+     *   macro scoping not so important | Parentage used for scope to get
+     *                                  | register assignments (important)
+     *   ----------------------------------------------------------------------
+     *   program is a tree              | AsmFmtCols snippets stitched together
+     *                                  | "by hand" to situate undef outputs
+     *   ----------------------------------------------------------------------
+     *   lines input as strings         | line input helper functions, that
+     *                                  | encapsulate simple assembly
+     *                                  | optimizations
+     *   ----------------------------------------------------------------------
+     *   verbatim line output,          | columnar asm output
+     *   (apart from indent)            | with scope indent typically zero
+     *   -----------------------------------------------------------------------
+     */
+  private:
+    /** Each scope could have a vector of macro --> substitution strings.
+     * For cpp+assembler output, this is quite important, as macros are
+     * used (abused) to handle register assignments.  As such, every
+     * macro has a corresponding \#undef.  We can package a bunch of
+     * macro emissions together in \c StringPairs. */
+    struct StringPairs
+        : public std::vector<std::pair<std::string,std::string>>
+    {
+        /// Convenient \c push_back trimmed versions of \c name and \c subst.
+        void push_trimmed(std::string name, std::string subst);
+    };
+    struct Defines : public StringPairs {
+        /** In the final tree, an \c un_path (absolute/relative) must also
+         * be "forward" of \c this Cblock.  Hmmm, a new type of relative
+         * search could enforce this.
+         *
+         * - asm
+         *   - define/undef scoping critical for register tracking
+         *   - default un_path is "." for assembly (too local?) */
+         * - C:
+         *   - defines/macros often non-local convenience items.
+         *   - default un_path is "" (C usually lazy about undefs) */
+         */
+        std::string const un_path;
+        Defines() : {}
+        /** undef bindings are late, to allow one to specify un_path that
+         * has not yet been created.  A final pass to walk the tree, locate
+         * undef Cblocks, and emit the undefs happens as a write() starts
+         * up.  Un-emittable \c un_path is a serious error for root write().
+        */
+        std::string last_un_path;
+    };
+    std::vector<StringPairs> stack_defs;
+    /** Convert \c StringPairs macros into multiline \#undefs string. */
+    std::string defs2undefs( StringPairs const& macs, std::string block_name );
+  public:
+#endif
+
     int nWrites() const {return _nwrites;}
     /** Note: write has a strange behaviour of emptying the string.
      * <B>Subject to change</B> \deprecated */
@@ -208,6 +269,19 @@ struct Cblock {
         return *ret;
     }
     //Cblock& find(std::string p) const;
+#if 0 // scope macros
+    /* - cb.def("M","S") -- #define M S  and #undef M
+     *   - if exist "./beg" and "./end" put def+undef there
+     *   - else if name="beg" and exists "../end" put def+undef there
+     *   - else use closes upward beg/end scope:
+     *     - "..*\/beg" and "..*\/end"
+     * - Fancier
+     *   - cb.at(..*/foo/beg).def("M","S"); to force upward scope
+     *   - consider how to change arb cblock into a scoped one.
+     *     - Ex. foo--> foo_scope/{beg,body,end} where body "is" the old node "foo" ?
+     */
+#endif
+
   private:
     /** find first \b single-component path \c p for simple search strategy.
      * return nullptr if not found. */
@@ -552,12 +626,13 @@ inline Cblock& mk_cpp_ifelse(Cunit& cunit, std::string name, std::string cond){
     block["end"]<<"#endif // "<<cond;
     return block;
 }
-/** create a "beg{..}" block with subblock named "body" properly indented.
+/** create a name/{beg,body,end} triple, with subblock named "body" properly indented.
  * - For 'C' \c beg could, for example, be an "if(...){" clause.
  * - For 'asm', \c beg and \c end could be [verbatim] comment strings.
  * - default \c beg and \c end selected according to _root->flavor
  * - after mk_scope, usually want to position the code \e before or \e after
  *   some existing Cblock.
+ * - in 'C' code , \c beg might be "if(cond)" or "else", etc.
  */
 inline Cblock& mk_scope(Cunit& cunit, std::string name, std::string beg="", std::string end=""){
     Cblock& block = *(new Cblock(&cunit,name));

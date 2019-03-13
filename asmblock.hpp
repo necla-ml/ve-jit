@@ -3,7 +3,13 @@
 #include "asmfmt.hpp"
 #include "throw.hpp"
 /** \file
- * Arange statements (std::string) into blocks.
+ *
+ * \warning this file should disappear. Cblock should be extended to
+ * support macro scopes nicely.  Then asm output is mostly a formatting
+ * operation applied to each output line before indenting decisions.
+ * [As well as a host of VE asm output helper functions].
+ *
+ * Arrange statements (std::string) into blocks.
  *
  * \todo this was forked from \ref cblock.hpp, but it would be nice
  *       to implement the Cunit.flavor=="asm" so we don't duplicate

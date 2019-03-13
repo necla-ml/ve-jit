@@ -144,7 +144,7 @@ void sim_vechash2( Sim& sim ){
 std::string asm_vechash2( Sim const& sim, std::string vlen_reg="" ){
     VecHash2 vh(MVL);                            // we'll use the default VecHash2 seed
     AsmFmtVe def, gen, hsh;
-    regs(def);
+    regs(def);                                  // assign our registers
     gen.setParent(&def);
     cout<<" given vlen_reg=<"<<vlen_reg<<">"<<endl;
     if( vlen_reg.empty() ){
@@ -162,19 +162,24 @@ std::string asm_vechash2( Sim const& sim, std::string vlen_reg="" ){
         gen.set_vector_length(vlen_reg);
     }
 
-    gen_ab( gen );
+    gen_ab( gen );      // code to generate a[], b[] vectors from seed
 
-    hsh.setParent(&gen);
+    hsh.setParent(&gen); // set parent scope by hand
     hsh.ins("xor h2,0,hash", "prior hash value");
+    // use vechash.hpp functions to emit asm code snippets to
+    // proper AsmFmtVe code sections.
     vh.kern_asm_begin( def, gen, 0, sim.s );
     vh.kern_asm( hsh, "a", "b", "vlen", "h2", "tmp");
     vh.kern_asm_end( hsh );
 
     AsmFmtVe endcode;
-    endcode.ins("b.l (,%lr)", "return!");
+    endcode.ins("b.l (,%lr)", "return");
     endcode.lcom("finished jit asm code " __FILE__);
 
     cout<<string(80,'=')<<" CODE OUTPUT"<<endl;
+    // ouch stitching output together by hand sucks.
+    // See WIP comments in Cblock about a better, uniform way of
+    // handling macro scopes.
     std::string code;
     code = def.flush();         code += "//END def.flush()\n";
     code += gen.flush();        code += "//END gen.flush()\n";
@@ -426,6 +431,11 @@ int main(int argc,char**argv)
     FOR(i,vl) assert( sim2.b[i] == sim.b[i] );
     cout<<hex<<" sim2.h2 = "<<sim2.h2<<" cf. sim.h2 = "<<sim.h2<<dec<<endl;
     assert( sim2.h2 == sim.h2 );
+#if defined(__ve)
+    cout<<" The C and VE asm vector hashes matched (GOOD)";
+#else
+    cout<<" (not on VE, ran same C code twice and output was the same)";
+#endif
     cout<<"\nGoodbye"<<endl;
 }
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break

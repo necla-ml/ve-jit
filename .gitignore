@@ -65,8 +65,12 @@ ftostring
 dltest1link
 dllbuild-ve
 bin_mk.c
-dllok0 dllok2 dllok3 dllok4
-dllvebug1 dllvebug2
+dllok0
+dllok2
+dllok3
+dllok4
+dllvebug1
+dllvebug2
 dllvebug10
 dlprt-ve
 dlprt-x86
@@ -126,9 +130,25 @@ bug-x86
 cblock
 *.diff
 test_*-x86
-bug0 bug1 bug2
+bug0
+bug1
+bug2
 nld.help
-nobjcopy.info objcopy.info
-nld.help nobjcopy.help
-asmblock-ve asmblock-ve.lo asmblock-ve.o asmblock-x86 asmblock-x86.lo asmblock-x86.o
-cblock-ve cblock-ve.lo cblock-ve.o cblock-x86 cblock-x86.lo cblock-x86.o
+nobjcopy.info
+objcopy.info
+nld.help
+nobjcopy.help
+asmblock-ve
+asmblock-ve.lo
+asmblock-ve.o
+asmblock-x86
+asmblock-x86.lo
+asmblock-x86.o
+cblock-ve
+cblock-ve.lo
+cblock-ve.o
+cblock-x86
+cblock-x86.lo
+cblock-x86.o
+cblock-*
+**oops
