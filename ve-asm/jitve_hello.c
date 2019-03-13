@@ -260,7 +260,7 @@ void test_kernel_math(unsigned long parm){
       // the ADD can start right away **if** we have an I-value, in [-64,63]
       long lparm = (long)parm;
       if( !add_ok && lparm >= -64 && lparm <= 63 ){
-        n += snprintf(&jit_parm[n],jsz-n, "\t#add Imm\n\taddu.l %%s1,%ld,%s0\n",lparm);
+        n += snprintf(&jit_parm[n],jsz-n, "\t#add Imm\n\taddu.l %%s1,%ld,%%s0\n",lparm);
         assert(n<jsz);
         add_ok = 1;
       }

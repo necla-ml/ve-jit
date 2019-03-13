@@ -15,6 +15,7 @@ Hello:
 	@echo "CC ${CC}"
 	@echo "CFLAGS ${CFLAGS}"
 	${CC} --version
+	ls -l
 hdrs%.o: hdrs%.c 
 	$(CC) -o $@ ${CFLAGS} -fPIC -O2 -c $<
 	$(NM) $@

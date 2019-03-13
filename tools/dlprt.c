@@ -359,18 +359,23 @@ void dl_dump(void * const handle){
 }
 ///////////////////////////////////////////////////////////////////////////////
 int main(const int argc, const char * const * const argv) {
-  assert((argc == 2) && (argc == 2));
-  const char * const lib = argv[1];
-  printf("Program: %s %s",argv[0],argv[1]);
-  printf(" Attempting dlopen_rel(%s,RTLD_LAZY)\n",lib); fflush(stdout);
-  void * const handle = dlopen_rel(lib, RTLD_NOW);
-  assert(handle != 0);
+  if(argc!=2) {
+    printf(" Need an argument, e.g. libm.so\n");
+    return 1;
+  }else{
+    assert((argc == 2) && (argc == 2));
+    const char * const lib = argv[1];
+    printf("Program: %s %s",argv[0],argv[1]);
+    printf(" Attempting dlopen_rel(%s,RTLD_LAZY)\n",lib); fflush(stdout);
+    void * const handle = dlopen_rel(lib, RTLD_NOW);
+    assert(handle != 0);
 #if REMOVE_CODE < 8
-  dl_dump(handle);
-  printf(" dlclose..."); fflush(stdout);
-  dlclose(handle);
+    dl_dump(handle);
+    printf(" dlclose..."); fflush(stdout);
+    dlclose(handle);
 #endif
-  printf(" DONE!\n"); fflush(stdout);
+    printf(" DONE!\n"); fflush(stdout);
+  }
   printf("Goodbye\n"); fflush(stdout);
   return 0;
 }

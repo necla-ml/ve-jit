@@ -1,0 +1,139 @@
+make[2]: Entering directory `/r/home/nlabhpg/kruus/jit/bug'
+{ \
+	echo '#include <stdio.h>'; \
+	echo 'int main(int argc,char**argv){ if(argc) printf("Goodbye from %s\n",argv[0]); return 0; }'; \
+	} > bug0.c
+{ \
+	echo '#include "stdint.h"'; \
+	} > hdrs0.c
+gcc -o hdrs0.o  -fPIC -O2 -c hdrs0.c
+nm hdrs0.o
+gcc -o libvehdrs0.so -shared hdrs0.o
+#nm libvehdrs0.so
+gcc -o bug0  -fPIC -Wall -Werror -L. -Wl,-rpath=`pwd` bug0.c libvehdrs0.so
+./bug0 7 && echo "Exit status $?" || echo "OHOH Exit status $?"
+Goodbye from ./bug0
+Exit status 0
+Without library...
+gcc  -fPIC -Wall bug0.c && ./a.out && echo YAHOO
+Goodbye from ./a.out
+YAHOO
+------------------------------------------------------------ END bug0
+
+{ \
+	echo '#include <stdio.h>'; \
+	} > hdrs1.c
+gcc -o hdrs1.o  -fPIC -O2 -c hdrs1.c
+nm hdrs1.o
+gcc -o libvehdrs1.so -shared hdrs1.o
+#nm libvehdrs1.so
+gcc -o bug1  -fPIC -Wall -Werror -L. -Wl,-rpath=`pwd` bug0.c libvehdrs1.so
+./bug1 7 && echo "Exit status $?" || echo "OHOH Exit status $?"
+Goodbye from ./bug1
+Exit status 0
+Without library...
+gcc  -fPIC -Wall bug0.c && ./a.out && echo YAHOO
+Goodbye from ./a.out
+YAHOO
+------------------------------------------------------------ END bug1
+
+{ \
+	echo '#include <stdio.h>'; \
+	echo 'int foo() { printf("7"); return 7; }'; \
+	} > hdrs2.c
+gcc -o hdrs2.o  -fPIC -O2 -c hdrs2.c
+nm hdrs2.o
+                 U _GLOBAL_OFFSET_TABLE_
+0000000000000000 T foo
+                 U putchar
+gcc -o libvehdrs2.so -shared hdrs2.o
+#nm libvehdrs2.so
+gcc -o bug2  -fPIC -Wall -Werror -L. -Wl,-rpath=`pwd` bug0.c libvehdrs2.so
+./bug2 7 && echo "Exit status $?" || echo "OHOH Exit status $?"
+Goodbye from ./bug2
+Exit status 0
+Without library...
+gcc  -fPIC -Wall bug0.c && ./a.out && echo YAHOO
+Goodbye from ./a.out
+YAHOO
+------------------------------------------------------------ END bug2
+
+make[2]: Leaving directory `/r/home/nlabhpg/kruus/jit/bug'
+make[2]: Entering directory `/r/home/nlabhpg/kruus/jit/bug'
+CXX g++
+CXXFLAGS 
+g++ --version
+g++ (GCC) 4.8.5 20150623 (Red Hat 4.8.5-28)
+Copyright (C) 2015 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+ls -l
+total 44
+-rw-r--r-- 1 nlabhpg 4gi   770 Mar 14 01:51 Makefile
+-rwxr-xr-x 1 nlabhpg 4gi  8440 Mar 14 01:51 a.out
+-rw-r--r-- 1 nlabhpg 4gi 13472 Mar 14 01:46 bug-ve.log
+-rw-r--r-- 1 nlabhpg 4gi  2216 Mar 14 01:51 bug-x86.log
+-rw-rw-r-- 1 nlabhpg 4gi  1702 Mar 14 01:43 bugN.mk
+-rw-r--r-- 1 nlabhpg 4gi  1362 Mar 14 01:44 bugNc.mk
+{ \
+	echo '#include <iostream>'; \
+	echo '#include <iomanip>'; \
+	echo 'using namespace std;'; \
+	echo 'int main(int,char**){ cout<<"Goodbye"<<endl; }'; \
+	} > bug0.cpp
+{ \
+	echo '#include "stdint.h"'; \
+	} > hdrs0.cpp
+g++ -o hdrs0.o  -fPIC -O2 -c hdrs0.cpp
+#nm -C hdrs0.o
+g++ -o libvehdrs0.so -shared hdrs0.o 
+g++ -o bug0  -fPIC -Wall -Werror -L. -Wl,-rpath,`pwd` bug0.cpp libvehdrs0.so 
+./bug0 7 && echo "Exit status $?" || echo "OHOH Exit status $?"
+Goodbye
+Exit status 0
+Without library...
+g++  -fPIC -Wall bug0.cpp && ./a.out && echo YAHOO
+Goodbye
+YAHOO
+------------------------------------------------------------ END bug0
+
+{ \
+	echo '#include <iostream>'; \
+	} > hdrs1.cpp
+g++ -o hdrs1.o  -fPIC -O2 -c hdrs1.cpp
+#nm -C hdrs1.o
+g++ -o libvehdrs1.so -shared hdrs1.o 
+g++ -o bug1  -fPIC -Wall -Werror -L. -Wl,-rpath,`pwd` bug0.cpp libvehdrs1.so 
+./bug1 7 && echo "Exit status $?" || echo "OHOH Exit status $?"
+Goodbye
+Exit status 0
+Without library...
+g++  -fPIC -Wall bug0.cpp && ./a.out && echo YAHOO
+Goodbye
+YAHOO
+------------------------------------------------------------ END bug1
+
+# This one is OK
+{ \
+	echo 'int foo() { return 7; }'; \
+	} > hdrs2.cpp
+# This one fails
+{ \
+	echo '#include <iostream>'; \
+	echo 'int foo() { std::cout<<"7"; return 7; }'; \
+	} > hdrs2.cpp
+g++ -o hdrs2.o  -fPIC -O2 -c hdrs2.cpp
+#nm -C hdrs2.o
+g++ -o libvehdrs2.so -shared hdrs2.o 
+g++ -o bug2  -fPIC -Wall -Werror -L. -Wl,-rpath,`pwd` bug0.cpp libvehdrs2.so 
+./bug2 7 && echo "Exit status $?" || echo "OHOH Exit status $?"
+Goodbye
+Exit status 0
+Without library...
+g++  -fPIC -Wall bug0.cpp && ./a.out && echo YAHOO
+Goodbye
+YAHOO
+------------------------------------------------------------ END bug2
+
+make[2]: Leaving directory `/r/home/nlabhpg/kruus/jit/bug'

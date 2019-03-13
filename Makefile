@@ -8,14 +8,13 @@ SHELL:=/bin/bash
 
 ifneq ($(CC:ncc%=ncc),ncc)
 
-.PRECIOUS: jitpp_loadreg
 #
 # only a few things can compile for x86...
 #
-TARGETS:=test_strMconst asmfmt-x86 jitpp_loadreg veliFoo.o
+TARGETS:=test_strMconst asmfmt-x86 veliFoo.o
 TARGETS+=veliFoo.o veli_loadreg-x86 dlprt-x86 cblock-x86 asmblock-x86
+TARGETS+=test_naspipe-x86 test_vejitpage_sh-x86
 VE_EXEC:=time
-OBJDUMP:=objdump
 OBJDUMP:=objdump
 OBJCOPY:=objcopy
 SHELL:=/bin/bash
@@ -46,12 +45,11 @@ else
 # all temporary files.  Unfortunately 'ncc' and 'nas' and tools run on host only,
 # and some steps require real files on the host filesystem :(
 #
-TARGETS=asmkern0.asm libjit1.a libjit1-x86.a asmfmt-ve\
-	asmkern.bin asmkern1.bin msk \
-	syscall_hello \
-	jitve0 jitve_hello test_strMconst jitve_math \
+TARGETS=libjit1.a libjit1-x86.a asmfmt-ve\
+	asmkern.bin msk \
+	test_strMconst \
 	jitpp_hello test_naspipe-x86 test_vejitpage_sh-x86 \
-	jitpp_loadreg \
+	test_naspipe-ve test_vejitpage_sh-ve \
 	asmfmt-x86 veli_loadreg-x86 veli_loadreg \
 	dlprt-x86 dlprt-ve \
 	cblock-x86 asmblock-x86 cblock-ve asmblock-ve
@@ -183,30 +181,6 @@ asmkern.bin: asmkern.S
 	@# we can dump or disassemble the raw machine code
 	hexdump -C asmkern.bin
 	$(OBJDUMP) -b binary -mve -D asmkern.bin
-#
-# a small demo of inline assembler, from Japan
-#
-asmkern0.asm: asmkern0.c
-	$(CC) $(CFLAGS) -c $< -DOPT=1 -o asmkern0.o
-	$(CC) $(CFLAGS) -Wa,adhln -S $< -o asmkern0.asm
-	$(OBJDUMP) -d asmkern0.o > asmkern0.dis
-#
-# pstreams demo piping a std::string of VE asm code
-# into a shell script (naspipe.sh) that returns
-# a disassembled dump on stdout
-# and errors on stderr.
-#
-# The script stdout and stderr are captured into C++ strings using pstream.h
-# (More interesting is to use vejitpage.sh and capture the binary blob
-#  output into a std::string that can be used to define a jit code page)
-#
-# This can run on VE or [much faster] on host
-test_naspipe: test_naspipe.cpp naspipe.sh
-	$(CXX) -O2 $< -o $@
-	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
-test_naspipe-x86: test_naspipe.cpp naspipe.sh
-	g++ -O2 $< -o $@
-	./$@ 2>&1 | tee $@.log
 # this also can run on host, in seconds rather than minutes,
 # because we do not execute the jit page
 # [we create the jit page string, and then hexdump and disassemble it]
@@ -216,27 +190,10 @@ test_vejitpage_sh: test_vejitpage_sh.cpp vejitpage.sh
 test_vejitpage_sh-x86: test_vejitpage_sh.cpp vejitpage.sh
 	g++ -std=c++11 -O2 $< -o $@
 	./$@ 2>&1 | tee $@.log
-#
-# low-level C-api, using jitve_util.h
-#
-jitve0: jitve0.c bin.mk
-	$(CC) -O2 $< -o $@
-	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
 jitve_util.o: jitve_util.c jitve_util.h
 	$(CC) -O2 -c $< -o $@
 test_strMconst: test_strMconst.c jitpage-ve.o
 	$(CC) $(CFLAGS) -O2 $^ -o $@ -ldl
-	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
-jitve_hello: jitve_hello.c jitpage-ve.o
-	$(CC) $(CFLAGS) -O2 -E -dD $< >& $(patsubst %.c,%.i,$<)
-	$(CC) $(CFLAGS) -O2 $^ -o $@ -ldl
-	$(CC) $(CFLAGS) -Wa,-adhln -c $< >& $(patsubst %.c,%.asm,$<)
-	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
-.PRECIOUS: jitve_math
-jitve_math: jitve_math.c jitpage-ve.o
-	$(CC) $(CFLAGS) -O2 -E -dD $< >& $(patsubst %.c,%.i,$<)
-	$(CC) $(CFLAGS) -O2 $^ -o $@ -ldl
-	$(CC) $(CFLAGS) -Wa,-adhln -c $< >& $(patsubst %.c,%.asm,$<)
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
 #
 # newer api uses jitpage.h (instead of jitve_util.h)
@@ -305,11 +262,9 @@ asmblock-x86: asmblock.cpp asmblock.hpp asmfmt-x86.o jitpage-x86.o intutil-x86.o
 asmblock-ve: asmblock.cpp asmblock.hpp asmfmt-ve.o jitpage-ve.o intutil-ve.o
 	$(CXX) ${CXXFLAGS} -DMAIN_ASMBLOCK $(filter %.cpp,$^) $(filter %.o,$^) -o $@ -ldl
 
-libvenobug.so: \
-	jitpage.lo \
-	intutil.lo \
-	bin.mk-ve.lo
-	$(CC) -o $@ -shared $^
+#
+# dlopen/dlsym and library-related wierdness is happening on VE
+#
 .PHONY: hdrs0.cpp bug0.cpp hdrs1.cpp hdrs2.cpp empty.cpp
 empty.cpp:
 	rm -f $@
@@ -365,6 +320,11 @@ asmfmt2.lo: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
 	$(CXX) ${CXXFLAGS} -fPIC -O2 -DASMFMTREMOVE=2 -c asmfmt.cpp -o $@
 libveasmfmt2.so: asmfmt2.lo
 	$(CXX) -o $@ -shared $^
+libvenobug.so: \
+	jitpage.lo \
+	intutil.lo \
+	bin.mk-ve.lo
+	$(CC) -o $@ -shared $^
 libvebug.so: \
 	jitpage.lo \
 	intutil.lo \
@@ -464,26 +424,6 @@ vechash-x86.lo: vechash.cpp vechash.hpp
 dllbuild-x86.o: dllbuild.cpp dllbuild.hpp
 	g++ -o $@ $(CXXFLAGS) -Wall -Werror -c $<
 
-# x86 tool to dlopen and walk symbol table	
-.PHONY: dlprt dlprt-clean dlprt-do
-dlprt: dlprt-clean dlprt-do
-dlprt-clean:
-	rm -f dlprt-x86 dlprt-ve libjit1.so libjit1-x86.so dlprt-x86.log dlprt-ve.log
-dlprt-do: dlprt-x86.log
-ifeq ($(CC:ncc%=ncc),ncc)
-dlprt-do: dlprt-ve.log
-endif
-dlprt-x86: dlprt.c
-	g++ -E $< -o $@.i
-	g++ -g2 $< -o $@ -ldl
-	# x86 libm.so as is actually a link-script (text file), which shows that most
-	# of libm comes from libm.so.6 (with AS_NEEDED for some shared/non-shared vector libs)
-	{ ./$@ libm.so.6; echo "exit status $$?"; } >& dlprt-x86.log
-dlprt-ve: dlprt.c
-	nc++ -E $< -o $@.i
-	nc++ -g2 $< -o $@ -ldl
-	{ ./$@ libm.so; echo "exit status $$?"; } >& dlprt-ve.log; \
-		echo "exit status $$?";
 test_vechash-x86: test_vechash.cpp vechash.cpp asmfmt.cpp jitpage.c intutil.c libjit1-x86.so
 	g++ ${CXXFLAGS} $(filter %.cpp,$^) $(filter %.c,$^) -o $@ -ldl #-L. -ljit1-x86
 	#{ ./$@; echo "exit status $$?"; }
@@ -497,13 +437,14 @@ test_vechash-ve: test_vechash.cpp vechash.cpp asmfmt.cpp jitpage.c intutil.c
 #allsyms-ve: allsyms.cpp
 #	${CXX} -g2 -O2 -std=c++11 -D_GNU_SOURCE $< -o $@
 .PHONY: dlprt-x86.log dlprt-ve.log
-dlprt-ve.log: dlprt-ve libjit1.so
-	#./dlprt-ve libjit1.so; echo "exit status $$?"
-	{ ./dlprt-ve libjit1.so; echo "exit status $$?"; } >> dlprt-ve.log 2>&1; \
+tools/%:
+	${MAKE} -C tools $*	
+dlprt-ve.log: tools/dlprt-ve libjit1.so
+	{ $^ libjit1.so; echo "exit status $$?"; } >> dlprt-ve.log 2>&1; \
 		echo "exit status $$?";
-dlprt-x86.log: dlprt-x86 libjit1-x86.so
+dlprt-x86.log: tools/dlprt-x86 libjit1-x86.so
 	# The next test FAILS
-	{ ./dlprt-x86 libjit1-x86.so; echo "exit status $$?"; } >> dlprt-x86.log 2>&1; \
+	{ $^ libjit1-x86.so; echo "exit status $$?"; } >> dlprt-x86.log 2>&1; \
 		echo "exit status $$?";
 
 LIBVELI_SRC:=veliFoo.cpp wrpiFoo.cpp
@@ -533,17 +474,6 @@ asmfmt-ve: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp jitpage-ve.o
 	#$(CXX) $(CXXFLAGS) -O2 -D_MAIN $(filter-out %.hpp,$^) -o $@
 	$(CXX) ${CXXFLAGS} -D_MAIN -Wall asmfmt.cpp jitpage.c intutil.c -o $@ -ldl
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
-#
-# C++ version of jitve_hello.
-# This one is more complicated. Besides printing hello world,
-# it also returns a very lucky value (7).
-#
-.PRECIOUS: jitpp_hello
-jitpp_hello: jitpp_hello.cpp asmfmt-ve.o intutil-ve.o jitpage-ve.o
-	$(CXX) $(CFLAGS) -O2 -E -dD $< >& $(patsubst %.cpp,%.i,$<)
-	$(CXX) $(CFLAGS) -O2 $^ -o $@ $(LDFLAGS)
-	$(CXX) $(CFLAGS) -Wa,-adhln -c $^ >& $(patsubst %.cpp,%.asm,$<)
-	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
 ifeq (0,1)	
 	# ccom: ./phase3_src/cg/schedule_vn_sx4.cpp:3372: void VN_TAG::confirm(int, int): Assertion `false' failed.
 	# nc++: /opt/nec/ve/ncc/1.5.2/libexec/ccom is abnormally terminated by SIGABRT
@@ -561,21 +491,11 @@ msk: msk.cpp
 	$(OBJDUMP) -d $@ >& msk.dis
 	$(VE_EXEC) ./$@ 2>&1 | tee msk.log
 endif
-jitpp_loadreg: jitpp_loadreg.cpp asmfmt-ve.o jitpage-ve.o intutil-ve.o
-	-$(CXX) $(CXXFLAGS) -O2 -E -dD $< >& $(patsubst %.cpp,%.i,$<) && echo YAY || echo OHOH for jitpp_loadreg.i
-	$(CXX) $(CXXFLAGS) -O2 $^ -o $@ $(LDFLAGS)
-	$(CXX) $(CXXFLAGS) -Wa,-adhln -c $^ >& $(patsubst %.cpp,%.asm,$<)
-	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
 %.asm: %.c
 	$(CC) $(CFLAGS) -g2 -Wa,-adhln -S $< >& $*.s
 	$(CC) $(CFLAGS) -Wa,-adhln -c $< >& $*.asm
 	$(CC) $(CFLAGS) -c $< -o $*.o
 	$(OBJDUMP) -d $*.o > $*.dis
-syscall_hello: syscall_hello.c
-	$(CC) $(CFLAGS) -S $< -o syscall_hello.s
-	$(MAKE) syscall_hello.asm
-	$(CC) $(CFLAGS) $< -o $@ && $(VE_EXEC) $@
-	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
 dltest0: dltest0.c
 	$(CC) $(CFLAGS) -o $@ -Wall -Werror $< -ldl
 dltest0-x86: dltest0.c	
@@ -694,26 +614,27 @@ dltest1-nclang: dltest1.cpp jitpipe.hpp Makefile
 clean:
 	rm -f *.o *.lo *.i *.ii *.out *.gch bin.mk*.o bin_mk.c
 	rm -f msk*.i msk*.S msk*.dis msk*.out tmp_*.s tmp*lucky*
-	rm -f syscall_hello.o syscall_hello.asm syscall_hello.dis
-	rm -f asmkern0.asm asmkern0.dis syscall_hello.s
 	for f in *.bin; do b=`basename $$f .bin`; rm -f $$b.asm $$b.o $$b.dis $$b.dump; done
 	for f in tmp_*.S; do b=`basename $$f .S`; rm -f $$b.asm $$b.dis $$b.dump; done
 	rm -rf tmp
-	rm -f jitve_math.asm jitve_hello.asm jitve_hello.s jitve_hello.dis jitve*.dis jitpp_hello.asm
-	$(MAKE) -f bugN.mk clean
+	rm -f asmfmt.s foo.s intutil.s jitpage.s test_vechash.s vechash.s
+	rm -f empty.c
+	$(MAKE) -C bug clean
+	$(MAKE) -C tools clean
 realclean: clean
 	rm -f $(TARGETS)
 	rm -f tmp_*.S *.bin
-	rm -f msk msk0 msk1 msk2 msk3 msk4 syscall_hello smir jitve0 ftostring a.exe 2
+	rm -f msk msk0 msk1 msk2 msk3 msk4 syscall_hello ftostring a.exe 2
 	rm -f bld.log asmfmt.log jit*.log mk*.log bld*.log test*.log dl*.log syscall*.log
-	rm -rf CMakeCache.txt CMakeFiles asmfmt asmfmt-x86 asmfmt.txt jitve_hello.s
+	rm -f CMakeCache.txt CMakeFiles asmfmt asmfmt-x86 asmfmt.txt
 	rm -f dllbuild-ve dllbuild-veb dllbuild-x86 dllbuild-x86b
 	rm -f dllok0 dllok2 dllok3 dllok4 dltest0 dltest0-x86
 	rm -f dllvebug1 dllvebug10 dllvebug2 dltest1 dltest1-clang
 	rm -f dltest1-nclang dltest1-x86 dltest1link
 	rm -f libclang_lucky.so libgcc_lucky.so libncc_lucky.so
-	rm -f bug bug-pic-ve bug-ve bug-x86 cblock
-	$(MAKE) -f bugN.mk realclean
+	rm -f cblock-ve cblock-x86 asmblock-ve asmblock-x86
+	$(MAKE) -C tools realclean
+	$(MAKE) -C bug realclean
 	$(MAKE) -C loops realclean
 	$(MAKE) -C loops2 realclean
 #

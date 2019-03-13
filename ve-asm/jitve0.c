@@ -1,3 +1,7 @@
+/** \file
+ * demo using bin.mk to create VE binary blob from \c .S input.
+ * We don't actually run anything.  In principle I'd like to have
+ * a 'nas' stand-ing available the could run on x86 :) */
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -17,7 +21,7 @@ void asm2bin(char const* basename, char const* cpp_asm_code){
   printf("created  .S file %s\n",basename); fflush(stdout);
   {
     char mk_cmd[100];
-    snprintf(&mk_cmd[0],100,"make -f bin.mk %s.bin\0",basename);
+    snprintf(&mk_cmd[0],100,"make -f ../bin.mk %s.bin\0",basename);
     printf("cmd: %s\n",mk_cmd); fflush(stdout);
     system(mk_cmd);
   }

@@ -5,7 +5,7 @@ all: Hello bug0 bug1 bug2
 	bug1.cpp hdrs1.cpp libvehdrs1.so hdrs1.o  \
 	bug1.cpp hdrs2.cpp libvehdrs2.so hdrs2.o 
 CXXFLAGS:=
-ifeq ($(CC:ncc%=ncc),ncc)
+ifeq ($(CXX:nc++%=ncc++),nc++)
 CXXFLAGS+=-std=c++11 -no-proginf
 LDFLAGS:=
 
@@ -23,6 +23,7 @@ Hello:
 	@echo "CXX ${CXX}"
 	@echo "CXXFLAGS ${CXXFLAGS}"
 	${CXX} --version
+	ls -l
 hdrs%.o: hdrs%.cpp 
 	$(CXX) -o $@ ${CXXFLAGS} -fPIC -O2 -c $<
 	#$(NM) -C $@

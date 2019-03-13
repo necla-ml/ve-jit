@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <assert.h>
+/** \file
+ * test just dlopen_rel */
 
 #ifdef __cplusplus
 # define __STDC_FORMAT_MACROS
@@ -15,6 +17,8 @@
 #include <dlfcn.h>
 
 ///////////////////////////////////////////////////////////////////////////////
+// try to dlopen, and if that fails,
+// attempt to create an absolute path and try again.
 static void * dlopen_rel(char const* const relpath, int opt){
   // first try relpath "as is" (maybe it is libm.so from some known dir)
   dlerror(); // clear error
@@ -48,7 +52,7 @@ int main(const int argc, const char * const * const argv) {
   assert(handle != 0);
   //dl_dump(handle);
   //printf(" dlclose..."); fflush(stdout);
-  //dlclose(handle);
+  dlclose(handle);
   printf(" DONE!\n"); fflush(stdout);
   printf("Goodbye\n"); fflush(stdout);
   return 0;

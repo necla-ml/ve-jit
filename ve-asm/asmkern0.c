@@ -1,3 +1,6 @@
+/** \file
+ * simple demo of VE inline assembler vs C code,
+ * to look at the produced assembly code. */
 #ifndef OPT
 #define OPT 1
 #endif
