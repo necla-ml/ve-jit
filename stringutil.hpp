@@ -156,7 +156,7 @@ std::string jitimm(T const t){
     std::ostringstream oss;
     bool const neg = i<0;
     char const* leading_bit=(neg? "1": "0");    // string for 1|0 MSB
-    if(neg) i=~i;                               // now i == |t|, positive
+    if(neg) i = ~i;                             // now i is positive
     if(!positivePow2(i+1))
         THROW("jitimm("<<t<<") not representable as 64-bit N(B) N B's followed by rest not-B");
     int const trailing = popcount(i); // in |t|

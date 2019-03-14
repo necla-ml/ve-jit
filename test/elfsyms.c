@@ -1,5 +1,6 @@
 // From https://www.unix.com/man-page/sunos/3elf/gelf_update_phdr/
 // Example 1: Printing the ELF Symbol Table
+//   -- VE likely does not have gelf.h --      :(
 
 #include <stdio.h>
 #include <sys/types.h>

@@ -1,3 +1,6 @@
+/** \file
+ * I don't know how to to do a fast "grouped" reduction for VE.
+ *  i.e. x[0]+x[1]+x[2],   x[3]+x[4]+x[5],  ... */
 /** add 256 doubles <em>in groups of 16</em> */
 void grpsum(double* d, double* s){
 	for(int j=0; j<16; ++j){

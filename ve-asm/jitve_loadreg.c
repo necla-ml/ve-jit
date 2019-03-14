@@ -1,10 +1,15 @@
 /** \file
- * Execute a JIT hello-world kernel
+ * C demo of VE assembler optimization  (it is a demo, not the fully optimized loadreg)
+ *
+ * DEPRECATED : looks like it was abandoned soon after it was created.
+ *              jitve_math has the add_sub optimizations now,
+ *              and libveli has the optimized "loadreg" codes
+ *              (much more sophisticated/exhaustive than here).
+ *
  * - Show how to:
  *   - allocate an executable page,
  *   - cross-assemble a small VE assembler kernel,
  *   - execute the kernel function
- *     - which prints "hello, world"
  *   - and even return
  *
  * - We kinda' do a function call, but the jit code:

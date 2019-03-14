@@ -11,9 +11,8 @@ ifneq ($(CC:ncc%=ncc),ncc)
 #
 # only a few things can compile for x86...
 #
-TARGETS:=test_strMconst asmfmt-x86 veliFoo.o
-TARGETS+=veliFoo.o veli_loadreg-x86 dlprt-x86 cblock-x86 asmblock-x86
-TARGETS+=test_naspipe-x86 test_vejitpage_sh-x86
+TARGETS:=asmfmt-x86 veliFoo.o
+TARGETS+=veliFoo.o cblock-x86 asmblock-x86
 VE_EXEC:=time
 OBJDUMP:=objdump
 OBJCOPY:=objcopy
@@ -46,15 +45,9 @@ else
 # and some steps require real files on the host filesystem :(
 #
 TARGETS=libjit1.a libjit1-x86.a asmfmt-ve\
-	asmkern.bin msk \
-	test_strMconst \
-	jitpp_hello test_naspipe-x86 test_vejitpage_sh-x86 \
-	test_naspipe-ve test_vejitpage_sh-ve \
-	asmfmt-x86 veli_loadreg-x86 veli_loadreg \
-	dlprt-x86 dlprt-ve \
+	jitpp_hello asmfmt-x86 dlprt-x86 dlprt-ve \
 	cblock-x86 asmblock-x86 cblock-ve asmblock-ve
 # slow!
-#TARGETS+=test_naspipe test_vejitpage_sh
 #CC?=ncc-1.5.1
 #CXX?=nc++-1.5.1
 #CC:=ncc-1.5.1
@@ -108,7 +101,7 @@ force: # force libs to be recompiled
 	$(MAKE) $(LIBJIT1_TARGETS)
 	$(MAKE) $(LIBVELI_TARGETS)
 
-VEJIT_SHARE:=cblock.cpp dltest1.cpp veli_loadreg.cpp dllbuild.cpp
+VEJIT_SHARE:=cblock.cpp ve-asm/veli_loadreg.cpp dllbuild.cpp
 VEJIT_LIBS:=libjit1-x86.a libveli-x86.a libjit1-x86.so bin.mk-x86.lo
 ifeq ($(CC:ncc%=ncc),ncc)
 VEJIT_LIBS+=libjit1.a libveli.a libjit1.so bin.mk-ve.lo
@@ -144,17 +137,6 @@ ifneq ($(CC:ncc%=ncc),ncc)
 	mv $@ vejit-x86.tar.gz
 endif
 #
-# see vl-run.sh for running veli_loadreg tests
-# many tests only need veli_loadreg-x86
-# only veli_loadreg -R needs VE (because it runs several
-# thousand optimized VE assembler test cases).
-WORKING?=6
-veli_loadreg: veli_loadreg.cpp libveli.a libjit1.a
-	$(CXX) $(CXXFLAGS) -DWORKING=${WORKING} -g -O2 -o $@ $^ $(LDFLAGS)
-	@echo "veli_loadreg runs VE Logic for Instructions tests on VE"
-	@echo "(veli_loadreg-x86 will do same VE logic tests on x86)"
-veli_loadreg-x86: veli_loadreg.cpp libveli-x86.a libjit1-x86.a
-	g++ $(CXXFLAGS) -Wall -DWORKING=${WORKING} -g -O2 -o $@ $^ -ldl
 #
 # Aurora assembler.S: cpp->.asm, $(CC)->.o, nobjcopy->.bin, .bin-->.dump
 # Actually, jitpage.h (newer version of ve_util.h) will use 'bin.mk' makefile
@@ -173,28 +155,8 @@ veli_loadreg-x86: veli_loadreg.cpp libveli-x86.a libjit1-x86.a
 	@echo "===========================" >> $*.dump
 	@echo "$(OBJDUMP) -b binary -mve -D %*.bin" >> $*.dump
 	$(OBJDUMP) -b binary -mve -D $*.bin >> $*.dump
-# short demo of creating a binary blob from some hand-written assembler (no C ABI)
-asmkern.bin: asmkern.S
-	$(CC) -o asmkern.o -c asmkern.S
-	@# if we have a relocatable (PIC) binary blob, we can create it as follows
-	$(OBJCOPY) -O binary asmkern.o asmkern.bin
-	@# we can dump or disassemble the raw machine code
-	hexdump -C asmkern.bin
-	$(OBJDUMP) -b binary -mve -D asmkern.bin
-# this also can run on host, in seconds rather than minutes,
-# because we do not execute the jit page
-# [we create the jit page string, and then hexdump and disassemble it]
-test_vejitpage_sh: test_vejitpage_sh.cpp vejitpage.sh
-	$(CXX) -O2 $< -o $@
-	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
-test_vejitpage_sh-x86: test_vejitpage_sh.cpp vejitpage.sh
-	g++ -std=c++11 -O2 $< -o $@
-	./$@ 2>&1 | tee $@.log
 jitve_util.o: jitve_util.c jitve_util.h
 	$(CC) -O2 -c $< -o $@
-test_strMconst: test_strMconst.c jitpage-ve.o
-	$(CC) $(CFLAGS) -O2 $^ -o $@ -ldl
-	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
 #
 # newer api uses jitpage.h (instead of jitve_util.h)
 # and supports C++         (asmfmt_fwd.hpp)
@@ -424,14 +386,6 @@ vechash-x86.lo: vechash.cpp vechash.hpp
 dllbuild-x86.o: dllbuild.cpp dllbuild.hpp
 	g++ -o $@ $(CXXFLAGS) -Wall -Werror -c $<
 
-test_vechash-x86: test_vechash.cpp vechash.cpp asmfmt.cpp jitpage.c intutil.c libjit1-x86.so
-	g++ ${CXXFLAGS} $(filter %.cpp,$^) $(filter %.c,$^) -o $@ -ldl #-L. -ljit1-x86
-	#{ ./$@; echo "exit status $$?"; }
-test_vechash-ve: test_vechash.cpp vechash.cpp asmfmt.cpp jitpage.c intutil.c
-	${CXX} ${CXXFLAGS} -E $< -o test_vechash.i
-	${CXX} ${CXXFLAGS} -S $(filter %.cpp,$^) $(filter %.c,$^)
-	${CXX} ${CXXFLAGS} $(filter %.cpp,$^) $(filter %.c,$^) -o $@ -ldl #-L. -ljit1-x86
-	#{ ./$@; echo "exit status $$?"; }
 #allsyms-x86: allsyms.cpp
 #	g++ -g2 -O2 -std=c++11 -D_GNU_SOURCE $< -o $@ -ldl
 #allsyms-ve: allsyms.cpp
@@ -474,32 +428,11 @@ asmfmt-ve: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp jitpage-ve.o
 	#$(CXX) $(CXXFLAGS) -O2 -D_MAIN $(filter-out %.hpp,$^) -o $@
 	$(CXX) ${CXXFLAGS} -D_MAIN -Wall asmfmt.cpp jitpage.c intutil.c -o $@ -ldl
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
-ifeq (0,1)	
-	# ccom: ./phase3_src/cg/schedule_vn_sx4.cpp:3372: void VN_TAG::confirm(int, int): Assertion `false' failed.
-	# nc++: /opt/nec/ve/ncc/1.5.2/libexec/ccom is abnormally terminated by SIGABRT
-msk: msk.cpp
-	$(CXX) $(CFLAGS) -E msk.cpp > msk.i
-	$(CXX) $(CFLAGS) -Wa,adhln -S msk.cpp -o msk.S
-	$(CXX) $(CFLAGS) -g2 msk.cpp -o $@
-	$(OBJDUMP) -d $@ >& msk.dis
-	$(VE_EXEC) ./$@ 2>&1 | tee msk.log
-else
-msk: msk.cpp
-	$(CXX) -O0 -E msk.cpp > msk.i
-	$(CXX) -O0 -Wa,adhln -S msk.cpp -o msk.S
-	$(CXX) -O0 -g2 msk.cpp -o $@
-	$(OBJDUMP) -d $@ >& msk.dis
-	$(VE_EXEC) ./$@ 2>&1 | tee msk.log
-endif
 %.asm: %.c
 	$(CC) $(CFLAGS) -g2 -Wa,-adhln -S $< >& $*.s
 	$(CC) $(CFLAGS) -Wa,-adhln -c $< >& $*.asm
 	$(CC) $(CFLAGS) -c $< -o $*.o
 	$(OBJDUMP) -d $*.o > $*.dis
-dltest0: dltest0.c
-	$(CC) $(CFLAGS) -o $@ -Wall -Werror $< -ldl
-dltest0-x86: dltest0.c	
-	g++ $(CXXFLAGS) -o $@ -Wall -Werror $< -ldl
 #bin.mk-x86.o: bin.mk
 #	objcopy --input binary --output elf64-x86-64 --binary-architecture i386 \
 #		--rename-section .data=.rodata,alloc,load,readonly,data,contents \
@@ -579,58 +512,25 @@ dllbuild-vec: dllbuild.cpp libjit1.so
 	nreadelf -d $@
 # next test show how to dynamically *compile* and load a dll given
 # a std::string containing 'C' code.
-.PHONY: dltest1.log
-RUNCMD:=	
-dltest1.log:
-	# recreate and run dltest1 versions x86+gcc and VE+ncc
-	rm -f dltest1 dltest1-x86 tmp_*.c lib*_lucky.so
-	@# '13' has been hard-wired to produce incorrect std::string ccode
-	-{ $(MAKE) VERBOSE=1 dltest1-x86 && $(RUNCMD) ./dltest1-x86 13 && echo YAY; } >& $@ || echo "Ohoh, continuing anyway"
-ifeq ($(CC),ncc)
-	@# '7' should return the correct value from the JIT function.
-	-{ echo ""; echo ""; $(MAKE) VERBOSE=1 dltest1 && $(RUNCMD) ve_exec ./dltest1 7 && echo YAY; } &>> $@ || echo "Ohoh, continuing anyway"
-endif
-	# Attempting JIT-via-clang (compile and cross-compile),
-	# even though you might not have them installed...
-	-{ $(MAKE) VERBOSE=1       dltest1-clang && $(RUNCMD) ./dltest1-clang 123 && echo YAY; } &>> $@ || echo "Ohoh, continuing anyway"
-	-{ $(MAKE) VERBOSE=1       dltest1-nclang && $(RUNCMD) ./dltest1-nclang -1 && echo YAY; } &>> $@ || echo "Ohoh, continuing anyway"
-	-ls -l tmp_*.c lib*lucky*.so
-	-ls -l tmp_*.c lib*lucky*.so &>> $@
-
-#libgcc_lucky.so     this code and jit code runs on host
-#libncc_lucky.so     this code and jit code runs on VE
-#libclang_lucky.so   this code(can be gcc) and jit code from clang run on host
-#libnclang_lucky.so  this code(can be ncc) and jist code from clang -target ve-linux on VE
-dltest1: dltest1.cpp jitpipe.hpp Makefile
-	$(CXX) $(CXXFLAGS) -o $@ -Wall -Werror $< 
-# Note: following binaries run on x86 so g++ is OK,
-#       but the JIT portion uses different compilers
-dltest1-x86: dltest1.cpp jitpipe.hpp Makefile
-	g++ $(CXXFLAGS) -o $@ -Wall -Werror $< -ldl
-dltest1-clang: dltest1.cpp jitpipe.hpp Makefile
-	g++ $(CXXFLAGS) -DJIT_CLANG -o $@ -Wall -Werror $< -ldl
-dltest1-nclang: dltest1.cpp jitpipe.hpp Makefile
-	g++ $(CXXFLAGS) -DJIT_NCLANG -o $@ -Wall -Werror $< -ldl
 clean:
 	rm -f *.o *.lo *.i *.ii *.out *.gch bin.mk*.o bin_mk.c
-	rm -f msk*.i msk*.S msk*.dis msk*.out tmp_*.s tmp*lucky*
+	rm -f tmp_*.s tmp*lucky*
 	for f in *.bin; do b=`basename $$f .bin`; rm -f $$b.asm $$b.o $$b.dis $$b.dump; done
 	for f in tmp_*.S; do b=`basename $$f .S`; rm -f $$b.asm $$b.dis $$b.dump; done
 	rm -rf tmp
-	rm -f asmfmt.s foo.s intutil.s jitpage.s test_vechash.s vechash.s
+	rm -f asmfmt.s foo.s intutil.s jitpage.s vechash.s
 	rm -f empty.c
 	$(MAKE) -C bug clean
 	$(MAKE) -C tools clean
 realclean: clean
-	rm -f $(TARGETS)
+	rm -f $(TARGETS) jitpp_loadreg
 	rm -f tmp_*.S *.bin
 	rm -f msk msk0 msk1 msk2 msk3 msk4 syscall_hello ftostring a.exe 2
 	rm -f bld.log asmfmt.log jit*.log mk*.log bld*.log test*.log dl*.log syscall*.log
 	rm -f CMakeCache.txt CMakeFiles asmfmt asmfmt-x86 asmfmt.txt
 	rm -f dllbuild-ve dllbuild-veb dllbuild-x86 dllbuild-x86b
-	rm -f dllok0 dllok2 dllok3 dllok4 dltest0 dltest0-x86
-	rm -f dllvebug1 dllvebug10 dllvebug2 dltest1 dltest1-clang
-	rm -f dltest1-nclang dltest1-x86 dltest1link
+	rm -f dllok0 dllok2 dllok3 dllok4
+	rm -f dllvebug1 dllvebug10 dllvebug2 
 	rm -f libclang_lucky.so libgcc_lucky.so libncc_lucky.so
 	rm -f cblock-ve cblock-x86 asmblock-ve asmblock-x86
 	$(MAKE) -C tools realclean
