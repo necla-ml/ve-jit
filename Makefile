@@ -3,7 +3,6 @@ SHELL:=/bin/bash
 # normal build target = all
 # distribution target = vejit.tar.gz
 # major clean and rebuild tests:
-#   dlprt
 #   dllbuild
 
 ifneq ($(CC:ncc%=ncc),ncc)
@@ -45,7 +44,7 @@ else
 # and some steps require real files on the host filesystem :(
 #
 TARGETS=libjit1.a libjit1-x86.a asmfmt-ve\
-	jitpp_hello asmfmt-x86 dlprt-x86 dlprt-ve \
+	asmfmt-x86 \
 	cblock-x86 asmblock-x86 cblock-ve asmblock-ve
 # slow!
 #CC?=ncc-1.5.1
@@ -155,8 +154,8 @@ endif
 	@echo "===========================" >> $*.dump
 	@echo "$(OBJDUMP) -b binary -mve -D %*.bin" >> $*.dump
 	$(OBJDUMP) -b binary -mve -D $*.bin >> $*.dump
-jitve_util.o: jitve_util.c jitve_util.h
-	$(CC) -O2 -c $< -o $@
+tools/%:
+	${MAKE} -C tools $*	
 #
 # newer api uses jitpage.h (instead of jitve_util.h)
 # and supports C++         (asmfmt_fwd.hpp)
@@ -319,7 +318,7 @@ dllok5: dllbug.cpp libvenobug.so libvehdrs2.so
 	echo "Exit status $$?"
 dllvebug0: dllbug.cpp libvenobug.so libvehdrs9.so
 	$(CXX) $(CXXFLAGS) -DCODEREMOVE=9 -fPIC -Wall -Werror -E $< -o dllbug9.i
-	$(CXX) -o $@ $(CXXFLAGS) -DCODEREMOVE=9 -fPIC -Wall -Werror -L. -Wl,-rpath=`pwd` $^
+	$(CXX) -o $@ $(CXXFLAGS) -DCODEREMOVE=9 -fPIC -Wall -Werror -L. -Wl,-rpath=`pwd` $^ $(LDFLAGS)
 	./$@ 7
 	echo "Exit status $$?"
 dllvebug1: dllbug.cpp libvenobug.so libvehdrs2.so
@@ -391,8 +390,6 @@ dllbuild-x86.o: dllbuild.cpp dllbuild.hpp
 #allsyms-ve: allsyms.cpp
 #	${CXX} -g2 -O2 -std=c++11 -D_GNU_SOURCE $< -o $@
 .PHONY: dlprt-x86.log dlprt-ve.log
-tools/%:
-	${MAKE} -C tools $*	
 dlprt-ve.log: tools/dlprt-ve libjit1.so
 	{ $^ libjit1.so; echo "exit status $$?"; } >> dlprt-ve.log 2>&1; \
 		echo "exit status $$?";
@@ -519,7 +516,7 @@ clean:
 	for f in tmp_*.S; do b=`basename $$f .S`; rm -f $$b.asm $$b.dis $$b.dump; done
 	rm -rf tmp
 	rm -f asmfmt.s foo.s intutil.s jitpage.s vechash.s
-	rm -f empty.c
+	rm -f empty.c libvehdrs*.so libveasmfmt*.so libvenobug*.so libveempty.so
 	$(MAKE) -C bug clean
 	$(MAKE) -C tools clean
 realclean: clean
@@ -533,6 +530,7 @@ realclean: clean
 	rm -f dllvebug1 dllvebug10 dllvebug2 
 	rm -f libclang_lucky.so libgcc_lucky.so libncc_lucky.so
 	rm -f cblock-ve cblock-x86 asmblock-ve asmblock-x86
+	rm -f asmfmt-ve.log distro.log [a-zA-Z].log x.prt x86.log
 	$(MAKE) -C tools realclean
 	$(MAKE) -C bug realclean
 	$(MAKE) -C loops realclean

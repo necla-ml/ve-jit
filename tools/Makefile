@@ -4,7 +4,6 @@ TARGETS+=dlprt-x86
 
 ifneq ($(CC:ncc%=ncc),ncc)
 VE_EXEC:=time
-TARGETS+=dlprt-ve
 CFLAGS:=-O2 -g2 -pthread
 CFLAGS+=-Wall -Werror
 CFLAGS+=-Wno-unknown-pragmas
@@ -21,15 +20,6 @@ endif
 
 all: ${TARGETS}
 
-# x86/ve tool to dlopen and walk symbol table	
-.PHONY: dlprt dlprt-clean dlprt-do
-dlprt: dlprt-clean dlprt-do
-dlprt-clean:
-	rm -f dlprt-x86 dlprt-ve libjit1.so libjit1-x86.so dlprt-x86.log dlprt-ve.log
-dlprt-do: dlprt-x86.log
-ifeq ($(CC:ncc%=ncc),ncc)
-dlprt-do: dlprt-ve.log
-endif
 dlprt-x86: dlprt.c
 	g++ -E $< -o $@.i
 	g++ -g2 $< -o $@ -ldl
