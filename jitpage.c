@@ -333,19 +333,6 @@ FindVal(const ElfW(Dyn) * dyn, const ElfW(Sxword) tag) {
 
 
 ///////////////////////////////////////////////////////////////////////////////
-#if 0
-static const void *
-FindPtr(const ElfW(Addr) load_addr,
-        const ElfW(Dyn) * dyn, const ElfW(Sxword) tag) {
-    for (; dyn->d_tag != DT_NULL; ++dyn) {
-        if (dyn->d_tag == tag) {
-            //return (const void *)(dyn->d_un.d_ptr - load_addr); // segfault?
-            return (const void *)(dyn->d_un.d_ptr);
-        }
-    }
-    assert(false);
-}
-#else
     static const void *
 FindPtr(const ElfW(Addr) load_addr,
         const ElfW(Dyn)     *dyn,
@@ -354,16 +341,18 @@ FindPtr(const ElfW(Addr) load_addr,
     const void *ret = NULL;
     BumpDyn(dyn,tag);
     // note: x86 stores actual pointer value, VE stores relative value?
-    if( dyn->d_tag == tag )
-#if !defined(__ve)
+    if( dyn->d_tag == tag ){
+#if defined(__ve) && __NEC_VERSION__ < 20000 // non-glibc
+        ret = (const void*)(load_addr + dyn->d_un.d_ptr);
+#else // x86 or ncc >= 2.0.0
         ret = (const void*)dyn->d_un.d_ptr;
-#else
-    ret = (const void*)(load_addr + dyn->d_un.d_ptr);
 #endif
-    else printf(" error: tag %d not found\n",(int)tag); // avoid assert in helpers
+        //printf(" tag %d Ptr @ %p\n",(int)tag,ret);
+    }else{
+        printf(" error: tag %d not found\n",(int)tag); // avoid assert in helpers
+    }
     return ret;
 }
-#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 #define Title(...) do{printf("-------------------------------------------------" \

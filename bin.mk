@@ -41,13 +41,16 @@ CFLAGS:=-O2 -fPIC $(CFLAGS)
 CXXFLAGS:=-std=c++11 -O2 -fPIC $(CXXFLAGS)
 CLANG_FLAGS:=$(CLANG_FLAGS) $(CFLAGS)
 CXXLANG_FLAGS:=$(CXXLANG_FLAGS) $(CXXFLAGS)
+# remove some flags that clang does not support
+CLANG_FLAGS:=$(filter-out -O2,$(CLANG_FLAGS))
+CXXLANG_FLAGS:=$(filter-out -O2,$(CLANG_FLAGS))
 # env flags append to some reasonable defaults
 # clang vector instrinsics flags (reuse C[XX]LANG_FLAGS env variables to adjust)
 CLANG_VI_FLAGS:=-show-spill-message-vec -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics
 # huh, what is correct? -show-spill-message-vec 
 # maybe: -fno-unroll-loops
 CLANG_FLAGS:=-target ve -mllvm $(CLANG_VI_FLAGS) $(CLANG_FLAGS)
-CXXLANG_FLAGS:=-target ve -mllvm $(CXXLANG_FLAGS) $(CXXLANG_FLAGS)
+CXXLANG_FLAGS:=-target ve -mllvm $(CLANG_VI_FLAGS) $(CXXLANG_FLAGS)
 $(info Ending with CFLAGS        = $(CFLAGS))
 $(info Ending with CXXFLAGS      = $(CXXFLAGS))
 $(info Ending with CLANG_FLAGS   = $(CLANG_FLAGS))

@@ -124,8 +124,13 @@ set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -std=gnu11 -D_GNU_SOURCE")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -Wall -Werror")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror")
-set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -pthread")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
+#
+# Changed: link with pthread compile removed from default flags because
+#          ncc >= 2.0 cannot load dlls that need the VE pthread library.
+# illegal instruction loading  "/opt/nec/ve/lib64/libthread_db.so.1"
+#
+#set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -pthread")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
 if(BUILD_SHARED)
     set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -fPIC")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")

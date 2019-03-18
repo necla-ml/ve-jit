@@ -116,7 +116,8 @@ std::string DllFile::obj(std::string fname){
             }
         }
     }
-    if(ret.empty()) THROW("DllFile::obj("<<fname<<") must match %.{c|cpp|s|S}");
+    if(ret.empty()) THROW("DllFile::obj("<<fname
+            <<") must match %[-vi|-ncc|-clang].{c|cpp} or %.{s|S}");
     return ret;
 }
 std::string DllFile::write(SubDir const& subdir){
@@ -648,7 +649,7 @@ int main(int argc,char**argv){
         cout<<" Trouble converting program argument into an int?"<<endl;
         return 1;
     }
-    char const* codefile_suffix = "-ncc.c";
+    char const* codefile_suffix = "-ncc.c"; // default: build JIT lib with ncc
     if( argc >= 3 ){
         codefile_suffix = argv[2];
     }

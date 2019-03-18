@@ -463,31 +463,36 @@ bin.mk-ve.lo: bin.mk ftostring
 dllbuild: dllbuild-clean dllbuild-do
 dllbuild-clean:
 	rm -rf tmp-dllbuild
-	rm -f dllbuild-{x86,x86b,ve,veb} libjit1{,-x86}.{a,so} *.o *.lo
+	rm -f dllbuild-{x86,x86b,ve,veb} *.o *.lo
+	#rm -f libjit1{,-x86}.{a,so}
 dllbuild-do: dllbuild.log dllvebug.log
 dllbuild.log:
 	# It is important to demo bin.mk basic correctness for the different build methods
 	# So now dllbuild puts multiple named builds into tmpdllbuild/ ,
 	# differentiated by a a new 'suffix' argument to the test program.
-	{ $(MAKE) VERBOSE=1 dllbuild-x86 dllbuild-x86b dllbuild-ve;\
+	{ $(MAKE) VERBOSE=1 dllbuild-x86 dllbuild-x86b && { \
+		echo "(x86 tests will not be able to run VE shared library)"; \
 		echo ""; echo "TEST dllbuild x86"; ./dllbuild-x86 7; \
 		echo ""; echo "TEST dllbuild x86 dll"; ./dllbuild-x86b 7; \
+		} ; \
+	$(MAKE) VERBOSE=1 dllbuild-ve && { \
+		echo " These simple tests seemed to work, but may be broken with ncc>=2.0?"; \
 		echo ""; echo "TEST dllbuild ve"; ./dllbuild-ve 7; \
 		echo ""; echo "TEST dllbuild ve ncc";     ./dllbuild-ve 7; \
 		echo ""; echo "TEST dllbuild ve clang";   ./dllbuild-ve 7 -clang.c; \
 		echo ""; echo "TEST dllbuild ve nc++";    ./dllbuild-ve 7 -ncc.cpp; \
 		echo ""; echo "TEST dllbuild ve clang C+intrinsics"; ./dllbuild-ve 7 -vi.c; \
 		echo ""; echo "TEST dllbuild ve clang++"; ./dllbuild-ve 7 -clang.cpp; \
-		} >& dllbuild.log && echo "dllbuild.log seems OK" || echo "dllbuild.log Huh?"
+		} ; } >& dllbuild.log && echo "dllbuild.log seems OK" || echo "dllbuild.log Huh?"
 	# NOTE -clang.cpp expected to fail becase clang++ does not understand "-std=c++11"
 dllvebug.log:
-	{ $(MAKE) VERBOSE=1 dllbuild-veb; \
+	{ $(MAKE) VERBOSE=1 dllbuild-veb && { \
 		echo ""; echo "TEST dllbuild ve dll ncc";     ./dllbuild-veb 7; \
 		echo ""; echo "TEST dllbuild ve dll clang";   ./dllbuild-veb 7 -clang.c; \
 		echo ""; echo "TEST dllbuild ve dll nc++";    ./dllbuild-veb 7 -ncc.cpp; \
 		echo ""; echo "TEST dllbuild ve dll clang++"; ./dllbuild-veb 7 -clang.cpp; \
 		echo ""; echo "TEST dllbuild ve dll clang C+intrinsics"; ./dllbuild-veb 7 -vi.c; \
-		} >& dllvebug.log && echo "dllvebug.log seems OK" || echo "dllvebug.log Huh?"
+		} ; } >& dllvebug.log && echo "dllvebug.log seems OK" || echo "dllvebug.log Huh?"
 	# NOTE **all** above fail because dllbuild-veb is linked with a shared C++ library.
 dllbuild-x86: dllbuild.cpp libjit1-x86.a
 	g++ -o $@ $(CXXFLAGS) -Wall -Werror -DDLLBUILD_MAIN $< -L. libjit1-x86.a -ldl
@@ -501,7 +506,8 @@ dllbuild-ve: dllbuild.cpp libjit1.a
 dllbuild-veb: dllbuild.cpp
 	if [ ! -f "vejit/lib/lib$(LIBJIT).so" ]; then $(MAKE) all-vejit-libs; fi
 	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -DDLLBUILD_MAIN $< \
-		-Lvejit/lib -Wl,-rpath,`pwd`/vejit/lib -l$(LIBJIT)
+		-Wl,--trace -Wl,--verbose \
+		-Lvejit/lib -Wl,-rpath,`pwd`/vejit/lib -l$(LIBJIT) -ldl
 	nreadelf -d $@
 # next test show how to dynamically *compile* and load a dll given/ fiail after subdir1/subdir2/ fwrite
 dllbuild-vec: dllbuild.cpp libjit1.so
@@ -514,9 +520,9 @@ clean:
 	rm -f tmp_*.s tmp*lucky*
 	for f in *.bin; do b=`basename $$f .bin`; rm -f $$b.asm $$b.o $$b.dis $$b.dump; done
 	for f in tmp_*.S; do b=`basename $$f .S`; rm -f $$b.asm $$b.dis $$b.dump; done
-	rm -rf tmp
+	rm -rf tmp tmp-dllbuild
 	rm -f asmfmt.s foo.s intutil.s jitpage.s vechash.s
-	rm -f empty.c libvehdrs*.so libveasmfmt*.so libvenobug*.so libveempty.so
+	rm -f empty.c empty.cpp libvehdrs*.so libveasmfmt*.so libvenobug*.so libveempty.so hdrs?.cpp
 	$(MAKE) -C bug clean
 	$(MAKE) -C tools clean
 realclean: clean

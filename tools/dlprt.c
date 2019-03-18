@@ -74,7 +74,7 @@ FindPtr(const ElfW(Addr) load_addr,
   BumpDyn(dyn,tag);
   // note: x86 stores actual pointer value, VE stores relative value?
   if( dyn->d_tag == tag ){
-#if defined(__ve) && __NEC_VERSION__ < 20000 // non-glibc
+#if defined(__ve) && (__NEC_VERSION__ < 20000/*non-glibc*/ || defined(OLDLIB))
     ret = (const void*)(load_addr + dyn->d_un.d_ptr);
 #else // x86 or ncc >= 2.0.0
     ret = (const void*)dyn->d_un.d_ptr;

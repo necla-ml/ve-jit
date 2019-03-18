@@ -10,7 +10,7 @@ CFLAGS+=-Wno-unknown-pragmas
 CXXFLAGS:=$(CFLAGS) -std=c++11
 
 else
-TARGETS+=dlprt-ve
+TARGETS+=dlprt-ve dlprt-oldve
 VE_EXEC:=ve_exec
 CFLAGS:=-O2 -g2
 CFLAGS+=-Wall -Werror
@@ -31,6 +31,9 @@ dlprt-ve: dlprt.c
 	nc++ -g2 $< -o $@ -ldl
 	{ ./$@ libm.so; echo "exit status $$?"; } >& dlprt-ve.log; \
 		echo "exit status $$?";
+dlprt-oldve: dlprt.c
+	nc++ -DOLDLIB -E $< -o $@.i
+	nc++ -DOLDLIB -g2 $< -o $@ -ldl
 clean:
 	rm -f ${TARGETS} *.i
 realclean: clean	
