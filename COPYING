@@ -22,6 +22,18 @@ integer multiply).
 
 Euclid's [extended] algorithm is described on Wikipedia.
 
+ELF file debuggingi with dl_dump routine in jitpage.c [tools/dlprt.c],
+Modified for ncc, and later for ncc>=2 (2 ELF file formats)
+  Walking the ELF file is based on examples like:
+	https://docs.oracle.com/cd/E19683-01/817-0679/6mgfb878d/index.html
+	https://wiki.osdev.org/ELF_Tutorial
+	https://github.com/eklitzke/parse-elf/blob/master/parse_elf.cc
+	and a stackoverflow post that I can no longer find.
+	libelf was inot available for VE (no gelf functions).
+There is also https://github.com/jacob-baines/elfparser, but I did not try it out.
+I did not distinguish between used/unused symbol table entries, but
+used another way to detect 'end of symbol table'.
+
 Other files are Copyright (C) 2017-2018 NEC Corporation
 and are release under LGPL v2.1
 
