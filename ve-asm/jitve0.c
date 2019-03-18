@@ -1,3 +1,5 @@
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file
  * demo using bin.mk to create VE binary blob from \c .S input.
  * We don't actually run anything.  In principle I'd like to have

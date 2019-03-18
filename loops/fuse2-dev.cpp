@@ -1,3 +1,5 @@
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file
  * fuse2.cpp shows how to fuse 2 loops into vectorized index calculations.
  * It is just a basic test of the idea (verifying correctness).

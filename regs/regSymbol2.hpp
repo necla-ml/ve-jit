@@ -1,5 +1,7 @@
 #ifndef REGSYMBOL2_HPP
 #define REGSYMBOL2_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 
 #define OLD 0
 

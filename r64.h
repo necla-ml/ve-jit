@@ -1,5 +1,7 @@
 #ifndef R64_H_
 #define R64_H_
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file r64.h
  * \brief poor-man's replacement for drand48 (fast, \b low-quality random numbers)
  */

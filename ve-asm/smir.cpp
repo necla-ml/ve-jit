@@ -1,3 +1,5 @@
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 #include "xtimec.h"         // _Xtime_get_ticks,
 #include <unistd.h>     // sleep
 #include <time.h>       // clock()

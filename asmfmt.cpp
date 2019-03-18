@@ -1,3 +1,5 @@
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 #ifndef ASMFMTREMOVE
 #define ASMFMTREMOVE 0
 #endif

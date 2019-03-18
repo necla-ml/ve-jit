@@ -1,5 +1,7 @@
 #ifndef REGSTATES_HPP
 #define REGSTATES_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 #include "old/regDefs.hpp"
 #include <forward_list>
 

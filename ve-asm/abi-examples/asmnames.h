@@ -1,5 +1,7 @@
 #ifndef ASMNAMES_H
 #define ASMNAMES_H
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 
 #define C2(X, Y)  X ## Y
 #define C1(X, Y)  C2(X, Y)

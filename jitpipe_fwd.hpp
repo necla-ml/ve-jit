@@ -1,5 +1,7 @@
 #ifndef JITPIPE_FWD_HPP
 #define JITPIPE_FWD_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file pstream.h support to run compilation tools.
  * Must compile with at least \c -std=c++11 (uses \c nullptr)
  */

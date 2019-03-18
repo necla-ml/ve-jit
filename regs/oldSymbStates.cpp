@@ -1,3 +1,5 @@
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file
  * \deprecated because symbStates.hpp has been replaced with symScopeUid.hpp and
  *             its \e official scope::SymbStates class now.  (renamed as -old files)

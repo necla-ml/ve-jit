@@ -1,3 +1,5 @@
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 
 /* \file
  * see https://stackoverflow.com/questions/11040646/faster-modulus-in-c-c

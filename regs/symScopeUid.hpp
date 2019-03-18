@@ -1,5 +1,7 @@
 #ifndef SYMSCOPEUID_HPP
 #define SYMSCOPEUID_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file
  * Header-only Scoped-Symbol utility classes.
  *

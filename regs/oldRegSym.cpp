@@ -1,3 +1,5 @@
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file
  * Basic \ref regSymbol.hpp tests with a DemoSymbStates class.
  *

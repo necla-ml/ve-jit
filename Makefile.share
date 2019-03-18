@@ -1,3 +1,6 @@
+#
+# NOT USED
+#
 VEJIT_ROOT:=../..
 ifneq ($(CC),ncc)
 .PRECIOUS: jitpp_loadreg

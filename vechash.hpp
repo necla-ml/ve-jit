@@ -1,5 +1,7 @@
 #ifndef VECHASH_HPP
 #define VECHASH_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 
 #include "asmfmt_fwd.hpp"
 #include "throw.hpp"

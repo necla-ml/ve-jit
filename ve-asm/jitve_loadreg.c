@@ -1,3 +1,5 @@
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file
  * C demo of VE assembler optimization  (it is a demo, not the fully optimized loadreg)
  *

@@ -1,5 +1,7 @@
 #ifndef JITPAGE_H
 #define JITPAGE_H
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file
  * C helpers for jit pages and assembling .S to .bin .
  *

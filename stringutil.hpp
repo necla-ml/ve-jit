@@ -1,5 +1,7 @@
 #ifndef STRINGUTIL_HPP
 #define STRINGUTIL_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file
  * pure-header std::string stuff */
 

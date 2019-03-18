@@ -1,5 +1,7 @@
 #ifndef BITFIELD_HPP
 #define BITFIELD_HPP
+/* Modification by Erik Kruus, NEC Corporation (2019)
+ * This file is part of ve-jit */
 /** \file
  * bitfield support for C++11.
  *

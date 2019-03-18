@@ -1,3 +1,5 @@
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 
 //#include "reg-base.hpp" // what can we do with just this?
 // A: Not much. without some chip knowledge, we don't even know how many

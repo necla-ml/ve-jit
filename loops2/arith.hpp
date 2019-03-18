@@ -1,5 +1,7 @@
 #ifndef __ARITH_HPP__
 #define __ARITH_HPP__
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 #include <iostream>
 #include <sstream>
 #include <assert.h>

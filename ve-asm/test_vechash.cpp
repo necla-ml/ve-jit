@@ -1,3 +1,5 @@
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file
  * - rework jitve_hello to demo asmfmt on the math kernel example
  * - merge with ve_regs (symbolic registers, scopes) work should continue

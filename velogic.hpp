@@ -1,5 +1,7 @@
 #ifndef VELOGIC_HPP
 #define VELOGIC_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file logic tests for VE code gen (can run on any chip) */
 #include "jitpage.h"
 #include <cstdint>

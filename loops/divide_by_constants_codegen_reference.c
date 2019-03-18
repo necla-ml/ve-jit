@@ -1,3 +1,5 @@
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /*
   Reference implementations of computing and using the "magic number" approach to dividing
   by constants, including codegen instructions. The unsigned division incorporates the

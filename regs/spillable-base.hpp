@@ -1,5 +1,7 @@
 #ifndef SPILLABLE_BASE_HPP
 #define SPILLABLE_BASE_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file
  * Basic Spillable Symbol Info.
  * \sa spill.hpp spill-impl.hpp regSymbol.hpp

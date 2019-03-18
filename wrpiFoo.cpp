@@ -1,3 +1,5 @@
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file wrappers to call VE jit pages with test logic */
 #if !defined(__ve)
 //#warning "Empty, since requires ncc to compile VE inline asm"

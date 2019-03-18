@@ -1,5 +1,7 @@
 #ifndef SPILL_IMPL2_HPP
 #define SPILL_IMPL2_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file
  * Spill area tracking: template functions */
 

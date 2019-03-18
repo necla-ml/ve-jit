@@ -1,5 +1,7 @@
 #ifndef THROW_HPP
 #define THROW_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 #include <stdexcept>
 #include <iostream>
 #include <sstream>

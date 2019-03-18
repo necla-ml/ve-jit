@@ -1,4 +1,6 @@
 // vim: et ts=4 sw=4 cindent cino=^=l0,\:0,N-s
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 void vcopy(double *dst, double *src, int len)
 {
 	double *p = src, *q = dst;

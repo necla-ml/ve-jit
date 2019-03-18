@@ -1,5 +1,7 @@
 #ifndef ASMFMT_FWD_HPP
 #define ASMFMT_FWD_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 #include "jitpage.h"
 #include <iosfwd>
 #include <string>

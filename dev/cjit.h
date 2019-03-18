@@ -1,5 +1,7 @@
 #ifndef CJIT_H
 #define CJIT_H
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 #warning "deprecated : see jitpage.h jitpage.c"
 
 #ifdef __cplusplus

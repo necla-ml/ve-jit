@@ -1,5 +1,7 @@
 #ifndef JITVE_UTIL_H
 #define JITVE_UTIL_H
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file
  * These are 'C' support function for jitve_foo.c tests.
  * \sa jitpage.h and asmfmt.hpp for later versions of these functions

@@ -1,3 +1,7 @@
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit, but is based on demo codes and documents
+ * describing how to navigate the ELF file format.  It has tweaks for VEOS
+ * pre- and post- version 2.0 */
 #include <stdio.h>
 #include <stddef.h>
 #include <stdint.h>

@@ -1,3 +1,5 @@
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file
  * intended to test scoped spillable symbols.
  * i.e. scopedSpillableBase.hpp unified with symScopeUid.hpp,

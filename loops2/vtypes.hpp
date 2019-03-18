@@ -1,5 +1,7 @@
 #ifndef VTYPES_HPP_
 #define VTYPES_HPP_
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 #include <stdexcept>
 #include <sstream>
 #include <vector>

@@ -1,5 +1,7 @@
 #ifndef SYMBSTATES_HPP
 #define SYMBSTATES_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file
  * Header-only Scoped-Symbol utility classes DEMO.
  *

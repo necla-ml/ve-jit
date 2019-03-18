@@ -1,3 +1,5 @@
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file test logic correctness for "loadreg" optimizations */
 #include "velogic.hpp"
 #include "asmfmt.hpp"

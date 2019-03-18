@@ -1,5 +1,7 @@
 #ifndef REG_AURORA_HPP
 #define REG_AURORA_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 #if defined(REGDEFS_HPP)
 #error "regDefs.hpp has been split into reg-base.hpp + reg-aurora.hpp"
 #endif

@@ -1,5 +1,7 @@
 #ifndef ASMFMT_HPP
 #define ASMFMT_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 #include "asmfmt_fwd.hpp"
 #include <sstream>
 #include <deque>

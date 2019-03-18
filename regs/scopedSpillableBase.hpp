@@ -1,5 +1,7 @@
 #ifndef SCOPED_SPILLABLE_BASE_HPP
 #define SCOPED_SPILLABLE_BASE_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file
  * Basic Scoped Spillable Symbol Info.
  * Compared with \ref spillable-base.hpp, we give up control of an \e active symbol concept,

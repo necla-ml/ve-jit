@@ -1,3 +1,5 @@
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 #include <unistd.h>
 #include <sys/syscall.h>
 /** magic offset for VE 'monc' calls to pass values to host.

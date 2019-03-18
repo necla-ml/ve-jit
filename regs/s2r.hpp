@@ -1,5 +1,7 @@
 #ifndef S2R_HPP
 #define S2R_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file
  * injective SymId-->RegId map.
  */

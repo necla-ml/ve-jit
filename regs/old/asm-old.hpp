@@ -1,5 +1,7 @@
 #ifndef ASM_HPP
 #define ASM_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file
  * \deprecated replaced by symbStates.hpp (rewrite)
  */

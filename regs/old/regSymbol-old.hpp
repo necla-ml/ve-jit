@@ -1,5 +1,7 @@
 #ifndef REGSYMBOL_HPP
 #define REGSYMBOL_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 #include "spillable-base.hpp"
 #include "regDefs.hpp"
 // While regDefs.hpp is now a processor-specific include file,

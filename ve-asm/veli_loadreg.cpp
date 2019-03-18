@@ -1,3 +1,5 @@
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file test register load optimizations.
  * Full rebuild, test, and compile single blob of long tests that
  * take test case number IN[%s0] and return ERR[%s2] and load

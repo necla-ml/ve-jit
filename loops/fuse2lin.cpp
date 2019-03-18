@@ -1,3 +1,5 @@
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file
  * \ref fuse2.cpp shows 2-loop vectorization induction using
  * a vector of a[], b[] loop variable pairs.

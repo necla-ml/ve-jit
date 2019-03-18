@@ -1,3 +1,5 @@
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 #include "dllbuild.hpp"
 //#include "cblock.hpp"    // prefix_lines (debug output)
 #include "throw.hpp"

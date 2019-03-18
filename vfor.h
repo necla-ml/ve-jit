@@ -1,5 +1,7 @@
 #ifndef VFOR_H
 #define VFOR_H
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 
 /** \macro SHORTLOOP ~ loop length less than simd length */
 #if defined(__ve) && (defined(__cplusplus) || __STDC_VERSION__ >= 199901L)

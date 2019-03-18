@@ -1,3 +1,5 @@
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file
  * I don't know how to to do a fast "grouped" reduction for VE.
  *  i.e. x[0]+x[1]+x[2],   x[3]+x[4]+x[5],  ... */

@@ -1,5 +1,7 @@
 #ifndef JITPIPE_HPP
 #define JITPIPE_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 
 /** \file all-inline impls for \ref jitpipe_fwd.hpp */
 #include "jitpipe_fwd.hpp"

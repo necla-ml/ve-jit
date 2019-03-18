@@ -1,5 +1,7 @@
 #ifndef PACKMATH_HPP
 #define PACKMATH_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file
  * packed integer math via floating point ops.
  * Aurora has no packed-integer ops, but if the integer range

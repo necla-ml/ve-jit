@@ -1,3 +1,7 @@
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
+#ifndef EXECHASH_HPP
+#define EXECHASH_HPP
 #include "../r64.h"
 #include <iostream>
 #include <iomanip>
@@ -107,4 +111,5 @@ private:
 inline std::ostream& operator<<(std::ostream& os, ExecHash const& execHash){
     return os << execHash.str();
 }
-
+// vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
+#ifndef EXECHASH_HPP

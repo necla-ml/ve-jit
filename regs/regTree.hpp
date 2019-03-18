@@ -1,5 +1,7 @@
 #ifndef REGTREE_HPP
 #define REGTREE_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file
  * WIP -- address some difficulties with SymScopeUid approach.
  *

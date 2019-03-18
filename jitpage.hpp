@@ -1,5 +1,7 @@
 #ifndef JITPAGE_HPP
 #define JITPAGE_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 #include "jitpage.h"
 
 #include <iostream>

@@ -1,5 +1,7 @@
 #ifndef CBLOCK_HPP
 #define CBLOCK_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 #include "throw.hpp"
 /** \file
  * Arange statements (std::string) into blocks.

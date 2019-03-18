@@ -1,3 +1,7 @@
+#ifndef DLLBUILD_HPP
+#define DLLBUILD_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file
  * put 2 .c functions and some const data into a library,
  * with some nice structure indicating what symbols to
@@ -140,3 +144,4 @@ struct DllBuild : std::vector<DllFile> {
     std::string fullpath;       ///< absolute path to libname {dir.abspath}/{libname}
 };
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
+#endif // DLLBUILD_HPP

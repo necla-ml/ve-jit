@@ -1,3 +1,5 @@
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 /** \file
  * simple demo of Vector-reduction summation op \e vsum.l */
 #include <stdio.h>

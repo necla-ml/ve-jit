@@ -1,6 +1,7 @@
 #ifndef CODEGENASM_HPP
 #define CODEGENASM_HPP
-#include "jit_data.h" // C data, ...
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 #include "stringutil.hpp"
 #include "velogic.hpp" // fully-tested "load scalar reg with constant"
 #include "asmfmt_fwd.hpp"

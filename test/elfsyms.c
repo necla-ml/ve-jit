@@ -1,3 +1,5 @@
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 // From https://www.unix.com/man-page/sunos/3elf/gelf_update_phdr/
 // Example 1: Printing the ELF Symbol Table
 //   -- VE likely does not have gelf.h --      :(
