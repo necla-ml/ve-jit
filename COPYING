@@ -8,28 +8,29 @@ and is described in
 	https://www.hackersdelight.org/aha/aha.pdf
 and licensed as
 	https://www.hackersdelight.org/permissions.htm
+and some things were modified for VE.
 
-regs/bitfield.hpp has its own "as-is" license.
+regs/bitfield.hpp has its own "as-is" license, and also some modifications.
 
-For scalar division by constants, various algorithms wer collected from the
+For scalar division by constants, various algorithms were collected from the
 net, I think libdivide covers most standard algorithms:
 	https://github.com/ridiculousfish/libdivide
 The algorithm used in libjit1 is a modification of a method described by
 Daniel Lemire:
 	https://github.com/lemire/fastmod
-but adapted for restricted range (since VE Aurora does not have a double-wide
-integer multiply).
+but adapted for restricted [21-bit] range since VE Aurora does not have
+a wider-than-64-bit integer multiply result.
 
 Euclid's [extended] algorithm is described on Wikipedia.
 
-ELF file debuggingi with dl_dump routine in jitpage.c [tools/dlprt.c],
-Modified for ncc, and later for ncc>=2 (2 ELF file formats)
+ELF file debugging with dl_dump routine in jitpage.c [also tools/dlprt.c],
+Modified for ncc, and later for ncc>=2 (VE has old and new ELF file format)
   Walking the ELF file is based on examples like:
 	https://docs.oracle.com/cd/E19683-01/817-0679/6mgfb878d/index.html
 	https://wiki.osdev.org/ELF_Tutorial
 	https://github.com/eklitzke/parse-elf/blob/master/parse_elf.cc
 	and a stackoverflow post that I can no longer find.
-	libelf was inot available for VE (no gelf functions).
+	libelf was not available for VE (no gelf functions).
 There is also https://github.com/jacob-baines/elfparser, but I did not try it out.
 I did not distinguish between used/unused symbol table entries, but
 used another way to detect 'end of symbol table'.

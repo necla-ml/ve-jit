@@ -20,13 +20,54 @@ read the output before seeing if it is like you expect.
 ### Build
 ##### First set up your ncc/nc++ environment
 
-- main libs as `make all vejit.tar.gz`
+- many targets have some limited functionality if compiled on x86, without
+  any CC=ncc set in your environment
+- To make all demos and subdirectories, you really should have CC=ncc (etc.)
+  and be able to run VE executables.  Some things will run fine on just x86 though.
+- A few items try out clang, or llvm for VE
+  - oh, VE llvm + intrinsics don't seem to be on github today (did they move?)
+  - a next-gen llvm might be https://github.com/cdl-saarland/rv, but not sure
+    about all the rest of the VE llvm packages :(
+
+
+- build main libs as `make all vejit.tar.gz`
 - libjit1 will contain core utilities, libveli is more for testing.
 - subdirs ve-asm/ asm/ c/ contain some simple demos/tests
   that use portions of libjit1 codes.
+  - These span from very simple example to some more complicated ones,
+    and exercise different parts of what is in (or was later put into)
+    libjit1 or libveli libraries.
 - ncc/nc++ sometimes exit with 'ccom' error.  Just retry.
 
-some [deprecated?] toy projects can be made as:
+- VE assembler demos can be found in `ve-asm/` and `asm/`.  These span
+  from very simple example to some more complicated ones.
+
+- optimized variable-vector length loop induction [for nested for loops]
+  demos can be tried in a subdirectory
+```
+cd loops
+make && ./fuse3 -t 256 100 9 >& x.log
+make && ./fuse3 -t 252 100 9 >& y.log
+```
+  - or try fuse2 to avoid using any particular kernel
+  - both mimic a `for(ii=0;ii<100;++ii){ for(jj=0;jj<9;++jj){ KERNEL; }}`
+    loop, where vectors of loop indices a[vl] in [0,99] and b[vl] in [0,8] are
+    initialized and induced.
+    - `x.log` reports strategy is loop unroll 8, with some vector constants
+      precalculated is possible, but the unrolled code is TBD for now.
+    - `x.log` uses a 2-op trick to replace vector divide-by constant with
+      a multiply and shift
+      - similar to gcc tricks for scalar division, but modified with reduce validity
+        range for VE because of lack of double-wide fixed multiply (i.e. fast VE code
+        really wants intermediates are limited to 64-bits).  But this is fine,
+        because we are JIT'ing, and know the exact ranges 0..100 and 0..9 will imply.
+    - `x.log remarks that vector length 252 allows an alternate vectorization strategy
+       (252 begin multiple of 9)
+  - compare code suggestions in `x.log` (vector length 256) and `y.log` (vector length 252)
+  - making vl a multiple of 9, we have a VE-specific `INDUCE:` that is essentially
+    just a single vector add to a[], with b[] being constant.
+
+Some [deprecated?] toy projects can be made as:
 ```
 make >& mk.log && echo YAY; \
 (cd dev && make >& mk.log && echo YAY2); \
