@@ -26,7 +26,8 @@
 #endif
 #endif
 
-/** \macro VFOR(VAR,LEN) ~ FOR + short loop hint (if available) */
+/** \macro VFOR(VAR,LEN) ~ FOR + short loop hint (if available).
+ * Use \c VFOR instead of \c FOR when simulating VE register ops. */
 #define VFOR(V,L) SHORTLOOP FOR(V,L)
 
 #endif // VFOR_H

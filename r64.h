@@ -8,18 +8,37 @@
 #include <stdint.h>
 //namespace sim
 //{
-    // I'm not too concerned about rng quality, so I'll not use drand48...
-    // mlcg2exp64 _multiple and _inverse (LCGADD is any odd number, for now)
-    //#define LCGMUL 1181783497276652981ULL
-    //#define LCGINV 13515856136758413469ULL
-    //#define LCGADD 76543217654321ULL
-    //#define LCGMUL2 7664345821815920749ULL
-    //#define LCGMUL3 2685821657736338717ULL
-    // MUL  MUL2 MUL3  are for m=2^64, c=0, and lack 8/16/32-D correlation
-    // MUL4 MUL5 MUL6  are full period for any odd c, decorrelated 8/16/32-tuples
-    //#define LCGMUL4 2862933555777941757ULL
-    //#define LCGMUL5 3202034522624059733ULL
-    //#define LCGMUL6 3935559000370003845ULL
+    /** This is an old, simple, low-quality pseudorandom sequence.
+     * If not too concerned about quality, this is a fast, inlinable
+     * way to replace function calls to drand and friends.
+     *
+     * - Some constants with decent bit-shuffling properties are:
+     *   - #define LCGMUL 1181783497276652981ULL
+     *   - #define LCGINV 13515856136758413469ULL
+     *   - #define LCGADD 76543217654321ULL
+     *   - #define LCGMUL2 7664345821815920749ULL
+     *   - #define LCGMUL3 2685821657736338717ULL
+     * - MUL  MUL2 MUL3  are for m=2^64, c=0, and lack 8/16/32-D correlation
+     *   - mlcg2exp64 _multiple and _inverse (LCGADD is any odd number, for now).
+     *     Somewhere I coded forward/backward by N steps and direct access
+     *     routines to M'th rand (iterate over first 64 powers of the constants)
+     * - MUL4 MUL5 MUL6  are full period for any odd c, decorrelated 8/16/32-tuples
+     *   - #define LCGMUL4 2862933555777941757ULL
+     *   - #define LCGMUL5 3202034522624059733ULL
+     *   - #define LCGMUL6 3935559000370003845ULL
+     *
+     * - Above constants are from<br>
+     *   https://www.iro.umontreal.ca/~lecuyer/myftp/papers/latrules.ps
+     *   "Tables of Linear Congruential Generators of Different Sizes and
+     *    Good Lattice Structure".
+     *
+     * - you can also go \c N steps forward/backward or directly access the
+     *   \c N'th random number, but these are slower operations that iterate
+     *   over bits of \c N and use lookup tables of powers of multipliers (or
+     *   their multiplicative inverses), so these routines are not included.
+     * - This project has no need for cryptographic hashing, so I often [mis]use
+     *   this PRNG as a quick'n'dirty hash, ex. \ref vechash.hpp
+     */
     struct R64
     {
         R64(uint64_t const seed=123U) : r(seed) {}
