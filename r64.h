@@ -54,6 +54,8 @@
      *     really good and fast choice with 128 bit state (and 64 bit output)
      *     is PCG-XSL-RR-128/64, whose update is
      *     \f$output = rotate64(uint64_t(state ^ (state >> 64)), state >> 122);\f$
+     *     - unfortunately, even clang with __uint128_t does not seem to produce
+     *       the SRD opcode
      *   - a 32-bit generator with 64 bits state that is fast is PCG XSH RS 64/32
      */
     struct PCG64 {

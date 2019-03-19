@@ -41,6 +41,7 @@ class DllOpen{
 #endif
         return dlsyms.at(s);
     }
+    std::unordered_map< std::string, void* > const& getDlsyms() const {return dlsyms;}
     ~DllOpen();
   private:
     friend class DllBuild;

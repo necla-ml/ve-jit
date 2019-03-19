@@ -335,10 +335,18 @@ inline bool OpLoadregStrings::one_op() const {
  * \c s is a VE register, \c v is the constant to load. */
 std::string ve_load64_opt0(std::string s, uint64_t v);
 
-/** load reg \c s with value \c v, optimized (but w/o context) */
+/** load reg \c s with value \c v, optimized (but w/o context).
+ *
+ * - Worst case: \b lea/lea (2 ops)
+ *   - This is better that clang/ncc which still seem to be
+ *     clearing the hi bits before the second lea.
+ *
+ * - but also checks for 1-op loads via \e logical, \e shift
+ *   and \e arithmetic ops (as well as 1-op \e lea).
+ */
 std::string ve_load64(std::string s, uint64_t v);
 
-/** set vector length (local \c tmp register if immN out of 0-127 range). */
+/** set vector length (local \c tmp register used iff immN out of 0-127 range). */
 std::string ve_set_vector_length(uint64_t immN, std::string tmp);
 
 /** A common pattern is to pre-select any required registers into an \c AsmScope block,
