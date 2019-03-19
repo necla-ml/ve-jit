@@ -22,6 +22,7 @@ CFLAGS+=-Wno-unknown-pragmas
 CXXFLAGS:=$(CFLAGS) -std=c++11
 LIBVELI_TARGETS:=libveli-x86.a
 LIBJIT1_TARGETS:=libjit1-x86.a libjit1-x86.so
+LIBJIT1_TARGETS+=libjit1-justc-x86.a # temporary
 LDFLAGS+=-ldl
 else
 #
@@ -69,6 +70,7 @@ OBJDUMP:=nobjdump
 OBJCOPY:=nobjcopy
 LIBVELI_TARGETS:=libveli.a libveli-x86.a
 LIBJIT1_TARGETS:=libjit1.a libjit1-x86.a libjit1.so libjit1-x86.so
+LIBJIT1_TARGETS+=libjit1-justc-x86.a # temporary
 # for ncc-2.x, we should add -ldl (as for x86)
 LDFLAGS+=-ldl
 endif
@@ -100,10 +102,13 @@ force: # force libs to be recompiled
 	$(MAKE) $(LIBJIT1_TARGETS)
 	$(MAKE) $(LIBVELI_TARGETS)
 
-VEJIT_SHARE:=cblock.cpp ve-asm/veli_loadreg.cpp dllbuild.cpp
+# for tarball...
+VEJIT_SHARE:=cblock.cpp ve-asm/veli_loadreg.cpp dllbuild.cpp COPYING
 VEJIT_LIBS:=libjit1-x86.a libveli-x86.a libjit1-x86.so bin.mk-x86.lo
+VEJIT_LIBS+=libjit1-justc-x86.a # possible ld.so workaround
 ifeq ($(CC:ncc%=ncc),ncc)
 VEJIT_LIBS+=libjit1.a libveli.a libjit1.so bin.mk-ve.lo
+VEJIT_LIBS+=libjit1-justc-ve.a # possible ld.so workaround
 endif
 .PHONY: all-vejit-libs
 all-vejit-libs:
@@ -114,6 +119,8 @@ vejit.tar.gz: jitpage.h intutil.h \
 		cblock.hpp dllbuild.hpp \
 		asmfmt.cpp cblock.cpp dllbuild.cpp jitpage.c intutil.c \
 		jitpage.hpp jitpipe_fwd.hpp jitpipe.hpp cblock.hpp pstreams-1.0.1 bin_mk.c \
+		vechash.hpp vechash.cpp asmblock.hpp \
+		libjit1-cxx.cpp libjit1-cxx.lo \
 		$(VEJIT_LIBS) $(VEJIT_SHARE)
 	rm -rf vejit
 	mkdir vejit
@@ -125,16 +132,19 @@ vejit.tar.gz: jitpage.h intutil.h \
 	$(MAKE) all-vejit-libs # libjit1[_omp][_ft][-x86].{a|so}
 	cp -av $(filter %.hpp,$^) $(filter %.h,$^) vejit/include/
 	cp -av pstreams-1.0.1 vejit/include/
-	#cp -av $(filter %.a,$^) $(filter %.so,$^) bin.mk-ve.lo vejit/lib/
-	cp -av $(filter libveli%,$^) $(filter bin.mk%,$^) vejit/lib/
+	cp -av $(filter %.a,$^) $(filter %.so,$^) $(filter bin.mk%,$^) $(filter %.lo,%^) vejit/lib/
 	cp -av $(filter %.cpp,$^) $(filter %.c,$^) vejit/share/vejit/src/
 	cp -av ${VEJIT_SHARE} vejit/share/vejit/
 	cp -av Makefile.share vejit/share/vejit/Makefile
-	tar czf $@ vejit
-	tar tvzf $@ vejit
+	tar czf $@.tmp vejit
+	tar tvzf $@.tmp vejit
 ifneq ($(CC:ncc%=ncc),ncc)
-	mv $@ vejit-x86.tar.gz
+	mv $@.tmp vejit-x86.tar.gz
+	@echo "created vejit-x86.tar.gz"
+else
+	mv $@.tmp $@
 endif
+
 #
 #
 # Aurora assembler.S: cpp->.asm, $(CC)->.o, nobjcopy->.bin, .bin-->.dump
@@ -174,7 +184,11 @@ libjit1.a: asmfmt-ve.o jitpage-ve.o intutil-ve.o \
 	readelf -h $@
 # Simple code without C++ init section crap to avoid VE dynamic loader bug
 # with iostream initialization ... TEMPORARY WORKAROUND
-libjit1-justc.a: jitpage-ve.o intutil-ve.o bin.mk-ve.lo
+libjit1-justc-ve.a: jitpage-ve.o intutil-ve.o bin.mk-ve.lo
+	rm -f $@
+	$(AR) rcs $@ $^
+	readelf -h $@
+libjit1-justc-x86.a: jitpage-x86.o intutil-x86.o bin.mk-x86.lo
 	rm -f $@
 	$(AR) rcs $@ $^
 	readelf -h $@
@@ -457,7 +471,7 @@ asmfmt-ve: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp jitpage-ve.o
 #		$< $@
 ftostring: ftostring.c
 	gcc -O3 $< -o $@
-bin.mk-x86.lo: bin.mk ftostring
+bin.mk-x86.lo bin_mk.c: bin.mk ftostring
 	# objcopy method lacks --add-symbol.  could use custom linker script, but use ftostring...
 	./ftostring bin.mk bin_mk >& bin_mk.c
 	gcc -fPIC -c bin_mk.c -o $@ #&& rm -f bin_mk.c
@@ -558,6 +572,8 @@ realclean: clean
 	rm -f libclang_lucky.so libgcc_lucky.so libncc_lucky.so
 	rm -f cblock-ve cblock-x86 asmblock-ve asmblock-x86
 	rm -f asmfmt-ve.log distro.log [a-zA-Z].log x.prt x86.log
+	rm -rf vejit # distro tarball tree
+	rm -f vejit.tar.gz.tmp vejit-x86.tar.gz # keep vejit.tar.gz (VE distro)
 	$(MAKE) -C tools realclean
 	$(MAKE) -C bug realclean
 	$(MAKE) -C loops realclean

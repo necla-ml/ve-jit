@@ -22,6 +22,8 @@
      *   - mlcg2exp64 _multiple and _inverse (LCGADD is any odd number, for now).
      *     Somewhere I coded forward/backward by N steps and direct access
      *     routines to M'th rand (iterate over first 64 powers of the constants)
+     * - Note that LCGMUL and LCGINV will have equiv. statistical properties,
+     *   if you need multiple, rands (ex. multi-dimensional hashing).
      * - MUL4 MUL5 MUL6  are full period for any odd c, decorrelated 8/16/32-tuples
      *   - #define LCGMUL4 2862933555777941757ULL
      *   - #define LCGMUL5 3202034522624059733ULL
@@ -31,13 +33,30 @@
      *   https://www.iro.umontreal.ca/~lecuyer/myftp/papers/latrules.ps
      *   "Tables of Linear Congruential Generators of Different Sizes and
      *    Good Lattice Structure".
+     *   - If using your own constant M, have (M&7)==5, \b and test them
+     *     with a RNG test suite (ex. crush in TESTU01)
      *
      * - you can also go \c N steps forward/backward or directly access the
      *   \c N'th random number, but these are slower operations that iterate
      *   over bits of \c N and use lookup tables of powers of multipliers (or
      *   their multiplicative inverses), so these routines are not included.
+     *   - If you really need 'direct access' rands, better to use something
+     *     of form \f$rand(n) = mixer(K*n\f$),<br>
+     *     see https://marc-b-reynolds.github.io/shf/2017/09/27/LPRNS.html
+     *
      * - This project has no need for cryptographic hashing, so I often [mis]use
      *   this PRNG as a quick'n'dirty hash, ex. \ref vechash.hpp
+     *
+     * - For a fast \b VE RNG <B>that passes all BigCrush tests</B>, see
+     *   <a href="http://www.pcg-random.org/pdf/hmc-cs-2014-0905.pdf">paper</a>
+     *   and code at https://github.com/imneme/pcg-cpp
+     *   - Note that VE has a double-wide unsigned right shift [SRD], so a
+     *     really good and fast choice with 128 bit state (and 64 bit output)
+     *     is PCG-XSL-RR-128/64, whose update is
+     *     \f$output = rotate64(uint64_t(state ^ (state >> 64)), state >> 122);\f$
+     *   - a 32-bit generator with 64 bits state that is fast is PCG XSH RS 64/32
+     */
+    struct PCG64 {
      */
     struct R64
     {
@@ -86,5 +105,6 @@
         //r50inv = double(1.0)/(uint64_t(1ULL<<50)));
         uint64_t r;
     };
+
 //}//sim::
 #endif // R64_H_
