@@ -774,4 +774,5 @@ int main(int argc,char**argv){
     return 0;
 }
 #endif // ifdef DLLBUILD_MAIN
+#undef BIN_MK_FROM_FILE
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break

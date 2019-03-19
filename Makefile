@@ -172,6 +172,27 @@ libjit1.a: asmfmt-ve.o jitpage-ve.o intutil-ve.o \
 	rm -f $@
 	$(AR) rcs $@ $^
 	readelf -h $@
+# Simple code without C++ init section crap to avoid VE dynamic loader bug
+# with iostream initialization ... TEMPORARY WORKAROUND
+libjit1-justc.a: jitpage-ve.o intutil-ve.o bin.mk-ve.lo
+	rm -f $@
+	$(AR) rcs $@ $^
+	readelf -h $@
+# The other part of the VE bug workaround is to distribute the C++ part
+# of libjit1 as a .lo object file, or as a monolithic C++ source file.
+# I'll also include libveli .cpp codes into the monolithic version
+libjit1-cxx.cpp: asmfmt.cpp vechash.cpp cblock.cpp asmblock.cpp dllbuild.cpp \
+	veliFoo.cpp wrpiFoo.cpp
+	sed -e '/^\#ifdef _MAIN/,/^\#endif/d' asmfmt.cpp > $@
+	#   cblock is header-only -- the .cpp file is self-test/demo
+	# asmblock is header-only -- the .cpp file is self-test/demo
+	cat vechash.cpp >> $@
+	cat veliFoo.cpp >> $@
+	cat wrpiFoo.cpp >> $@
+libjit1-cxx.lo: libjit1-cxx.cpp
+	$(CXX) ${CXXFLAGS} -fPIC -c $< -o $@
+
+
 #libbin_mk.a: bin.mk-ve.o
 #	rm -f $@; $(AR) rcs $@ $^
 #// nc++ only has a .a version std:: C++ library?
