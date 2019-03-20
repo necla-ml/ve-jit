@@ -19,7 +19,9 @@ The algorithm used in libjit1 is a modification of a method described by
 Daniel Lemire:
 	https://github.com/lemire/fastmod
 but adapted for restricted [21-bit] range since VE Aurora does not have
-a wider-than-64-bit integer multiply result.
+a wider-than-64-bit integer multiply result. Oh. there's now a paper:                                                                                                                                                                                                                                                                                                     
+        https://arxiv.org/pdf/1902.01961.pdf
+and I also adapted a 21-bit version of the fast divisibility test.
 
 Euclid's [extended] algorithm is described on Wikipedia.
 
