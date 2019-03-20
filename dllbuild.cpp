@@ -91,12 +91,16 @@ SubDir::SubDir(std::string subdir)
         abspath = getPath() + '/' + subdir;
     }
 }
-std::string DllFile::obj(std::string fname){
-    std::string ret;
+/** Unfortunately, multiple compilations rely on bin.mk file rule details,
+ * so now we return a vector of objects. */
+std::vector<std::string> DllFile::obj(std::string fname){
+    std::vector<std::string> ret;
     size_t p, pp=0;
+    std::vector<char const*> alts;
+    cout<<" Dllfile::obj(\""<<fname<<"\")..."<<endl; cout.flush();
     if((p=fname.rfind('-'))!= std::string::npos){
         if(0){ ;
-        }else if((p=fname.rfind("-vi.c"))==fname.size()-5){ pp=p;
+        }else if((p=fname.rfind("-vi.c"))==fname.size()-5){ pp=p; alts.push_back("_unroll-ve.o");
         }else if((p=fname.rfind("-vi.cpp"))==fname.size()-7){ pp=p;
         }else if((p=fname.rfind("-ncc.c"))==fname.size()-6){ pp=p;
         }else if((p=fname.rfind("-ncc.cpp"))==fname.size()-8){ pp=p;
@@ -104,7 +108,10 @@ std::string DllFile::obj(std::string fname){
         }else if((p=fname.rfind("-clang.cpp"))==fname.size()-10){ pp=p;
         }
         if(pp){
-            ret = fname.substr(0,pp).append("-ve.o");
+            ret.push_back(fname.substr(0,pp).append("-ve.o"));
+            for(auto const& suffix: alts){
+                ret.push_back(fname.substr(0,pp).append(suffix));
+            }
         }
     }
     if(ret.empty()){
@@ -112,14 +119,14 @@ std::string DllFile::obj(std::string fname){
         if(last_dot != std::string::npos){
             std::string ftype = fname.substr(last_dot+1);
             if( ftype == "c" || ftype == "cpp" ){
-                ret = fname.substr(0,last_dot) + "-ve.o";
+                ret.push_back(fname.substr(0,last_dot) + "-ve.o");
             }else if( ftype == "s" || ftype == "S" ){
-                ret = fname.substr(0,last_dot) + ".bin";
+                ret.push_back(fname.substr(0,last_dot) + ".bin");
             }
         }
     }
     if(ret.empty()) THROW("DllFile::obj("<<fname
-            <<") must match %[-vi|-ncc|-clang].{c|cpp} or %.{s|S}");
+            <<") must match %[-vi|-ncc|-clang].{c|cpp} or %.{s|S} (see bin.mk rules)");
     return ret;
 }
 std::string DllFile::write(SubDir const& subdir){
@@ -205,6 +212,12 @@ std::string const & DllBuild::getLibName() const {
     return this->libname;
 }
 
+/** Generating the Makefile
+ *
+ * - adds a prefix to canned rules of \e bin.mk Makefile template
+ * - notably, \e all: target is a shared library
+ * - bin.mk now can produce multiple clang versions.
+ */
 void DllBuild::prep(string basename, string subdir/*="."*/){
     if(empty()){
         cout<<" Nothing to do for dll "<<basename<<endl;
@@ -219,12 +232,16 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
     mkfile<<"# Auto-generated Makefile for "<<libname;
     mkfile<<"\nLIBNAME:="<<libname
         //<<"\nLDFLAGS:=$(LDFLAGS) -shared -fPIC -Wl,-rpath="<<dir.abspath<<" -L"<<dir.abspath
-        <<"\nLDFLAGS:=-shared -fPIC -Wl,-rpath="<<dir.abspath<<" -L"<<dir.abspath<<" $(LDFLAGS)"
-        <<"\nall: $(LIBNAME)\n";
+        <<"\nLDFLAGS:=-shared -fPIC -Wl,-rpath="<<dir.abspath<<" -L"<<dir.abspath<<" $(LDFLAGS)";
+        mkfile<<"\n.PHONY: hello goodbye all\n"
+            <<"all: hello $(LIBNAME) goodbye\n";
     {
         ostringstream sources; sources<<"\nSOURCES:=";
         ostringstream objects; objects<<"\nOBJECTS:=";
         ostringstream deps;    deps   <<"\n";
+        ostringstream hello;   hello  <<"\n";
+        ostringstream goodbye; goodbye<<"\ngoodbye:\n"
+            <<"\techo 'Goodbye, "<<mkfname<<" ending'\n";
         for(size_t i=0U; i<size(); ++i){
             DllFile& df = (*this)[i];
             if(1){ // handle absent fields in DllFile
@@ -241,16 +258,79 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
                 }
             }
             string dfSourceFile = df.basename+df.suffix;
-            sources<<" \\\n\t\t"<<dfSourceFile;
-            df.objname = DllFile::obj(dfSourceFile); // checks name correctness
-            deps<<"\n"<<df.objname<<": "<<dfSourceFile;
-            objects<<" "<<df.objname;
+            sources<<" \\\n\t"<<dfSourceFile;
+            df.objects = DllFile::obj(dfSourceFile); // checks name correctness
+            // A source file might produce several objects by different compile options
+            // The symbols should be renamed to coexist in a single dll
+#if 0 // objcopy --prefix-symbols does NOT work for more complicated objects files
+            vector<SymbolDecl> altsyms;
+            for(auto const& object: df.objects){
+                objects<<" \\\n\t"<<object;
+                deps<<"\n"<<object<<": "<<dfSourceFile;
+                // What object file types do we recognize?
+                if(object.rfind("_unroll-ve.o")==object.size()-12){
+                    for(auto const& sd: df.syms){ // SymbolDecl
+                        string altname = "unroll_"+sd.symbol;
+                        string altfwd = sd.fwddecl;
+                        size_t fnLoc = altfwd.find(sd.symbol);
+                        if(fnLoc != string::npos)
+                            altfwd.replace(fnLoc, sd.symbol.length(), altname);
+                        altsyms.emplace_back(altname,"unrolled version",altfwd);
+                    }
+                }
+            }
+            // append all altsyms, from any alternate object files
+            if(!altsyms.empty()){
+                df.syms.reserve(df.syms.size() + altsyms.size());
+                for(auto const s: altsyms)
+                    df.syms.push_back(s);
+            }
+#else // objcopy with a rename file might be good
+            vector<SymbolDecl> altsyms;
+            for(auto const& object: df.objects){
+                objects<<" \\\n\t"<<object;
+                deps<<"\n"<<object<<": "<<dfSourceFile;
+                // What object file types do we recognize?
+                if(object.rfind("_unroll-ve.o")==object.size()-12){
+                    ostringstream rename;
+                    for(auto const& sd: df.syms){ // SymbolDecl
+                        string altname = "unroll_"+sd.symbol;
+                        string altfwd = sd.fwddecl;
+                        size_t fnLoc = altfwd.find(sd.symbol);
+                        if(fnLoc != string::npos)
+                            altfwd.replace(fnLoc, sd.symbol.length(), altname);
+                        altsyms.emplace_back(altname,"unrolled version",altfwd);
+                        rename<<"\techo '"<<sd.symbol<<" "<<altname<<"' >> $@\n";
+                    }
+                    string renames = rename.str();
+                    std::cout<<" XXX renames = <"<<renames<<">\n";
+                    if(!renames.empty()){
+                        string renameFile(object);
+                        renameFile.append(".rename");
+                        mkfile<<"\n"<<renameFile<<":"
+                            <<"\n\trm -f "<<renameFile<<"\n"
+                            <<renames;
+                        hello<<"\nhello: "<<renameFile; // create this FIRST
+                    }
+                }
+            }
+            // append all altsyms, from any alternate object files
+            if(!altsyms.empty()){
+                df.syms.reserve(df.syms.size() + altsyms.size());
+                for(auto const s: altsyms)
+                    df.syms.push_back(s);
+            }
+#endif
+
             df.abspath = dir.abspath+'/'+dfSourceFile;
             df.write(this->dir);            // source file input (throw if err)
         }
+        mkfile<<hello.str();
+        mkfile<<"\nhello:\n\techo 'Hello, "<<mkfname<<" begins'\n";
         mkfile<<"\n#sources\n"<<sources.str()<<endl;
         mkfile<<"\n#deps   \n"<<deps   .str()<<endl;
         mkfile<<"\n#objects\n"<<objects.str()<<endl;
+        mkfile<<"\n"<<goodbye.str()<<endl;
         mkfile<<endl;
     }
     mkfile<<"\n# end of customized prologue.  Follow by standard build recipes from bin.mk\n";
@@ -752,9 +832,20 @@ int main(int argc,char**argv){
     typedef int (*LuckyNumberFn)();
     void * luckySymbol = lib["myLuckyNumber"]; // create stores symbols as void*
     LuckyNumberFn cjit_fn = (LuckyNumberFn)(luckySymbol);
-    cout<<" Calling symbol 'myLuckyNumber' ... cjit_fn @ "<<(void*)cjit_fn<<endl; cout.flush();
+    cout<<" Calling symbol 'myLuckyNumber' ... cjit_fn @ "
+        <<(void*)cjit_fn<<endl; cout.flush();
     int cjit_fn_ret = cjit_fn();
     cout<<" cjit_fn returned "<<cjit_fn_ret<<endl; cout.flush();
+
+    // Look for different compile options (ex. -ve.c 'unroll' symbole)
+    if(lib.contains("unroll_myLuckyNumber")){
+        luckySymbol = lib["unroll_myLuckyNumber"];
+        LuckyNumberFn cjit_fn = (LuckyNumberFn)(luckySymbol);
+        cout<<" Calling symbol 'unroll_myLuckyNumber' ... cjit_fn @ "
+            <<(void*)cjit_fn<<endl; cout.flush();
+        cjit_fn_ret = cjit_fn();
+        cout<<" cjit_fn returned "<<cjit_fn_ret<<endl; cout.flush();
+    }
 
 #if 0 // later ...
     typedef int (*JitFunc)();

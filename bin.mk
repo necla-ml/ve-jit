@@ -39,18 +39,27 @@ $(info Begin with CLANG_FLAGS   = $(CLANG_FLAGS))
 $(info Begin with CXXLANG_FLAGS = $(CXXLANG_FLAGS))
 CFLAGS:=-O2 -fPIC $(CFLAGS)
 CXXFLAGS:=-std=c++11 -O2 -fPIC $(CXXFLAGS)
+
 CLANG_FLAGS:=$(CLANG_FLAGS) $(CFLAGS)
 CXXLANG_FLAGS:=$(CXXLANG_FLAGS) $(CXXFLAGS)
-# remove some flags that clang does not support
+# remove some flags that need special handling for clang
 CLANG_FLAGS:=$(filter-out -O2,$(CLANG_FLAGS))
 CXXLANG_FLAGS:=$(filter-out -O2,$(CLANG_FLAGS))
 # env flags append to some reasonable defaults
 # clang vector instrinsics flags (reuse C[XX]LANG_FLAGS env variables to adjust)
-CLANG_VI_FLAGS:=-show-spill-message-vec -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics
+# Here is a recent libvednn impl compilation:
+# cd /usr/uhome/aurora/4gi/nlabhpg/work/kruus/vednn-ek/build/src/intrinsic/Convolution/Forward
+# && /usr/uhome/aurora/4gi/nlabhpg/.local/bin/clang -DVEDNN_USE_OPENMP
+#  -I/usr/uhome/aurora/4gi/nlabhpg/work/kruus/vednn-ek/src/intrinsic/..
+#    -target ve -O3 -mllvm -show-spill-message-vec -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics
+#    -o CMakeFiles/vednn_intrinsic_convolution_forward.dir/direct_default.c.o
+#    -c /usr/uhome/aurora/4gi/nlabhpg/work/kruus/vednn-ek/src/intrinsic/Convolution/Forward/direct_default.c
+CLANG_VI_FLAGS?=-show-spill-message-vec -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics
 # huh, what is correct? -show-spill-message-vec 
 # maybe: -fno-unroll-loops
-CLANG_FLAGS:=-target ve -mllvm $(CLANG_VI_FLAGS) $(CLANG_FLAGS)
-CXXLANG_FLAGS:=-target ve -mllvm $(CLANG_VI_FLAGS) $(CXXLANG_FLAGS)
+CLANG_FLAGS:=-target linux-ve -O3 -mllvm $(CLANG_VI_FLAGS) $(CLANG_FLAGS)
+CXXLANG_FLAGS:=-target linux-ve -O3 -mllvm $(CLANG_VI_FLAGS) $(CXXLANG_FLAGS)
+
 $(info Ending with CFLAGS        = $(CFLAGS))
 $(info Ending with CXXFLAGS      = $(CXXFLAGS))
 $(info Ending with CLANG_FLAGS   = $(CLANG_FLAGS))
@@ -74,12 +83,46 @@ $(info Ending with CXXLANG_FLAGS = $(CXXLANG_FLAGS))
 	$(CLANG) $(CLANG_FLAGS) -fPIC -c $< -o $@
 # OK $(CLANG) -target ve -O3 -mllvm -show-spill-message-vec -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics -fPIC -o $@ -c $<
 # OK $(CLANG) -target ve -mllvm $(CLANG_VI_FLAGS) -fPIC -o $@ -c $<
+
+# annotated assembly (without -fPIC, to simplify)
+%-vi_bin.asm: %-vi.c
+	$(CLANG) $(filter-out -fPIC,$(CLANG_FLAGS)) -ggdb -S $< -o $*-vi_bin.s
+	$(NCC) $(CFLAGS) -o $*-vi_bin.o -c $*-vi_bin.s
+	nobjdump -DS -j .text $*-vi_bin.o >& $@
 %-ve.o: %-vi.c
 	which $(CLANG)
 	$(CLANG) --version
-	$(CLANG) $(filter-out -fPIC,$(CLANG_FLAGS)) -S $< -o $*-vi_bin.s
+	ls -l
+	#$(MAKE) $*-vi_bin.asm # Why does make not find this rule?
+	$(CLANG) $(filter-out -fPIC,$(CLANG_FLAGS)) -ggdb -S $< -o $*-vi_bin.s
+	$(NCC) $(CFLAGS) -o $*-vi_bin.o -c $*-vi_bin.s
+	nobjdump -DS -j .text $*-vi_bin.o >& $@
+	# the official compile "as is"
 	$(CLANG) $(CLANG_FLAGS) -S $< -o $*-vi.s
-	$(NCC) $(CFLAGS) -fPIC -o $@ -c $*-vi.s
+	$(NCC) $(CFLAGS) -o $@ -c $*-vi.s
+# create a second object file, with unrolling and change func name
+%_unroll-ve.o: %-vi.c
+	$(CLANG) $(CLANG_FLAGS) -funroll-loops -S $< -o $*_unroll-vi.s
+	@#$(NCC) $(CFLAGS) -o $@ -c $*_unroll-vi.s
+	$(NCC) $(CFLAGS) -o $*_unroll-ve.o.tmp -c $*_unroll-vi.s
+	@#nobjcopy --redefine-sym $*=$*_unroll $*_unroll-ve.o.tmp $@
+	@# the file name does not always match the function name!
+ifeq (1,0)
+	@# but --prefix-symbols might be too much:  "unroll_GLOBAL_OFFSET_TABLE"
+	nobjcopy --prefix-symbols unroll_ $*_unroll-ve.o.tmp $@
+else
+	# OK, expect the client to create a file of symbol renames...
+	if [ -f '$@.rename' ]; then  \
+		echo ".rename file exists"; \
+		nobjcopy --redefine-syms '$@.rename' $*_unroll-ve.o.tmp $@; \
+	else \
+		echo "No .rename file, try shorcut rename $* (from file name)"; \
+		nobjcopy --redefine-sym $*=$*_unroll $*_unroll-ve.o.tmp $@; \
+	fi
+endif	
+	@echo 'Here are the alternate .o file symbols in $@'
+	nnm $@
+	#rm -f $*_unroll-ve.o.tmp
 %-ve.o: %-ncc.cpp
 	$(NCXX) $(CXXFLAGS) -fPIC -S $< -o $*-ncc_cpp.s
 	$(NCXX) $(CXXFLAGS) -fPIC -c $< -o $@

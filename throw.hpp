@@ -35,12 +35,14 @@
     if(!(COND)){ \
         std::ostringstream oss; \
         oss<<" ERROR: "<<FILE<<':'<<LINE<<" "<<#COND<<MSG<<std::endl; \
+        std::cout.flush(); \
         throw std::runtime_error(oss.str()); \
     } \
 }while(0)
 #define THROW_PRETTY( FILE, LINE, MSG ) do{ \
     std::ostringstream oss; \
     oss<<" ERROR: "<<FILE<<':'<<LINE<<" "<<MSG<<std::endl; \
+    std::cout.flush(); \
     throw std::runtime_error(oss.str()); \
 }while(0)
 //#define THROW_UNLESS( COND, MSG ) THROW_PRETTY_IF(__PRETTY_FUNCTION__, __LINE__, COND, MSG)

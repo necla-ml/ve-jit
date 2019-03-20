@@ -41,6 +41,7 @@ class DllOpen{
 #endif
         return dlsyms.at(s);
     }
+    bool contains(std::string const& s) const{return dlsyms.find(s)!=dlsyms.end();}
     std::unordered_map< std::string, void* > const& getDlsyms() const {return dlsyms;}
     ~DllOpen();
   private:
@@ -74,7 +75,7 @@ struct SubDir{
 };
 /** basename*.{c|cpp|s|S} compilable code file */
 struct DllFile {
-    DllFile() : basename(), suffix(), code(), syms(), comment(), objname(), abspath() {}
+    DllFile() : basename(), suffix(), code(), syms(), comment(), objects(), abspath() {}
     std::string basename;
     std::string suffix;             ///< *.{c|cpp|s|S}
 	std::string code;
@@ -84,10 +85,10 @@ struct DllFile {
     /** write comment+code to <subdir.abspath>/<basename><suffix>.
      * \return \c abspath */
     std::string  write(SubDir const& subdir);
-    static std::string obj(std::string fname);   ///< %.{c,cpp,s,S} --> %.o \throw on err
+    static std::vector<std::string> obj(std::string fname);   ///< %.{c,cpp,s,S} --> %.o \throw on err
     std::string const& getFilePath() const {return this->abspath;}
   private:
-    std::string objname;        ///< set by \c write
+    std::vector<std::string> objects;        ///< set by \c DllBuild.prep
     friend class DllBuild;
     std::string abspath;
 };
@@ -105,7 +106,10 @@ struct DllBuild : std::vector<DllFile> {
      * /post \c dir is left with all files necessary to build the library
      *       via 'make', and (?) a header with any known fwd decls.
      * If cross-compiling, stop after 'prep' or 'make' stage, because you
-     * can't run any dll code. */
+     * can't run any dll code.
+     *
+     * \note prepended 'all:' target to bin.mk depends on details of bin.mk!
+     */
     void prep(std::string basename, std::string dir=".");
     /** If possible, re-use existing Makefile of a previous \c prep. */
     void skip_prep(std::string basename, std::string dir=".");
