@@ -1,12 +1,10 @@
-/* Copyright (c) 2019 by NEC Corporation
- * This file is part of ve-jit */
-/*
-  Reference implementations of computing and using the "magic number" approach to dividing
-  by constants, including codegen instructions. The unsigned division incorporates the
-  "round down" optimization per ridiculous_fish.
-
-  This is free and unencumbered software. Any copyright is dedicated to the Public Domain.
-*/
+/* This is free and unencumbered software. Any copyright is dedicated to the Public Domain.
+ * This file is part of ve-jit
+ * 
+ *  Reference implementations of computing and using the "magic number" approach to dividing
+ *  by constants, including codegen instructions. The unsigned division incorporates the
+ *  "round down" optimization per ridiculous_fish.
+ */
 
 #include <limits.h> //for CHAR_BIT
 #include <assert.h>

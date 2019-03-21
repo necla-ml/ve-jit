@@ -330,8 +330,8 @@ struct Cunit {
     std::string const flavor;                       ///< [WIP] "C" or "asm"
     int shiftwidth;
     //std::map<std::string, Cblock*> blk;
-    Cunit(std::string name, std::string flavor="C" )
-        : name(name), root(this,name), v(2),
+    Cunit(std::string name, std::string flavor="C", int const verbose=2 )
+        : name(name), root(this,name), v(verbose),
         indent(), flavor(flavor), shiftwidth(flavor=="C"? 2: 0)
     {}
     // Should we warn if anything in DAG is un-emitted?

@@ -130,26 +130,27 @@ std::vector<std::string> DllFile::obj(std::string fname){
     return ret;
 }
 std::string DllFile::write(SubDir const& subdir){
+    int const v = 1;
     this->abspath = subdir.abspath + "/" + this->basename + this->suffix;
     try{
         std::ofstream ofs(abspath);
-        cout<<" ofstream ofs("<<abspath<<") CREATED"<<endl; cout.flush();
+        if(v>1){cout<<" ofstream ofs("<<abspath<<") CREATED"<<endl; cout.flush();}
         ofs <<"//Dllfile: basename = "<<basename
             <<"\n//Dllfile: suffix   = "<<suffix
             <<"\n//Dllfile: abspath  = "<<abspath;
-        cout<<" writing comment: "<<comment<<endl; cout.flush();
+        if(v>1){cout<<" writing comment: "<<comment<<endl; cout.flush();}
         ofs <<"\n"<<comment;
-        cout<<" writing code: "<<code<<endl; cout.flush();
+        if(v>1){cout<<" writing code: "<<code<<endl; cout.flush();}
         ofs <<"\n"<<code
             <<endl;
-        cout<<" and an extra ofs.flush() !!!"<<endl; cout.flush();
+        if(v>1){cout<<" and an extra ofs.flush() !!!"<<endl; cout.flush();}
         ofs.flush();
         ofs.close();
     }catch(...){
         cout<<" Trouble writing file "<<abspath<<endl;
         throw;
     }
-    cout<<" Wrote file "<<abspath<<endl;
+    if(v>0){cout<<" Wrote file "<<abspath<<endl;}
     return this->abspath;
 }
 
@@ -241,7 +242,7 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
         ostringstream deps;    deps   <<"\n";
         ostringstream hello;   hello  <<"\n";
         ostringstream goodbye; goodbye<<"\ngoodbye:\n"
-            <<"\techo 'Goodbye, "<<mkfname<<" ending'\n";
+            <<"\t@echo 'Goodbye, "<<mkfname<<" ending'\n";
         for(size_t i=0U; i<size(); ++i){
             DllFile& df = (*this)[i];
             if(1){ // handle absent fields in DllFile
@@ -303,12 +304,12 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
                         rename<<"\techo '"<<sd.symbol<<" "<<altname<<"' >> $@\n";
                     }
                     string renames = rename.str();
-                    std::cout<<" XXX renames = <"<<renames<<">\n";
+                    //std::cout<<" XXX renames = <"<<renames<<">\n";
                     if(!renames.empty()){
                         string renameFile(object);
                         renameFile.append(".rename");
                         mkfile<<"\n"<<renameFile<<":"
-                            <<"\n\trm -f "<<renameFile<<"\n"
+                            <<"\n\t@rm -f "<<renameFile<<"\n"
                             <<renames;
                         hello<<"\nhello: "<<renameFile; // create this FIRST
                     }
@@ -376,10 +377,11 @@ void DllBuild::skip_prep(string basename, string subdir/*="."*/){
     }
 }
 void DllBuild::make(std::string env){
+    int const v = 1;
     if(!prepped)
         THROW("Please prep(basename,dir) before make()");
     string mk = env+" make VERBOSE=1 -C "+dir.abspath+" -f "+mkfname;
-    cout<<" Make command: "<<mk<<endl; cout.flush();
+    if(v>0){cout<<" Make command: "<<mk<<endl; cout.flush();}
 #if 0
     auto ret = system(mk.c_str());
     if(ret){
@@ -409,14 +411,19 @@ void DllBuild::make(std::string env){
     mkstream.close();                 // retrieve exit status and errno
     status = mkstream.rdbuf()->status();
     error  = mkstream.rdbuf()->error();
-    cout<<string(40,'-')<<" stdout:"<<endl<<out<<endl;
-    cout<<string(40,'-')<<" stderr:"<<endl<<err<<endl;
-    cout<<" Make error  = "<<error <<endl;
-    cout<<" Make status = "<<status<<endl;
-    if(error||status) THROW(" Make failed! status="<<status<<" error="<<error);
+    if(v>0 || error || status){
+        cout<<string(40,'-')<<" stdout:"<<endl<<out<<endl;
+    }
+    if(v>1 || error || status){
+        cout<<string(40,'-')<<" stderr:"<<endl<<err<<endl;
+        cout<<" Make error  = "<<error <<endl;
+        cout<<" Make status = "<<status<<endl;
+    }
+    if(error||status)
+        THROW(" Make failed! status="<<status<<" error="<<error);
 #endif
     //system(("ls -l "+dir.abspath).c_str()); // <-- unsafe c_str usage
-    cout<<" 'make' ran in: "<<dir.abspath<<endl;
+    if(v>0){cout<<" 'make' ran in: "<<dir.abspath<<endl;}
     made = true;
 }
 void DllBuild::skip_make(std::string env){
@@ -474,21 +481,30 @@ static std::ostream& prefix_lines(std::ostream& os, std::string code,
     return os;
 }
 std::unique_ptr<DllOpen> DllBuild::dllopen(){
+    int const v = 1;
     //using cprog::prefix_lines;
-    cout<<"*** DllBuild::dllopen() BEGINS"<<endl;
+    if(v)cout<<"*** DllBuild::dllopen() BEGINS"<<endl;
     if(!(prepped and made))
         THROW("Please prep(basename,dir) and make() before you dllopen()");
     std::unique_ptr<DllOpen> pRet( new DllOpen );
     DllOpen& ret = *pRet;
     ret.libname = this->libname;
-    cout<<"DllBuild::dllopen() calling dlopen... libname="<<libname<<endl; cout.flush();
-    cout<<"DllBuild::dllopen() calling dlopen... fullpath="<<fullpath<<endl; cout.flush();
+    if(v>1){
+        cout<<"DllBuild::dllopen() calling dlopen... libname="<<libname<<endl;
+        cout<<"DllBuild::dllopen() calling dlopen... fullpath="<<fullpath<<endl;
+        cout.flush();
+    }
     if(access(fullpath.c_str(),R_OK))
         THROW(" Cannot read file "<<fullpath);
-    else { cout<<"Good, have read access to fullpath"<<endl; cout.flush(); }
+    else
+        if(v>1){cout<<"Good, have read access to fullpath"<<endl; cout.flush();}
+
 #if JIT_DLFUNCS // but means libjit1 has a dependency on libdl
-    {
-        cout<<" debug... dlopen_rel + dl_dump..."<<endl;
+    if(v>1){
+        //
+        // Check right away that dlopen *can* succeed [debug]
+        //
+        if(v>1){cout<<" debug... dlopen_rel + dl_dump..."<<endl;}
         //void * dbg = dlopen_rel( fullpath.c_str(), RTLD_LAZY );
         void * dbg = dlopen( fullpath.c_str(), RTLD_LAZY );
         if(!dbg) {
@@ -497,9 +513,11 @@ std::unique_ptr<DllOpen> DllBuild::dllopen(){
 #endif
             THROW(" dlopen failed!");
         }
-        dl_dump(dbg);
-        cout<<" debug... back from dl_dump..."<<endl;
-        dlclose(dbg);
+        if(v>2){
+            dl_dump(dbg);
+            cout<<" debug... back from dl_dump..."<<endl;
+            dlclose(dbg);
+        }
     }
 #endif
 
@@ -510,35 +528,35 @@ std::unique_ptr<DllOpen> DllBuild::dllopen(){
     return pRet;
 #endif
 
-#if 0
-    ret.libHandle = dlopen(fullpath.c_str(), RTLD_NOW);
-    cout<<"DllBuild::dllopen() dlopen(fullpath, RTLD_NOW) OK"<<endl; cout.flush();
-#elif 1
-    cout<<"now dlopen..."<<endl; cout.flush();
+    if(v>1){cout<<"now dlopen..."<<endl; cout.flush();}
     ret.libHandle = dlopen(fullpath.c_str(), RTLD_LAZY);
-    cout<<"DllBuild::dllopen() dlopen(fullpath, RTLD_LAZY) OK"<<endl; cout.flush();
-#else
-    static char * fpath=nullptr;
-    if( fpath != nullptr ) free(fpath);
-    strcpy( fpath, fullpath.c_str() );
-    ret.libHandle = dlopen(fpath, RTLD_LAZY);
-#endif
+    if(v>0){cout<<"DllBuild::dllopen() dlopen(fullpath, RTLD_LAZY) OK"<<endl; cout.flush();}
     if(!ret.libHandle){ std::ostringstream oss; oss<<"failed dlopen("<<fullpath<<") dlerror "<<dlerror(); cout<<oss.str()<<endl; cout.flush(); THROW(oss.str()); }
+    //
+    // Now go through all our expected symbols and actually
+    // obtain their address, before we return
+    //
     int nerr=0; // symbol load error count
-    cout<<"Library: "<<this->libname<<endl; cout.flush();
+    if(v>0){cout<<"Library: "<<this->libname<<endl; cout.flush();}
     for(auto const& df: *this){
         auto const filepath = df.getFilePath();
-        cout<<"   File: "<<df.basename<<df.suffix
+        if(v>1){cout<<"   File: "<<df.basename<<df.suffix
             <<"\n       : "<<filepath<<endl;
-        cout.flush();
+            cout.flush();
+        }
         ret.files.push_back(filepath);
         for(auto const sym: df.syms){
             //void* addr = nullptr;
             dlerror(); // clear previous error [if any]
             void* addr = dlsym(ret.libHandle, sym.symbol.c_str());
-            cout<<"   Symbol: "<<sym.symbol<<" @ "<<addr<<"\n"; cout.flush();
-            if(!sym.comment.empty()) prefix_lines(cout,sym.comment,"        // ")<<"\n";
-            if(!sym.fwddecl.empty()) prefix_lines(cout,sym.fwddecl,"        ")<<"\n";
+            if(v>0){
+                cout<<"   Symbol: "<<sym.symbol<<" @ "<<addr<<"\n";
+                if(!sym.comment.empty())
+                    prefix_lines(cout,sym.comment,"        // ")<<"\n";
+                if(!sym.fwddecl.empty())
+                    prefix_lines(cout,sym.fwddecl,"        ")<<"\n";
+                cout.flush();
+            }
             char const* dlerr=dlerror();
             //if(addr==nullptr) // sometimes symbols might really have value 0
             if(dlerr){
@@ -552,8 +570,7 @@ std::unique_ptr<DllOpen> DllBuild::dllopen(){
             ret.dlsyms.insert(make_pair(sym.symbol,addr));
         }
     }
-    cout<<"*** DllBuild::dllopen() DONE : nerr="<<nerr<<endl;
-    cout.flush();
+    if(v){cout<<"*** DllBuild::dllopen() DONE : nerr="<<nerr<<endl; cout.flush();}
     if(nerr) THROW(nerr<<" symbol load errors from "<<libname);
     return pRet;
 }
@@ -755,72 +772,75 @@ int main(int argc,char**argv){
                 "int myLuckyNumber()" ));
     tmplucky.comment = "// " + tmplucky.basename + " has one JIT function";
 
-    DllBuild dllbuild;
-    dllbuild.push_back(tmplucky);
+    unique_ptr<DllOpen> pLib;
+    {
+        DllBuild dllbuild;
+        dllbuild.push_back(tmplucky);
 
-    if(1) { // test subdir creation and tmpluck.write
-        system("rm -rf subdir1");           // clean up this test
-        if(createDirectoryAnyDepth("subdir1/subdir2"))
-            THROW(" could not create subdir1/subdir2 writable");
-        else cout<<" seems subdir1/subdir2 is writable"<<endl;
-        if(access("subdir1/subdir2",W_OK)){
-            cout<<" not there yet? sleep(1) ..."; cout.flush();
-            sleep(1);
-        }
-        if(access("subdir1/subdir2",W_OK))
-            THROW(" Still no write access to template file subdir1/subdir2");
-        cout<<" GOOD. subdir seems there"<<endl;
-        // DllFile tmplucky
-        // --> file at abspath
-        // <current dir>/subdir1/subdir2/tmpdllbuild_file0-ncc.c
-        string abspath = tmplucky.write(SubDir("subdir1/subdir2"));
-        cout<<" abspath = "<<abspath<<endl; cout.flush();
-        if(access(abspath.c_str(),R_OK)){
-            cout<<abspath<<" not there yet? sleep(1) ..."; cout.flush();
-            sleep(1);
-        }
-        cout<<" abspath = "<<abspath.c_str()<<endl; cout.flush();
-        if(access(abspath.c_str(),R_OK)){
-            cout<<" still no access!"<<endl; cout.flush();
-            THROW(" Still no read access to template file subdir1/subdir2");
-        }
-        cout<<" abspath = "<<abspath<<endl; cout.flush();
-        cout<<" GOOD. apparently have read access to tmplucky.write(...) path"<<endl; cout.flush();
-        cout<<" GOOD. created abspath = "<<abspath<<endl; cout.flush();
-        cout<<" system commands ... "<<endl; cout.flush();
-        system("ls -l subdir1/subdir2");
-        cout.flush();
+        if(1) { // test subdir creation and tmpluck.write
+            system("rm -rf subdir1");           // clean up this test
+            if(createDirectoryAnyDepth("subdir1/subdir2"))
+                THROW(" could not create subdir1/subdir2 writable");
+            else cout<<" seems subdir1/subdir2 is writable"<<endl;
+            if(access("subdir1/subdir2",W_OK)){
+                cout<<" not there yet? sleep(1) ..."; cout.flush();
+                sleep(1);
+            }
+            if(access("subdir1/subdir2",W_OK))
+                THROW(" Still no write access to template file subdir1/subdir2");
+            cout<<" GOOD. subdir seems there"<<endl;
+            // DllFile tmplucky
+            // --> file at abspath
+            // <current dir>/subdir1/subdir2/tmpdllbuild_file0-ncc.c
+            string abspath = tmplucky.write(SubDir("subdir1/subdir2"));
+            cout<<" abspath = "<<abspath<<endl; cout.flush();
+            if(access(abspath.c_str(),R_OK)){
+                cout<<abspath<<" not there yet? sleep(1) ..."; cout.flush();
+                sleep(1);
+            }
+            cout<<" abspath = "<<abspath.c_str()<<endl; cout.flush();
+            if(access(abspath.c_str(),R_OK)){
+                cout<<" still no access!"<<endl; cout.flush();
+                THROW(" Still no read access to template file subdir1/subdir2");
+            }
+            cout<<" abspath = "<<abspath<<endl; cout.flush();
+            cout<<" GOOD. apparently have read access to tmplucky.write(...) path"<<endl; cout.flush();
+            cout<<" GOOD. created abspath = "<<abspath<<endl; cout.flush();
+            cout<<" system commands ... "<<endl; cout.flush();
+            system("ls -l subdir1/subdir2");
+            cout.flush();
 #if 0
-        system(("ls -l "+abspath).c_str());
-        system(("cat "+abspath).c_str());
+            system(("ls -l "+abspath).c_str());
+            system(("cat "+abspath).c_str());
 #else
-        { string cmd = "ls -l " + abspath;
-            cout<<" Try system( "<< cmd <<" )"<<endl; cout.flush();
-            system(cmd.c_str()); cout.flush(); }
-        { string cmd = "cat   " + abspath;
-            cout<<" Try system( "<< cmd <<" )"<<endl; cout.flush();
-            system(cmd.c_str()); cout.flush(); }
+            { string cmd = "ls -l " + abspath;
+                cout<<" Try system( "<< cmd <<" )"<<endl; cout.flush();
+                system(cmd.c_str()); cout.flush(); }
+            { string cmd = "cat   " + abspath;
+                cout<<" Try system( "<< cmd <<" )"<<endl; cout.flush();
+                system(cmd.c_str()); cout.flush(); }
 #endif
-        system("rm -rf subdir1");           // clean up this test
-    }
+            system("rm -rf subdir1");           // clean up this test
+        }
 
-    //DllOpen lib = dllbuild.create( libBase, "tmp-dllbuild");
-    // let's do it step by step...
-    dllbuild.prep( libBase, "tmp-dllbuild"/*build subdirectory*/ );
-    dllbuild.make();
-    if(1){
-        cout<<"\nExpected symbols...\n";
-        cout<<"Library: "<<dllbuild.getLibName()<<endl;
-        for(auto const& df: dllbuild){
-            cout<<"   File: "<<df.basename<<df.suffix<<" :"<<endl;
-            for(auto const& sym: df.syms){
-                cout<<"      "<<sym.symbol<<endl;
-                if(!sym.comment.empty()){ cout<<"        // "<<sym.comment<<endl; }
-                if(!sym.fwddecl.empty()){ cout<<"        "<<sym.fwddecl<<endl; }
+        //DllOpen lib = dllbuild.create( libBase, "tmp-dllbuild");
+        // let's do it step by step...
+        dllbuild.prep( libBase, "tmp-dllbuild"/*build subdirectory*/ );
+        dllbuild.make();
+        if(1){
+            cout<<"\nExpected symbols...\n";
+            cout<<"Library: "<<dllbuild.getLibName()<<endl;
+            for(auto const& df: dllbuild){
+                cout<<"   File: "<<df.basename<<df.suffix<<" :"<<endl;
+                for(auto const& sym: df.syms){
+                    cout<<"      "<<sym.symbol<<endl;
+                    if(!sym.comment.empty()){ cout<<"        // "<<sym.comment<<endl; }
+                    if(!sym.fwddecl.empty()){ cout<<"        "<<sym.fwddecl<<endl; }
+                }
             }
         }
+        pLib = dllbuild.create();
     }
-    unique_ptr<DllOpen> pLib = dllbuild.create();
     if( !pLib ){
 #if !defined(__ve)
         cout<<" STOPPING EARLY: we are an x86 executable and should not load a VE .so"<<endl;

@@ -11,7 +11,8 @@
 #include <vector>
 #include <unordered_map>
 #include <memory>           // std::unique_ptr
-#ifndef NDEBUF
+#ifndef NDEBUG
+#include <iostream>
 #include "throw.hpp"
 #endif
 
@@ -100,7 +101,17 @@ struct DllFile {
 struct DllBuild : std::vector<DllFile> {
     DllBuild() : std::vector<DllFile>(), prepped(false), made(false),
     dir(), basename(), libname(), mkfname(), fullpath()
-    {}
+    {
+#ifndef NDEBUG
+        std::cout<<" +DllBuild"<<std::endl;
+#endif
+    }
+    ~DllBuild()
+    {
+#ifndef NDEBUG
+        std::cout<<" -DllBuild"<<std::endl;
+#endif
+    }
     /** Create source files and Makefile.
      *  ok for host- or cross-compile
      * /post \c dir is left with all files necessary to build the library

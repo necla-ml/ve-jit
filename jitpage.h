@@ -15,6 +15,7 @@
 #ifdef JITVVE_UTIL_H
 #error "Please do not mix up old jitve_util.h API with newer jitpage.h API"
 #endif
+/** \deprecated not useful */
 #define JIT_DLFUNCS 1
 
 #include <stdint.h> // uint64_t

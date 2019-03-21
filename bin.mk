@@ -1,20 +1,52 @@
 #
 # bin.mk (template)
 #
+# This file is intended for:
+# - *-ve.o object files [or LIBNAME .so, for C JIT], or
+# - VE .bin binary blobs [for assembly JIT]
+# It is usually set up with a prefix 'all:' target, and changes here
+# should go hand in hand with dllbuild.hpp and dllbuild.cpp
+# 
+
+# Set this to 0 in your environment to make this build quieter
+# It controls things different from VERBOSE (make command-echo)
+BIN_MK_VERBOSE?=1
+
 # Example of how to compile a [local copy of] a jit '-vi.c' file
 #        [copied from ../vednn-ek/test/tmp_cjitConv01/cjitConvFwd_parmstr-vi.c]
 #   CFLAGS=-I../vednn-ek/test/vednn-ftrace1/include make VERBOSE=1 -f bin.mk cjitConvFwd_parmstr-ve.o
 #
 #LDFLAGS?=
+#  Warning: this produces a LOT of output...
+#  Also, not really sure if --copy-dt-needed-entries does anything with nld
+ifeq (${BIN_MK_VERBOSE},0)
+LIBFLAGS?=-Wl,--copy-dt-needed-entries
+else
+LIBFLAGS?=-Wl,--verbose -Wl,--trace -Wl,--copy-dt-needed-entries
+endif
+
+ifeq (${BIN_MK_VERBOSE},0)
+define bin_mk_info
+endef
+else
+$(info BIN_MK_VERBOSE=$(BIN_MK_VERBOSE))
+define bin_mk_info
+$(info $(1))
+endef
+endif
+
 $(LIBNAME): $(OBJECTS)
+ifneq (${BIN_MK_VERBOSE},0)
 	echo "-------- Linking --------"
 	echo "LDFLAGS = $${LDFLAGS}"
-	ncc -o $@ $(LDFLAGS) -Wl,--verbose -Wl,--trace -Wl,--copy-dt-needed-entries $(filter %-ve.o,$(OBJECTS))
+endif
+	ncc -o $@ $(LDFLAGS) $(LIBFLAGS) $(filter %-ve.o,$(OBJECTS))
+ifneq (${BIN_MK_VERBOSE},0)
 	echo "-------- Linking DONE --------"
 	# This would assume VE library target !!! -nreadelf -hds $@
 	echo "-------- Library $(LIBNAME) created in `pwd`"
-# This file ONLY generates -ve.o object files or VE .bin binary blobs
-# 
+endif
+
 # Allow override of default compiler (maybe particular version is required)
 # NCC   must be used for .S files (nas possibly, if you don't use cpp preprocessor)
 # NCC   must be used for extended assembly (JIT asm with register calling convention)
@@ -33,10 +65,10 @@ CFLAGS?=
 CXXFLAGS?=
 CLANG_FLAGS?=
 CXXLANG_FLAGS?=
-$(info Begin with CFLAGS        = $(CFLAGS))
-$(info Begin with CXXFLAGS      = $(CXXFLAGS))
-$(info Begin with CLANG_FLAGS   = $(CLANG_FLAGS))
-$(info Begin with CXXLANG_FLAGS = $(CXXLANG_FLAGS))
+$(bin_mk_info Begin with CFLAGS        = $(CFLAGS))
+$(bin_mk_info Begin with CXXFLAGS      = $(CXXFLAGS))
+$(bin_mk_info Begin with CLANG_FLAGS   = $(CLANG_FLAGS))
+$(bin_mk_info Begin with CXXLANG_FLAGS = $(CXXLANG_FLAGS))
 CFLAGS:=-O2 -fPIC $(CFLAGS)
 CXXFLAGS:=-std=c++11 -O2 -fPIC $(CXXFLAGS)
 
@@ -60,11 +92,11 @@ CLANG_VI_FLAGS?=-show-spill-message-vec -fno-vectorize -fno-unroll-loops -fno-sl
 CLANG_FLAGS:=-target linux-ve -O3 -mllvm $(CLANG_VI_FLAGS) $(CLANG_FLAGS)
 CXXLANG_FLAGS:=-target linux-ve -O3 -mllvm $(CLANG_VI_FLAGS) $(CXXLANG_FLAGS)
 
-$(info Ending with CFLAGS        = $(CFLAGS))
-$(info Ending with CXXFLAGS      = $(CXXFLAGS))
-$(info Ending with CLANG_FLAGS   = $(CLANG_FLAGS))
+$(bin_mk_info Ending with CFLAGS        = $(CFLAGS))
+$(bin_mk_info Ending with CXXFLAGS      = $(CXXFLAGS))
+$(bin_mk_info Ending with CLANG_FLAGS   = $(CLANG_FLAGS))
 CXXLANG_FLAGS:=$(filter-out -std=c++11,$(CXXLANG_FLAGS))
-$(info Ending with CXXLANG_FLAGS = $(CXXLANG_FLAGS))
+$(bin_mk_info Ending with CXXLANG_FLAGS = $(CXXLANG_FLAGS))
 #
 # We will distinguish C files requiring different types of VE compile
 # by suffix.
@@ -90,13 +122,16 @@ $(info Ending with CXXLANG_FLAGS = $(CXXLANG_FLAGS))
 	$(NCC) $(CFLAGS) -o $*-vi_bin.o -c $*-vi_bin.s
 	nobjdump -DS -j .text $*-vi_bin.o >& $@
 %-ve.o: %-vi.c
+ifneq (${BIN_MK_VERBOSE},0)
 	which $(CLANG)
 	$(CLANG) --version
 	ls -l
-	#$(MAKE) $*-vi_bin.asm # Why does make not find this rule?
+endif
+	@#$(MAKE) $*-vi_bin.asm # Why does make not find this rule?
 	$(CLANG) $(filter-out -fPIC,$(CLANG_FLAGS)) -ggdb -S $< -o $*-vi_bin.s
 	$(NCC) $(CFLAGS) -o $*-vi_bin.o -c $*-vi_bin.s
-	nobjdump -DS -j .text $*-vi_bin.o >& $@
+	nobjdump -DS -j .text $*-vi_bin.o >& $*-vi_bin.asm
+	rm -f $*-vi_bin.s $*-vi_bin.o
 	# the official compile "as is"
 	$(CLANG) $(CLANG_FLAGS) -S $< -o $*-vi.s
 	$(NCC) $(CFLAGS) -o $@ -c $*-vi.s
@@ -119,10 +154,12 @@ else
 		echo "No .rename file, try shorcut rename $* (from file name)"; \
 		nobjcopy --redefine-sym $*=$*_unroll $*_unroll-ve.o.tmp $@; \
 	fi
-endif	
+endif
+ifneq (${BIN_MK_VERBOSE},0)
 	@echo 'Here are the alternate .o file symbols in $@'
 	nnm $@
-	#rm -f $*_unroll-ve.o.tmp
+endif
+	rm -f $*_unroll-ve.o.tmp
 %-ve.o: %-ncc.cpp
 	$(NCXX) $(CXXFLAGS) -fPIC -S $< -o $*-ncc_cpp.s
 	$(NCXX) $(CXXFLAGS) -fPIC -c $< -o $@
