@@ -43,7 +43,8 @@
 #include <sstream>
 #include <algorithm>    // std::max
 
-#ifdef NDEBUG
+// CBLOCK_DBG disabled (things running OK now)
+#if 1 || defined(NDEBUG)
 #define CBLOCK_DBG(V,N,...) do{}while(0)
 #else
 #define CBLOCK_DBG(V,N,...) do { \
@@ -413,7 +414,7 @@ inline Cblock& Cblock::after(Cblock& prev) {
 #endif
 }
 
-Cblock& Cblock::append(std::string codeline){
+inline Cblock& Cblock::append(std::string codeline){
     if( !codeline.empty() ){
 #if 0 // trial...
         // to technically allow building up a single statement, we only
@@ -430,7 +431,7 @@ Cblock& Cblock::append(std::string codeline){
     return *this;
 }
 inline Cblock& Cblock::append(Cblock &cb){
-    int const v=0;
+    int const __attribute__((unused)) v=0;
     CBLOCK_DBG(v,3," append! "<<std::endl);
     assert(_parent != nullptr );
     CBLOCK_DBG(v,10," this@"<<_parent->_name<<"/"<<_name<<" append");
@@ -443,7 +444,7 @@ inline Cblock& Cblock::append(Cblock &cb){
     return cb; // new behaviour
 }
 inline std::string Cblock::fullpath() const {
-    int const v=0;
+    int const __attribute__((unused)) v=0;
     CBLOCK_DBG(v,1," fullpath!"<<std::endl;);
     std::string out;
     out.reserve(256);
@@ -471,7 +472,7 @@ inline std::string Cblock::fullpath() const {
     return out;
 }
 inline Cblock& Cblock::unlink() {
-    int const v=0;
+    int const __attribute__((unused)) v=0;
     if(this == &(_root->root))
         THROW("unlink of "<<fullpath()<<" failed, is it root?");
     if(_parent != this && _parent != nullptr){
@@ -682,7 +683,7 @@ inline Cblock& mk_func(Cunit& cunit, std::string name, std::string decl){
  */
 inline Cblock* Cblock::find(std::string p) const {
     assert(_root != nullptr);
-    int const v = _root->v;
+    int const __attribute__((unused)) v = _root->v;
     CBLOCK_DBG(v,3,std::string(8,'=')<<" Cblock "<<fullpath()<<" find(\""<<p<<"\")");
     if(p.empty()){
         CBLOCK_DBG(v,3," empty => not found\n");
