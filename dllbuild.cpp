@@ -263,30 +263,10 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
             df.objects = DllFile::obj(dfSourceFile); // checks name correctness
             // A source file might produce several objects by different compile options
             // The symbols should be renamed to coexist in a single dll
-#if 0 // objcopy --prefix-symbols does NOT work for more complicated objects files
-            vector<SymbolDecl> altsyms;
-            for(auto const& object: df.objects){
-                objects<<" \\\n\t"<<object;
-                deps<<"\n"<<object<<": "<<dfSourceFile;
-                // What object file types do we recognize?
-                if(object.rfind("_unroll-ve.o")==object.size()-12){
-                    for(auto const& sd: df.syms){ // SymbolDecl
-                        string altname = "unroll_"+sd.symbol;
-                        string altfwd = sd.fwddecl;
-                        size_t fnLoc = altfwd.find(sd.symbol);
-                        if(fnLoc != string::npos)
-                            altfwd.replace(fnLoc, sd.symbol.length(), altname);
-                        altsyms.emplace_back(altname,"unrolled version",altfwd);
-                    }
-                }
-            }
-            // append all altsyms, from any alternate object files
-            if(!altsyms.empty()){
-                df.syms.reserve(df.syms.size() + altsyms.size());
-                for(auto const s: altsyms)
-                    df.syms.push_back(s);
-            }
-#else // objcopy with a rename file might be good
+            //
+            // objcopy with a rename file seems best way to rename
+            // compile-option-differentiated symbols.
+            //
             vector<SymbolDecl> altsyms;
             for(auto const& object: df.objects){
                 objects<<" \\\n\t"<<object;
@@ -321,7 +301,6 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
                 for(auto const s: altsyms)
                     df.syms.push_back(s);
             }
-#endif
 
             df.abspath = dir.abspath+'/'+dfSourceFile;
             df.write(this->dir);            // source file input (throw if err)
@@ -377,7 +356,7 @@ void DllBuild::skip_prep(string basename, string subdir/*="."*/){
     }
 }
 void DllBuild::make(std::string env){
-    int const v = 1;
+    int const v = 0;
     if(!prepped)
         THROW("Please prep(basename,dir) before make()");
     string mk = env+" make VERBOSE=1 -C "+dir.abspath+" -f "+mkfname;
@@ -411,6 +390,16 @@ void DllBuild::make(std::string env){
     mkstream.close();                 // retrieve exit status and errno
     status = mkstream.rdbuf()->status();
     error  = mkstream.rdbuf()->error();
+    if(1){
+        std::string mklog = dir.abspath+"/"+mkfname+".log";
+        if(error || status){
+            cout<<" Please check build log in "<<mklog<<endl;
+        }
+        // even in quiet mode mode: write 'make' output into a file:
+        std::ofstream ofs(mklog);
+        ofs<<string(40,'-')<<" stdout:"<<endl<<out<<endl;
+        ofs<<string(40,'-')<<" stderr:"<<endl<<err<<endl;
+    }
     if(v>0 || error || status){
         cout<<string(40,'-')<<" stdout:"<<endl<<out<<endl;
     }
@@ -444,10 +433,12 @@ DllOpen::DllOpen() : basename(), libHandle(nullptr), dlsyms(), libname(), files(
     cout<<" +DllOpen"; cout.flush();
 }
 DllOpen::~DllOpen() {
-    cout<<" -DllOpen"; cout.flush();
+    int const v = 0;
+    if(v){cout<<" -DllOpen"; cout.flush();}
     if(libHandle) dlclose(libHandle);
     libHandle = nullptr;
-    files.clear();
+    if(v){cout<<" back from dlclose\n"; cout.flush();}
+    //files.clear();
 }
 // When inlined from cblock.hpp I got linker errors (std::string::size multiple defn of Cblock::append or so !!!!!)
 static std::ostream& prefix_lines(std::ostream& os, std::string code,
@@ -538,7 +529,10 @@ std::unique_ptr<DllOpen> DllBuild::dllopen(){
     //
     int nerr=0; // symbol load error count
     if(v>0){cout<<"Library: "<<this->libname<<endl; cout.flush();}
-    for(auto const& df: *this){
+    ret.dlsyms_num.resize(this->size()); // create 'i'-->vector<symbolName> entries
+    for(size_t i=0U; i<this->size(); ++i)
+    {
+        auto const& df = (*this)[i];
         auto const filepath = df.getFilePath();
         if(v>1){cout<<"   File: "<<df.basename<<df.suffix
             <<"\n       : "<<filepath<<endl;
@@ -546,7 +540,6 @@ std::unique_ptr<DllOpen> DllBuild::dllopen(){
         }
         ret.files.push_back(filepath);
         for(auto const sym: df.syms){
-            //void* addr = nullptr;
             dlerror(); // clear previous error [if any]
             void* addr = dlsym(ret.libHandle, sym.symbol.c_str());
             if(v>0){
@@ -558,7 +551,6 @@ std::unique_ptr<DllOpen> DllBuild::dllopen(){
                 cout.flush();
             }
             char const* dlerr=dlerror();
-            //if(addr==nullptr) // sometimes symbols might really have value 0
             if(dlerr){
                 cout<<"**Error: could not load symbol "<<sym.symbol<<endl;
                 ++nerr;
@@ -568,6 +560,7 @@ std::unique_ptr<DllOpen> DllBuild::dllopen(){
                 ++nerr;
             }
             ret.dlsyms.insert(make_pair(sym.symbol,addr));
+            ret.dlsyms_num[i].push_back(sym.symbol);
         }
     }
     if(v){cout<<"*** DllBuild::dllopen() DONE : nerr="<<nerr<<endl; cout.flush();}

@@ -36,6 +36,20 @@ class DllOpen{
   public:
     DllOpen(DllOpen const& other) = delete;
     DllOpen& operator=(DllOpen const& other) = delete;
+    /** How many tests (or source files) are in dll? */
+    size_t nSrc() const {
+        return dlsyms_num.size(); // equiv files.size()
+    }
+    /** dll generated from multiple files/tests, can retain i-->vector<symbolnames>.
+     * \c i ~ which DllFile in a DllBuild, ~ which "test parameters".
+     * \pre \c i in range 0..nSrc()-1 . */
+    std::vector<std::string> operator[](size_t const i) const {
+#ifndef NDEBUG
+        if(i>=this->dlsyms_num.size()) THROW("DllOpen["<<i<<"] not present");
+#endif
+        return dlsyms_num[i];
+    }
+    /** dll symbol name \c s --> pointer-to-item(typically function) */
     void* operator[](std::string const& s) const {
 #ifndef NDEBUG
         if(dlsyms.find(s) == dlsyms.end()) THROW("DllOpen["<<s<<"] not present");
@@ -44,15 +58,23 @@ class DllOpen{
     }
     bool contains(std::string const& s) const{return dlsyms.find(s)!=dlsyms.end();}
     std::unordered_map< std::string, void* > const& getDlsyms() const {return dlsyms;}
+    std::vector<std::vector<std::string>> const& getDlsrcs() const {return dlsyms_num;}
+    std::vector<std::string> const& getDlfiles() const {return files;}
     ~DllOpen();
   private:
     friend class DllBuild;
     std::string basename;
     void *libHandle;
-    std::unordered_map< std::string, void* > dlsyms;
-    // optional...
+    /** \b always have a map symbol-->address of the \e known JIT symbols. */
+    std::unordered_map< std::string, void* > dlsyms; // all, no particular order
+    /// \group library and source-file data
+    /// Typically one set of test params creates one JIT source file.
+    /// Multiple JIT source files can be combined into library \c libname
+    //@{
     std::string libname;            ///< full path
-    std::vector<std::string> files; ///< full paths of all jit code files
+    std::vector<std::string> files; ///< full paths of all jit source files
+    std::vector<std::vector<std::string>> dlsyms_num; ///< known symbols of each jit source file
+    //@}
     DllOpen();
 };
 /** single-symbol data. */

@@ -113,7 +113,7 @@ endif
 .PHONY: all-vejit-libs
 all-vejit-libs:
 	./mklibs.sh >& mklibs.log	# writes libs into vejit/lib/
-vejit.tar.gz: jitpage.h intutil.h \
+vejit.tar.gz: jitpage.h intutil.h vfor.h \
 		intutil.hpp stringutil.hpp throw.hpp \
 		asmfmt_fwd.hpp asmfmt.hpp codegenasm.hpp velogic.hpp \
 		cblock.hpp dllbuild.hpp \
@@ -201,6 +201,9 @@ libjit1-cxx.cpp: asmfmt.cpp vechash.cpp cblock.cpp asmblock.cpp dllbuild.cpp \
 	#   cblock is header-only -- the .cpp file is self-test/demo
 	# asmblock is header-only -- the .cpp file is self-test/demo
 	cat vechash.cpp >> $@
+	cat cblock.cpp >> $@
+	cat asmblock.cpp >> $@
+	cat dllbuild.cpp >> $@
 	cat veliFoo.cpp >> $@
 	cat wrpiFoo.cpp >> $@
 libjit1-cxx.lo: libjit1-cxx.cpp
