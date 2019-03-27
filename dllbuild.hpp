@@ -49,6 +49,19 @@ class DllOpen{
 #endif
         return dlsyms_num[i];
     }
+    int srcTag(size_t const i) const {
+#ifndef NDEBUG
+        if(i>=this->dlsyms_num.size()) THROW("DllOpen["<<i<<"] not present");
+#endif
+        return tag[i];
+    }
+    std::string const& srcFile(size_t const i) const {
+#ifndef NDEBUG
+        if(i>=this->dlsyms_num.size()) THROW("DllOpen["<<i<<"] not present");
+#endif
+        return files[i];
+    }
+
     /** dll symbol name \c s --> pointer-to-item(typically function) */
     void* operator[](std::string const& s) const {
 #ifndef NDEBUG
@@ -73,6 +86,7 @@ class DllOpen{
     //@{
     std::string libname;            ///< full path
     std::vector<std::string> files; ///< full paths of all jit source files
+    std::vector<int>         tag;   ///< user tag (params?) per source file
     std::vector<std::vector<std::string>> dlsyms_num; ///< known symbols of each jit source file
     //@}
     DllOpen();
@@ -99,6 +113,7 @@ struct SubDir{
 /** basename*.{c|cpp|s|S} compilable code file */
 struct DllFile {
     DllFile() : basename(), suffix(), code(), syms(), comment(), objects(), abspath() {}
+    int tag;                        ///< up to user (test number? parameter set?)
     std::string basename;
     std::string suffix;             ///< *.{c|cpp|s|S}
 	std::string code;

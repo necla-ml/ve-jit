@@ -530,7 +530,7 @@ std::unique_ptr<DllOpen> DllBuild::dllopen(){
     int nerr=0; // symbol load error count
     if(v>0){cout<<"Library: "<<this->libname<<endl; cout.flush();}
     ret.dlsyms_num.resize(this->size()); // create 'i'-->vector<symbolName> entries
-    for(size_t i=0U; i<this->size(); ++i)
+    for(size_t i=0U; i<this->size(); ++i) // for each source file
     {
         auto const& df = (*this)[i];
         auto const filepath = df.getFilePath();
@@ -539,6 +539,7 @@ std::unique_ptr<DllOpen> DllBuild::dllopen(){
             cout.flush();
         }
         ret.files.push_back(filepath);
+        ret.tag.push_back(df.tag);
         for(auto const sym: df.syms){
             dlerror(); // clear previous error [if any]
             void* addr = dlsym(ret.libHandle, sym.symbol.c_str());
