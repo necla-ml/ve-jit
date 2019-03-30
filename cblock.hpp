@@ -629,7 +629,12 @@ inline Cblock& mk_cpp_ifelse(Cunit& cunit, std::string name, std::string cond){
     block["end"]<<"#endif // "<<cond;
     return block;
 }
-/** create a name/{beg,body,end} triple, with subblock named "body" properly indented.
+/** create a name/{beg,body,cleanup,end} triple, with subblock named "body" properly indented.
+ * - \e body and \e cleanup are always created empty.
+ * - \e beg indents and \e end unindents
+ * \return pointer to \e name/body node.
+ * to insert a pre-"end" code, do \c return_value["../cleanup"]
+ *
  * - For 'C' \c beg could, for example, be an "if(...){" clause.
  * - For 'asm', \c beg and \c end could be [verbatim] comment strings.
  * - default \c beg and \c end selected according to _root->flavor
@@ -651,7 +656,8 @@ inline Cblock& mk_scope(Cunit& cunit, std::string name, std::string beg="", std:
     }else{ // "asm"}
         block["beg"]<<"// BLOCK "<<name<<PostIndent(+cunit.shiftwidth);
         if(!beg.empty()) block["beg"]<<beg<<"\n";
-        block["body"]; // empty
+        block["body"];    // empty
+        block["cleanup"]; // empty
         if(!end.empty()) block["end"]<<end<<"\n";
         block["end"]<<"// END "<<name<<PreIndent(-cunit.shiftwidth);
     }
@@ -664,6 +670,11 @@ inline Cblock& mk_func(Cunit& cunit, std::string name, std::string decl){
 /** for simple scopes (terminate with just "}", and with a "body" sub-block...
  * - if AFTER is a cblock, we could just use AFTER.getRoot() and save an argument
  * - general case is a bit more flexible, but macro is fairly readable if combined with indenting
+ * - create subnodes \e CBLK_VAR/{beg,body,exit}
+ * - \e cleanup is always created empty.
+ * \c BEG is code put into "CBLK_VAR/beg"
+ * \c CBLK_VAR ends up pointing at "CBLK_VAR/body" node
+ * \c AFTER is the node 'after' which CBLK_VAR gets inserted.
  */
 #define CBLOCK_SCOPE(CBLK_VAR,BEG,CUNIT,AFTER) auto& CBLK_VAR = mk_scope((CUNIT),#CBLK_VAR,(BEG)).after(AFTER)["body"];
 //@} helpers
