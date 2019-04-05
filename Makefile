@@ -19,7 +19,8 @@ SHELL:=/bin/bash
 CFLAGS:=-O2 -g2 -pthread
 CFLAGS+=-Wall -Werror
 CFLAGS+=-Wno-unknown-pragmas
-CXXFLAGS:=$(CFLAGS) -std=c++11
+# note 'gnu' is needed to support extended asm in nc++
+CXXFLAGS:=$(CFLAGS) -std=gnu++11
 LIBVELI_TARGETS:=libveli-x86.a
 LIBJIT1_TARGETS:=libjit1-x86.a libjit1-x86.so
 LIBJIT1_TARGETS+=libjit1-justc-x86.a # temporary
@@ -63,7 +64,7 @@ TARGETS=libjit1.a libjit1-x86.a asmfmt-ve\
 #CXX:=nc++
 CFLAGS:=-O2 -g2
 CFLAGS+=-Wall -Werror
-#CXXFLAGS:=$(CFLAGS) -std=c++11
+#CXXFLAGS:=$(CFLAGS) -std=c++11 # does not allow extended asm -- need 'gnu' extensions...
 CXXFLAGS:=$(CFLAGS) -std=gnu++11
 VE_EXEC:=ve_exec
 OBJDUMP:=nobjdump
@@ -105,12 +106,14 @@ force: # force libs to be recompiled
 # for tarball...
 VEJIT_SHARE:=cblock.cpp ve-asm/veli_loadreg.cpp dllbuild.cpp COPYING
 VEJIT_LIBS:=libjit1-x86.a libveli-x86.a libjit1-x86.so bin.mk-x86.lo
-VEJIT_LIBS+=libjit1-justc-x86.a # possible ld.so workaround
+VEJIT_LIBS+=libjit1-justc-x86.a libjit1-cxx-x86.lo # possible ld.so workaround
 ifeq ($(CC:ncc%=ncc),ncc)
 VEJIT_LIBS+=libjit1.a libveli.a libjit1.so bin.mk-ve.lo
-VEJIT_LIBS+=libjit1-justc-ve.a # possible ld.so workaround
+VEJIT_LIBS+=libjit1-justc-ve.a libjit1-cxx-ve.lo # possible ld.so workaround
 endif
 .PHONY: all-vejit-libs
+huh:
+	echo VEJIT_LIBS are $(VEJIT_LIBS)	
 all-vejit-libs:
 	./mklibs.sh >& mklibs.log	# writes libs into vejit/lib/
 vejit.tar.gz: jitpage.h intutil.h vfor.h \
@@ -120,7 +123,7 @@ vejit.tar.gz: jitpage.h intutil.h vfor.h \
 		asmfmt.cpp cblock.cpp dllbuild.cpp jitpage.c intutil.c \
 		jitpage.hpp jitpipe_fwd.hpp jitpipe.hpp cblock.hpp pstreams-1.0.1 bin_mk.c \
 		vechash.hpp vechash.cpp asmblock.hpp \
-		libjit1-cxx.cpp libjit1-cxx.lo \
+		libjit1-cxx.cpp \
 		$(VEJIT_LIBS) $(VEJIT_SHARE)
 	rm -rf vejit
 	mkdir vejit
@@ -132,7 +135,7 @@ vejit.tar.gz: jitpage.h intutil.h vfor.h \
 	$(MAKE) all-vejit-libs # libjit1[_omp][_ft][-x86].{a|so}
 	cp -av $(filter %.hpp,$^) $(filter %.h,$^) vejit/include/
 	cp -av pstreams-1.0.1 vejit/include/
-	cp -av $(filter %.a,$^) $(filter %.so,$^) $(filter bin.mk%,$^) $(filter %.lo,%^) vejit/lib/
+	cp -av $(filter %.a,$^) $(filter %.so,$^) $(filter bin.mk%,$^) $(filter %.lo,$^) vejit/lib/
 	cp -av $(filter %.cpp,$^) $(filter %.c,$^) vejit/share/vejit/src/
 	cp -av ${VEJIT_SHARE} vejit/share/vejit/
 	cp -av Makefile.share vejit/share/vejit/Makefile
@@ -206,9 +209,11 @@ libjit1-cxx.cpp: asmfmt.cpp vechash.cpp cblock.cpp asmblock.cpp dllbuild.cpp \
 	cat dllbuild.cpp >> $@
 	cat veliFoo.cpp >> $@
 	cat wrpiFoo.cpp >> $@
-libjit1-cxx.lo: libjit1-cxx.cpp
+libjit1-cxx-ve.lo: libjit1-cxx.cpp
+	# gnu++11 allows extended asm...
 	$(CXX) ${CXXFLAGS} -fPIC -c $< -o $@
-
+libjit1-cxx-x86.lo: libjit1-cxx.cpp
+	g++ ${CXXFLAGS} -fPIC -c $< -o $@
 
 #libbin_mk.a: bin.mk-ve.o
 #	rm -f $@; $(AR) rcs $@ $^
@@ -444,15 +449,17 @@ libveli-x86.a: $(patsubst %.cpp,%-x86.o,$(LIBVELI_SRC))
 	$(AR) rcs $@ $^
 $(patsubst $(LIBVELI_SRC),%.cpp,%-x86.o) %-x86.o: %.cpp
 	g++ ${CXXFLAGS} -Wall -O2 -c $< -o $@
-#$(patsubst $(LIBVELI_SRC),%.cpp,%.o) %.o: %.cpp
-#	@# inline asm is incompatible with nc++ -std=c++11
-#	$(CXX) -Wall -O2 -c $< -o $@
-wrpiFoo.o: wrpiFoo.cpp velogic.hpp
-	@# inline asm is incompatible with nc++ -std=c++11
-	$(CXX) -Wall -O2 -c $< -o $@
-veliFoo.o: veliFoo.cpp velogic.hpp
-	@# inline asm is incompatible with nc++ -std=c++11
+$(patsubst $(LIBVELI_SRC),%.cpp,%.o) %.o: %.cpp
+	@#$(CXX) -Wall -O2 -c $< -o $@
+	@# inline asm is incompatible with nc++ -std=c++11 # AHAA must use -std=gnu++11
 	$(CXX) ${CXXFLAGS} -Wall -O2 -c $< -o $@
+#wrpiFoo.o: wrpiFoo.cpp velogic.hpp
+#	@#$(CXX) -Wall -O2 -c $< -o $@
+#	@# inline asm is incompatible with nc++ -std=c++11 # AHAA must use -std=gnu++11
+#	$(CXX) ${CXXFLAGS} -Wall -O2 -c $< -o $@
+#veliFoo.o: veliFoo.cpp velogic.hpp
+#	@# inline asm is incompatible with nc++ -std=c++11 # AHAA must use -std=gnu++11
+#	$(CXX) ${CXXFLAGS} -Wall -O2 -c $< -o $@
 
 #asmfmt.cpp has a standalone demo program with -D_MAIN compiler	
 asmfmt-x86: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp intutil.c intutil.h jitpage.c jitpage.h

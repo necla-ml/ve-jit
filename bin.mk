@@ -2,10 +2,15 @@
 # bin.mk (template)
 #
 # This file is intended for:
-# - *-ve.o object files [or LIBNAME .so, for C JIT], or
+# - *-ve.o object files [or LIBNAME .so / ARCHIVE .a, for C JIT], or
 # - VE .bin binary blobs [for assembly JIT]
 # It is usually set up with a prefix 'all:' target, and changes here
 # should go hand in hand with dllbuild.hpp and dllbuild.cpp
+#
+# Verbosity:
+#    Hmm. safest for large jobs seems VERBOSE=0 BIN_MK_VERBOSE=0 LC_ALL=C (cmd)
+#    which seems to play nicely with pstreams.  Often I think the build gets
+#    stuck.
 # 
 
 # Set this to 0 in your environment to make this build quieter
@@ -34,6 +39,15 @@ define bin_mk_info
 $(info $(1))
 endef
 endif
+
+$(ARCHIVE): $(OBJECTS)
+	nar rcs $@ $^
+	# MEGA_ARCHIVE is "$(MEGA_ARCHIVE)"
+	@if [ -f "$(MEGA_ARCHIVE)" ]; then \
+		rm -f mega.mri; \
+		{ echo "open $(MEGA_ARCHIVE)"; echo "replace $(ARCHIVE)"; echo "save"; echo "end"; } > mega.mri; \
+		nar -M mega.mri; \
+		fi
 
 $(LIBNAME): $(OBJECTS)
 ifneq (${BIN_MK_VERBOSE},0)
@@ -104,7 +118,13 @@ $(bin_mk_info Ending with CXXLANG_FLAGS = $(CXXLANG_FLAGS))
 # Aurora C: %-ncc.c      via ncc (scalar code, extended asm, nas/link frontend)
 #       and %-clang.c    via clang scalar code (want good optimizer)
 #       and %-vi.c       via clang VECTOR INTRINSICS
+#
 # All with CFLAGS/CXXFLAGS
+# Assembler outputs are for show, and can omit -fPIC for clarity.
+# 'C' sources are compile with -fPIC so they can produce .so library.
+# NOTE: you may combine the .o's into a .a "mega-library", which can
+#       be converted to a mega- .so
+#
 # Begin by cancelling the default rule -- we REQUIRE a special suffix
 %.o: %.c
 %-ve.o: %-ncc.c
@@ -133,13 +153,13 @@ endif
 	nobjdump -DS -j .text $*-vi_bin.o >& $*-vi_bin.asm
 	rm -f $*-vi_bin.s $*-vi_bin.o
 	# the official compile "as is"
-	$(CLANG) $(CLANG_FLAGS) -S $< -o $*-vi.s
+	$(CLANG) $(CLANG_FLAGS) -fPIC -S $< -o $*-vi.s
 	$(NCC) $(CFLAGS) -o $@ -c $*-vi.s
 # create a second object file, with unrolling and change func name
 %_unroll-ve.o: %-vi.c
 	$(CLANG) $(CLANG_FLAGS) -funroll-loops -S $< -o $*_unroll-vi.s
 	@#$(NCC) $(CFLAGS) -o $@ -c $*_unroll-vi.s
-	$(NCC) $(CFLAGS) -o $*_unroll-ve.o.tmp -c $*_unroll-vi.s
+	$(NCC) $(CFLAGS) -fPIC -o $*_unroll-ve.o.tmp -c $*_unroll-vi.s
 	@#nobjcopy --redefine-sym $*=$*_unroll $*_unroll-ve.o.tmp $@
 	@# the file name does not always match the function name!
 ifeq (1,0)

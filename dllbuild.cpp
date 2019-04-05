@@ -227,15 +227,17 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
     this->dir      = SubDir(subdir);
     this->basename = basename;
     this->libname  = "lib"+this->basename+".so";
+    string archive = "lib"+this->basename+".a";  // NEW
     this->mkfname  = this->basename+".mk";
     this->fullpath = dir.abspath+"/"+libname;
     ostringstream mkfile;
     mkfile<<"# Auto-generated Makefile for "<<libname;
     mkfile<<"\nLIBNAME:="<<libname
+        <<"\nARCHIVE:="<<archive
         //<<"\nLDFLAGS:=$(LDFLAGS) -shared -fPIC -Wl,-rpath="<<dir.abspath<<" -L"<<dir.abspath
         <<"\nLDFLAGS:=-shared -fPIC -Wl,-rpath="<<dir.abspath<<" -L"<<dir.abspath<<" $(LDFLAGS)";
         mkfile<<"\n.PHONY: hello goodbye all\n"
-            <<"all: hello $(LIBNAME) goodbye\n";
+            <<"all: hello $(ARCHIVE) $(LIBNAME) goodbye\n";
     {
         ostringstream sources; sources<<"\nSOURCES:=";
         ostringstream objects; objects<<"\nOBJECTS:=";

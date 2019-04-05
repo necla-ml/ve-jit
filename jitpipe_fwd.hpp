@@ -5,7 +5,7 @@
 /** \file pstream.h support to run compilation tools.
  * Must compile with at least \c -std=c++11 (uses \c nullptr)
  */
-#include "pstreams-1.0.1/pstream.h"
+//#include "pstreams-1.0.1/pstream.h"
 #include "stringutil.hpp"
 #include "throw.hpp"
 #include <sstream>
@@ -69,38 +69,6 @@ struct PstreamPipe {
 #endif
 
     std::string const pipe_command;
-};
-
-inline int PstreamPipe::run( std::string cpp_asm_code )
-{
-    // pipe string 've_asm_code' into 'pipe_command' and get back:
-    //  - stdout --> string 'disassembly'
-    //  - stderr --> string 'errors'
-    //  - pipe_command exit code --> int status
-    //  - pipe_command errno     --> int error
-    using namespace redi;
-    redi::pstream jitcmd(pipe_command,
-            pstreams::pstdin | pstreams::pstdout | pstreams::pstderr);
-
-    // "cat" cpp_asm_code into the pipe
-    jitcmd << cpp_asm_code << peof;
-
-    {
-        jitcmd.err();
-        std::stringstream ss_err;
-        ss_err << jitcmd.rdbuf();
-        this->err = ss_err.str();   // stderr --> std::string
-    }
-    {
-        jitcmd.out();
-        std::stringstream ss_out;
-        ss_out << jitcmd.rdbuf();
-        this->out = ss_out.str();   // stdout --> std::string
-    }
-    jitcmd.close();                 // retrieve exit status and errno
-    this->status = jitcmd.rdbuf()->status();
-    this->error  = jitcmd.rdbuf()->error();
-    return status;                  // return exit status, OK == 0
 };
 
 struct CPPpipe : public PstreamPipe {
