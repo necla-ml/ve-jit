@@ -156,6 +156,8 @@ struct DllBuild : std::vector<DllFile> {
      * If cross-compiling, stop after 'prep' or 'make' stage, because you
      * can't run any dll code.
      *
+     * Keep one copy of duplicate DllFile (warn, or throw depending on how suspicious things seem)
+     *
      * \note prepended 'all:' target to bin.mk depends on details of bin.mk!
      */
     void prep(std::string basename, std::string dir=".");

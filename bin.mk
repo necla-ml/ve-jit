@@ -16,6 +16,9 @@
 # Set this to 0 in your environment to make this build quieter
 # It controls things different from VERBOSE (make command-echo)
 BIN_MK_VERBOSE?=1
+# This can be used to jit object files in a "repository", to avoid
+# recompiles (untested)
+MEGA_ARCHIVE?=../libmegajit.a
 
 # Example of how to compile a [local copy of] a jit '-vi.c' file
 #        [copied from ../vednn-ek/test/tmp_cjitConv01/cjitConvFwd_parmstr-vi.c]
@@ -41,9 +44,9 @@ endef
 endif
 
 $(ARCHIVE): $(OBJECTS)
-	nar rcs $@ $^
+	-nar rcs $@ $^ && echo 'created $@' || echo 'Trouble creating $@ (continuing)'
 	# MEGA_ARCHIVE is "$(MEGA_ARCHIVE)"
-	@if [ -f "$(MEGA_ARCHIVE)" ]; then \
+	-@if [ -f "$(MEGA_ARCHIVE)" ]; then \
 		rm -f mega.mri; \
 		{ echo "open $(MEGA_ARCHIVE)"; echo "replace $(ARCHIVE)"; echo "save"; echo "end"; } > mega.mri; \
 		nar -M mega.mri; \
@@ -54,7 +57,7 @@ ifneq (${BIN_MK_VERBOSE},0)
 	echo "-------- Linking --------"
 	echo "LDFLAGS = $${LDFLAGS}"
 endif
-	ncc -o $@ $(LDFLAGS) $(LIBFLAGS) $(filter %-ve.o,$(OBJECTS))
+	ncc -o $@ $(LDFLAGS) $(LIBFLAGS) $(filter %-ve.o,$^)
 ifneq (${BIN_MK_VERBOSE},0)
 	echo "-------- Linking DONE --------"
 	# This would assume VE library target !!! -nreadelf -hds $@

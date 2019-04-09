@@ -236,8 +236,44 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
         <<"\nARCHIVE:="<<archive
         //<<"\nLDFLAGS:=$(LDFLAGS) -shared -fPIC -Wl,-rpath="<<dir.abspath<<" -L"<<dir.abspath
         <<"\nLDFLAGS:=-shared -fPIC -Wl,-rpath="<<dir.abspath<<" -L"<<dir.abspath<<" $(LDFLAGS)";
-        mkfile<<"\n.PHONY: hello goodbye all\n"
-            <<"all: hello $(ARCHIVE) $(LIBNAME) goodbye\n";
+    mkfile<<"\n.PHONY: hello goodbye all\n"
+        <<"all: hello $(ARCHIVE) $(LIBNAME) goodbye\n";
+    // Let's be even more careful about duplicates (multiply-defined-symbols if identical code)
+    for(size_t i=0U; i<size(); ++i){
+        if( (*this)[i].basename.empty() ){
+            cout<<" DllFile "<<i<<" had no basename (removing)"<<endl;
+            continue;
+        }
+        for(size_t j=0U; j<i; ++j){
+            if( (*this)[i].basename == (*this)[j].basename ){
+                if( (*this)[i].suffix == (*this)[j].suffix){
+                    if( (*this)[i].code == (*this)[j].code){
+                        cout<<" Duplicate DllFile skipped: "<<(*this)[i].basename
+                            <<"."<<(*this)[i].suffix
+                            <<" "<<(*this)[i].code.size()<<" code bytes"<<endl;
+                    }else{
+                        THROW(" Duplicate DllFile! code does not match "<<(*this)[i].basename
+                                <<"."<<(*this)[i].suffix
+                                <<" "<<(*this)[i].code.size()<<" code bytes");
+                    }
+                }else{
+                    cout<<"Warning: input file "<<(*this)[i].basename<<"."<<(*this)[i].suffix
+                        <<" with different suffix "
+                        <<" ."<<(*this)[j].suffix
+                        <<" IGNORED"<<endl;
+                }
+                (*this)[i].basename.clear(); // mark for erasure
+            }
+        }
+    }
+    for(auto it=begin(); it!=end(); ){
+        if( it->basename.empty() ){
+            it = erase(it);
+        }else{
+            cout<<" Keeping: "<<it->basename<<"."<<it->suffix<<endl;
+            ++it;
+        }
+    }
     {
         ostringstream sources; sources<<"\nSOURCES:=";
         ostringstream objects; objects<<"\nOBJECTS:=";
@@ -260,6 +296,7 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
                         <<" for basename "<<df.basename<<endl;
                 }
             }
+
             string dfSourceFile = df.basename+df.suffix;
             sources<<" \\\n\t"<<dfSourceFile;
             df.objects = DllFile::obj(dfSourceFile); // checks name correctness
@@ -357,12 +394,7 @@ void DllBuild::skip_prep(string basename, string subdir/*="."*/){
         prepped = true;
     }
 }
-void DllBuild::make(std::string env){
-    int const v = 0;
-    if(!prepped)
-        THROW("Please prep(basename,dir) before make()");
-    string mk = env+" make VERBOSE=1 -C "+dir.abspath+" -f "+mkfname;
-    if(v>0){cout<<" Make command: "<<mk<<endl; cout.flush();}
+static int try_make( std::string mk, std::string mklog, int const v/*verbose*/ ){
 #if 0
     auto ret = system(mk.c_str());
     if(ret){
@@ -370,7 +402,10 @@ void DllBuild::make(std::string env){
     }
 #else // pstreams to capture stdout, stderr into log files etc.
     using namespace redi;
-    redi::pstream mkstream(mk,
+    string mk_cmd = mk;
+    if(!mklog.empty())
+        mk_cmd.append(" >& ").append(mklog);
+    redi::pstream mkstream(mk_cmd,
             pstreams::pstdin | pstreams::pstdout | pstreams::pstderr);
     mkstream << peof;
     string err;
@@ -393,12 +428,11 @@ void DllBuild::make(std::string env){
     status = mkstream.rdbuf()->status();
     error  = mkstream.rdbuf()->error();
     if(1){
-        std::string mklog = dir.abspath+"/"+mkfname+".log";
         if(error || status){
             cout<<" Please check build log in "<<mklog<<endl;
         }
         // even in quiet mode mode: write 'make' output into a file:
-        std::ofstream ofs(mklog);
+        std::ofstream ofs(mklog, ios_base::app);
         ofs<<string(40,'-')<<" stdout:"<<endl<<out<<endl;
         ofs<<string(40,'-')<<" stderr:"<<endl<<err<<endl;
     }
@@ -413,7 +447,22 @@ void DllBuild::make(std::string env){
     if(error||status)
         THROW(" Make failed! status="<<status<<" error="<<error);
 #endif
+    return status | error;
+}
+void DllBuild::make(std::string env){
+    int const v = 0;
+    if(!prepped)
+        THROW("Please prep(basename,dir) before make()");
+    std::string mklog = dir.abspath+"/"+mkfname+".log";
+    string mk = env+" make VERBOSE=1 -C "+dir.abspath+" -f "+mkfname;
+    if(v>0){cout<<" Make command: "<<mk<<endl; cout.flush();}
     //system(("ls -l "+dir.abspath).c_str()); // <-- unsafe c_str usage
+    int bad = try_make(mk,mklog,v);
+    if(bad){
+        mklog.append("2");
+        cout<<"Trying make once again..."<<endl;
+        bad = try_make(mk, mklog, 2);
+    }
     if(v>0){cout<<" 'make' ran in: "<<dir.abspath<<endl;}
     made = true;
 }
@@ -427,7 +476,7 @@ void DllBuild::skip_make(std::string env){
         cout.flush();
         this->make(env);
     }else{
-        cout<<" Re-using existingg library "<<fullpath<<endl;
+        cout<<" Re-using existing library "<<fullpath<<endl;
     }
     made = true;
 }
