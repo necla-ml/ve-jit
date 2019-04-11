@@ -125,6 +125,7 @@ struct DllFile {
     std::string  write(SubDir const& subdir);
     static std::vector<std::string> obj(std::string fname);   ///< %.{c,cpp,s,S} --> %.o \throw on err
     std::string const& getFilePath() const {return this->abspath;}
+    std::string short_descr() const;
   private:
     std::vector<std::string> objects;        ///< set by \c DllBuild.prep
     friend class DllBuild;
@@ -189,10 +190,13 @@ struct DllBuild : std::vector<DllFile> {
     /** return \c libname, or \throw if not \c prepped */
     std::string const & getLibName() const;
   private:
+    /** during \c prep weed out tests that might create duplicate symbols? */
+    //void remove_duplicate_files();
+  private:
     std::unique_ptr<DllOpen> dllopen();
     bool prepped;
     bool made;
-    SubDir dir;
+    SubDir dir;                 ///< build dir (set via \c prep or skip_prep)
     std::string basename;
     std::string libname;        ///< libbasename.so
     std::string mkfname;        ///< basename.mk

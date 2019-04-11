@@ -7,20 +7,9 @@
 #include "pstreams-1.0.1/pstream.h"
 #include <fstream>
 #include <cstring>
-#include <unistd.h>     // getcwd, sysconf, pathconf, access
 #include <assert.h>
-//#include "jitpipe.hpp"
-//#include <sstream>
-//#include <array>
-//#include <cstdlib>
-//#include <cstdio>   // remove (rm file or directory)
-//#include <cerrno>
-//#include <cstring>  // strerror
-//#include <dlfcn.h>
-//#include <stdio.h>
-//#include <assert.h>
-//#include <filesystem> // join paths (c++17)
-
+#include <unistd.h>     // getcwd, sysconf, pathconf, access
+#include <sys/stat.h>   // stat (possibly faster than 'access') and I check size
 using namespace std;
 
 /** 0 ~ we are linked with bin.mk object file,
@@ -91,6 +80,13 @@ SubDir::SubDir(std::string subdir)
         abspath = getPath() + '/' + subdir;
     }
 }
+std::string DllFile::short_descr() const {
+    std::ostringstream oss;
+    oss <<basename<<"."<<suffix
+        <<" "<<code.size()<<" code bytes, "
+        <<syms.size()<<" symbols";
+    return oss.str();
+}
 /** Unfortunately, multiple compilations rely on bin.mk file rule details,
  * so now we return a vector of objects. */
 std::vector<std::string> DllFile::obj(std::string fname){
@@ -107,7 +103,7 @@ std::vector<std::string> DllFile::obj(std::string fname){
         }else if((p=fname.rfind("-clang.c"))==fname.size()-8){ pp=p;
         }else if((p=fname.rfind("-clang.cpp"))==fname.size()-10){ pp=p;
         }
-        if(pp){
+        if(pp){ // all make fname[0:pp)+"-ve.o", and perhaps some alts
             ret.push_back(fname.substr(0,pp).append("-ve.o"));
             for(auto const& suffix: alts){
                 ret.push_back(fname.substr(0,pp).append(suffix));
@@ -129,28 +125,57 @@ std::vector<std::string> DllFile::obj(std::string fname){
             <<") must match %[-vi|-ncc|-clang].{c|cpp} or %.{s|S} (see bin.mk rules)");
     return ret;
 }
+/** \b new: if file exists and "same", don't rewrite it */
 std::string DllFile::write(SubDir const& subdir){
     int const v = 1;
-    this->abspath = subdir.abspath + "/" + this->basename + this->suffix;
-    try{
-        std::ofstream ofs(abspath);
-        if(v>1){cout<<" ofstream ofs("<<abspath<<") CREATED"<<endl; cout.flush();}
-        ofs <<"//Dllfile: basename = "<<basename
+    string myfile;
+    {
+        std::ostringstream oss;
+        oss <<"//Dllfile: basename = "<<basename
             <<"\n//Dllfile: suffix   = "<<suffix
             <<"\n//Dllfile: abspath  = "<<abspath;
-        if(v>1){cout<<" writing comment: "<<comment<<endl; cout.flush();}
-        ofs <<"\n"<<comment;
-        if(v>1){cout<<" writing code: "<<code<<endl; cout.flush();}
-        ofs <<"\n"<<code
+        if(v>1){cout<<" generating comment: "<<comment<<endl; cout.flush();}
+        oss <<"\n"<<comment;
+        if(v>1){cout<<" copying code: "<<code<<endl; cout.flush();}
+        oss <<"\n"<<code
             <<endl;
-        if(v>1){cout<<" and an extra ofs.flush() !!!"<<endl; cout.flush();}
-        ofs.flush();
-        ofs.close();
-    }catch(...){
-        cout<<" Trouble writing file "<<abspath<<endl;
-        throw;
+        myfile = oss.str();
     }
-    if(v>0){cout<<" Wrote file "<<abspath<<endl;}
+
+    this->abspath = subdir.abspath + "/" + this->basename + this->suffix;
+
+    // check file existence, and whether we can skip the rewrite
+    bool writeit = true;
+    {
+        struct stat st;
+        if(stat(abspath.c_str(), &st)){
+            cout<<" my size "<<myfile.size();
+            if((size_t)st.st_size == myfile.size()){ // file size matches => "same" (hack)
+                writeit = false;
+                if(v>1)
+                    cout<<" matches existing file, so NOT overwriting";
+            }else{
+                if(v>1) cout<<" differs from existing file size "<<st.st_size;
+            }
+        }else{
+            if(v>1) cout<<" and target file does not exist";
+        }
+    }
+
+    if(writeit){
+        try{
+            std::ofstream ofs(abspath);
+            if(v>1){cout<<" ofstream ofs("<<abspath<<") CREATED"<<endl; cout.flush();}
+            ofs<<myfile;
+            if(v>1){cout<<" and an extra ofs.flush() !!!"<<endl; cout.flush();}
+            ofs.flush();
+            ofs.close();
+        }catch(...){
+            cout<<" Trouble writing file "<<abspath<<endl;
+            throw;
+        }
+        if(v>0){cout<<" Wrote file "<<abspath<<endl;}
+    }
     return this->abspath;
 }
 
@@ -218,6 +243,9 @@ std::string const & DllBuild::getLibName() const {
  * - adds a prefix to canned rules of \e bin.mk Makefile template
  * - notably, \e all: target is a shared library
  * - bin.mk now can produce multiple clang versions.
+ *
+ * \c skip added so existing Makefile or source files would not get
+ * rewritten.
  */
 void DllBuild::prep(string basename, string subdir/*="."*/){
     if(empty()){
@@ -240,38 +268,70 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
         <<"all: hello $(ARCHIVE) $(LIBNAME) goodbye\n";
     // Let's be even more careful about duplicates (multiply-defined-symbols if identical code)
     for(size_t i=0U; i<size(); ++i){
-        if( (*this)[i].basename.empty() ){
+        auto& df_i = (*this)[i];
+        if( df_i.basename.empty() ){
             cout<<" DllFile "<<i<<" had no basename (removing)"<<endl;
             continue;
         }
         for(size_t j=0U; j<i; ++j){
-            if( (*this)[i].basename == (*this)[j].basename ){
-                if( (*this)[i].suffix == (*this)[j].suffix){
-                    if( (*this)[i].code == (*this)[j].code){
-                        cout<<" Duplicate DllFile skipped: "<<(*this)[i].basename
-                            <<"."<<(*this)[i].suffix
-                            <<" "<<(*this)[i].code.size()<<" code bytes"<<endl;
+            auto& df_j = (*this)[j];
+            if( df_i.basename == df_j.basename ){
+                if( df_i.suffix == df_j.suffix){
+                    if( df_i.code == df_j.code && df_i.syms.size() == df_j.syms.size() ){
+                        cout<<" Duplicate DllFile "<<i<<" matches "<<j<<", IGNORED "<<i
+                            <<"\n    prev: "<<df_j.short_descr()
+                            <<"\n    skip: "<<df_i.short_descr()
+                            <<endl;
                     }else{
-                        THROW(" Duplicate DllFile! code does not match "<<(*this)[i].basename
-                                <<"."<<(*this)[i].suffix
-                                <<" "<<(*this)[i].code.size()<<" code bytes");
+                        THROW(" Duplicate DllFile "<<i<<" vs "<<j<<"! code/syms do not match "
+                                <<"\n    prev: "<<df_j.short_descr()
+                                <<"\n    skip: "<<df_i.short_descr());
                     }
                 }else{
-                    cout<<"Warning: input file "<<(*this)[i].basename<<"."<<(*this)[i].suffix
-                        <<" with different suffix "
-                        <<" ."<<(*this)[j].suffix
-                        <<" IGNORED"<<endl;
+                    cout<<" Duplicate DllFile "<<i<<" w/ different suffix from "<<j<<", IGNORED "<<i
+                        <<"\n    prev: "<<df_j.short_descr()
+                        <<"\n    skip: "<<df_i.short_descr()
+                        <<endl;
                 }
-                (*this)[i].basename.clear(); // mark for erasure
+#define DLLBUILD_ERASE_SUSPICIOUS 1
+#if DLLBUILD_ERASE_SUSPICIOUS
+                df_i.basename.clear(); // mark for full erasure from build
+                break;
+#else // keep it around, but disable its syms and library inclusion (for debug?)
+                // UNTESTED CODE
+                std::ostringstream oss;
+                oss<<df_i.suffix<<".dup_"<<i<<'_'<<j;
+                df_i.suffix = oss.str(); // remove by change suffix and clearing syms
+                cout<<"    changed DllFile "<<i<<" suffix to "<<df_i.suffix<<endl;
+
+                df_i.comment = "REMOVED "+df_i.comment;
+                df_i.syms.clear();
+                cout<<"    and clearing its symbols"<<endl;
+                // keep the tag? or punt it to the old one?  (not sure)
+
+                if(0){ // with changed suffix and empty syms, we can still write a file
+                    // in case it helps debug...
+                    oss.str("");
+                    oss<<"#if 0 /* Test file "<<i<<" removed, similar to prev "<<j
+                        <<"\n    prev: "<<(*this)[ j ].short_descr()
+                        <<"\n    skip: "<<(*this)[ i ].short_descr()
+                        <<df_i.code
+                        <<"\n#endif /* test removed! */";
+                    df_i.code = newcode.str();
+                }
+#endif
+                break; // important!
             }
         }
     }
-    for(auto it=begin(); it!=end(); ){
-        if( it->basename.empty() ){
-            it = erase(it);
-        }else{
-            cout<<" Keeping: "<<it->basename<<"."<<it->suffix<<endl;
-            ++it;
+    if(DLLBUILD_ERASE_SUSPICIOUS) { // fully remove the DllFile?
+        for(auto it=begin(); it!=end(); ){
+            if( it->basename.empty() ){
+                it = erase(it);
+            }else{
+                cout<<" Keeping: "<<it->basename<<"."<<it->suffix<<endl;
+                ++it;
+            }
         }
     }
     {
@@ -297,7 +357,7 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
                 }
             }
 
-            string dfSourceFile = df.basename+df.suffix;
+            string dfSourceFile = df.basename+df.suffix; // no "." because suffix could be "-vi.c"
             sources<<" \\\n\t"<<dfSourceFile;
             df.objects = DllFile::obj(dfSourceFile); // checks name correctness
             // A source file might produce several objects by different compile options
@@ -383,6 +443,7 @@ void DllBuild::skip_prep(string basename, string subdir/*="."*/){
     this->dir      = SubDir(subdir);
     this->basename = basename;
     this->libname  = "lib"+this->basename+".so";
+    string archive = "lib"+this->basename+".a";  // NEW
     this->mkfname  = this->basename+".mk";
     this->fullpath = dir.abspath+"/"+libname;
     std::string absmkfile = dir.abspath+"/"+mkfname;
@@ -468,7 +529,7 @@ void DllBuild::make(std::string env){
 }
 void DllBuild::skip_make(std::string env){
     if(!prepped)
-        THROW("Please prep(basename,dir) before make()");
+        THROW("Please prep(basename,dir), or at least skip_prep(), before make()");
     string mk = env+" make VERBOSE=1 -C "+dir.abspath+" -f "+mkfname;
     cout<<" Make command: "<<mk<<endl; cout.flush();
     if(access(this->fullpath.c_str(),R_OK)){
@@ -715,21 +776,8 @@ cout<<"EXCELLENT, dlsym(jitLibHandle,\"myLuckyNumber\") has my jit function"
 #ifdef DLLBUILD_MAIN
 using namespace std;
 
-// copied here to avoid including jitpipe_fwd.hpp
-static std::string multiReplace(
-        const std::string needle,
-        const std::string replace,
-        std::string haystack)
-{
-    size_t const nlen = needle.length();
-    size_t const rlen = replace.length();
-    size_t nLoc = 0;;
-    while ((nLoc = haystack.find(needle, nLoc)) != std::string::npos) {
-        haystack.replace(nLoc, nlen, replace);
-        nLoc += rlen;
-    }
-    return haystack;
-}
+#include "stringutil.hpp" // multiReplace
+
 #if 0
 /** print a prefix stating where we think we're running */
 static void pfx_where(){
