@@ -178,7 +178,7 @@ add_library(${LIBJIT} ${LIB_MODE}
     )
 add_library(jit1_code OBJECT
     asmfmt.cpp cblock.cpp dllbuild.cpp
-    jit_data.c jitpage.c bin_mk.c intutil.c
+    jitpage.c bin_mk.c intutil.c
     )
 add_custom_command(
     OUTPUT bin_mk.c

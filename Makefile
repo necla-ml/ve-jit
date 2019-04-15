@@ -115,7 +115,7 @@ endif
 huh:
 	echo VEJIT_LIBS are $(VEJIT_LIBS)	
 all-vejit-libs:
-	./mklibs.sh >& mklibs.log	# writes libs into vejit/lib/
+	./mklibs.sh 2>&1 | tee mklibs.log	# writes libs into vejit/lib/
 vejit.tar.gz: jitpage.h intutil.h vfor.h \
 		intutil.hpp stringutil.hpp throw.hpp \
 		asmfmt_fwd.hpp asmfmt.hpp codegenasm.hpp velogic.hpp \

@@ -12,17 +12,37 @@
 #    which seems to play nicely with pstreams.  Often I think the build gets
 #    stuck.
 # 
+# Usage:
+#    Simple : supply OBJECTS:=<list of object file names> in Makefile
+#    Robust : ALSO supply OBJECTS_FILE:=FILE1,... where FILE1 contains the list object file names
+#    (OBJECTS is used for dependencies within 'make', whereas its matching
+#     OBJECTS_FILE is used to circumvent command line / argv limits of shell commands)
+#
+# NEW: autocreate an OBJECTS_FILE if it is empty...
+#
+# Simple usage can break if you have 20 or more long source files, esp. since
+# you might produce several objects files per source file by varying compile flags.
+#
 
 # Set this to 0 in your environment to make this build quieter
 # It controls things different from VERBOSE (make command-echo)
 BIN_MK_VERBOSE?=1
+
+ifeq ($(ARCHIVE),)
+ARCHIVE:=$(patsubst %.so,%.a,$(LIBNAME))
+endif
 # This can be used to jit object files in a "repository", to avoid
 # recompiles (untested)
-MEGA_ARCHIVE?=../libmegajit.a
+mkfile_path := $(realpath $(lastword $(MAKEFILE_LIST)))
+mkfile_dir := $(dir $(mkfile_path))
+MEGA_ARCHIVE?=$(abspath $(mkfile_dir)/../libmegajit.a)
+
 
 # Example of how to compile a [local copy of] a jit '-vi.c' file
 #        [copied from ../vednn-ek/test/tmp_cjitConv01/cjitConvFwd_parmstr-vi.c]
 #   CFLAGS=-I../vednn-ek/test/vednn-ftrace1/include make VERBOSE=1 -f bin.mk cjitConvFwd_parmstr-ve.o
+#
+#   (include path is for vednnx.h, change to suit)
 #
 #LDFLAGS?=
 #  Warning: this produces a LOT of output...
@@ -43,25 +63,109 @@ $(info $(1))
 endef
 endif
 
-$(ARCHIVE): $(OBJECTS)
-	-nar rcs $@ $^ && echo 'created $@' || echo 'Trouble creating $@ (continuing)'
+# nar accepts @FILE, ncc does not.  So we generate .a of -fPIC objects,
+# and then convert to .so   Makefile $(file ...) trick does not work
+#
+# Using 'echo' also fails to pass everything into the file,
+# and using make's file/foreach commands also did not work out.
+#
+# NEW: if OBJECTS_FILE is not given, auto-create it (can be slow if thousands of OBJECTS)
+#
+ifeq (${OBJECTS_FILE},)
+OBJECTS_FILE:=$(patsubst %.a,%.OBJECTS,$(ARCHIVE))
+# cannot use $$(OBJECTS) anywhere in a command line (it can exceed command line)
+# 'foreach' + 'shell' seems safe. make's 'file' command did not work for me
+$(OBJECTS_FILE): $(mkfile_path)
+	rm -f $@
+	$(foreach L,$(MANY1000),$(shell echo '$L' >> $@))
+	@echo 'wordcount $@ : '`wc $@`
+endif
+
+# if OBJECTS_FILE is a real(?) file, also use @FILE for object file list
+ifneq (${OBJECTS_FILE},)
+#REAL_OBJECTS_FILE:=$(foreach F,${OBJECTS_FILE},$(realpath $F))
+REAL_OBJECTS_FILE:=$(OBJECTS_FILE)
+AT_OBJECTS_FILE:=$(patsubst %,@%,$(REAL_OBJECTS_FILE))
+.PHONY: ${AT_OBECTS_FILE} # never try to create @FILEs
+EXTRA_ARCHIVE_OBJECTS:=
+else
+# if OBJECTS_FILE empty, ARCHIVE_OBJECTS same as OBJECTS
+AT_OBJECTS_FILE:=
+REAL_OBJECTS_FILE:=
+EXTRA_ARCHIVE_OBJECTS:=$(OBJECTS)
+endif
+.PRECIOUS: $(ARCHIVE)
+# Remember, any OBJECTS_FILE should **duplicate** the 'make' OBJECTS dependencies
+$(ARCHIVE): $(REAL_OBJECTS_FILE) $(OBJECTS)
+	nar rcs $@ $(AT_OBJECTS_FILE) $(EXTRA_ARCHIVE_OBJECTS) \
+		&& echo 'created $@' || echo 'Trouble creating $@ (continuing)'
+	nnm $@ | wc
+ifneq (${BIN_MK_VERBOSE},0)
+	-ls -l $@; echo 'nnm wordcount: ' `nnm $@ | wc`
+endif
+ifneq ($(MEGA_ARCHIVE),)
+	#	$(MAKE) $(MEGA_ARCHIVE)
+	nar rcs $(MEGA_ARCHIVE) $(AT_OBJECTS_FILE) $(ARCHIVE_OBJECTS) \
+		&& echo ' updated $(MEGA_ARCHIVE)' || echo 'Trouble updating $(MEGA_ARCHIVE) (continuing)'
+ifneq (${BIN_MK_VERBOSE},0)
+	-ls -l lib* $(MEGA_ARCHIVE); echo 'nnm $(MEGA_ARCHIVE) wordcount: ' `nnm libnew.a | wc`
+endif
+endif
+
+$(MEGA_ARCHIVE)_first_version: # this created a nested archive, not good
 	# MEGA_ARCHIVE is "$(MEGA_ARCHIVE)"
 	-@if [ -f "$(MEGA_ARCHIVE)" ]; then \
-		rm -f mega.mri; \
-		{ echo "open $(MEGA_ARCHIVE)"; echo "replace $(ARCHIVE)"; echo "save"; echo "end"; } > mega.mri; \
-		nar -M mega.mri; \
-		fi
+		echo ' updating MEGA_ARCHIVE $(MEGA_ARCHIVE)'; \
+		{ echo "open $(MEGA_ARCHIVE)"; echo "replace $(ARCHIVE)"; echo "save"; echo "end"; } \
+		| nar -M; \
+	else \
+		echo ' creating MEGA_ARCHIVE $(MEGA_ARCHIVE)'; \
+		cp -av $@ $(MEGA_ARCHIVE); \
+	fi
+ifneq (${BIN_MK_VERBOSE},0)
+	-ls -l lib* $(MEGA_ARCHIVE); echo 'nnm libnew.a wordcount: ' `nnm libnew.a | wc`
+endif
+
+# mri scripting via TINY also did not remove duplicate objects.
+$(MEGA_ARCHIVE)_tiny: $(ARCHIVE)
+	 MEGA_ARCHIVE is "$(MEGA_ARCHIVE)"
+	-if [ -f "$(MEGA_ARCHIVE)" ]; then \
+		echo ' creating thin archive $(patsubst %.a,%-megaT.a,$(ARCHIVE))'; \
+		ar -rcT $(patsubst %.a,%-megaT.a,$(ARCHIVE)) $(MEGA_ARCHIVE) $(ARCHIVE) \
+		&& echo 'creating new MEGA_ARCHIVE $(patsubst %.a,%-mega.a,$(ARCHIVE))' \
+		&& { echo 'create $(patsubst %.a,%-mega.a,$(ARCHIVE))'; \
+	             echo 'addlib $(patsubst %.a,%-megaT.a,$(ARCHIVE))'; \
+		     echo 'save'; \
+		     echo 'end'; } \
+		   | nar -M; \
+	else \
+		echo ' creating MEGA_ARCHIVE $(MEGA_ARCHIVE)'; \
+		cp -av $@ $(MEGA_ARCHIVE); \
+	fi
+ifneq (${BIN_MK_VERBOSE},0)
+	-ls -l lib*; echo 'nnm wordcount: ' `nnm $@ | wc`
+endif
 
 $(LIBNAME): $(OBJECTS)
 ifneq (${BIN_MK_VERBOSE},0)
 	echo "-------- Linking --------"
 	echo "LDFLAGS = $${LDFLAGS}"
 endif
-	ncc -o $@ $(LDFLAGS) $(LIBFLAGS) $(filter %-ve.o,$^)
+	@#ncc -o $@ $(LDFLAGS) $(LIBFLAGS) $(filter %-ve.o,$^)
+	@# did not work echo '$(OBJECTS)' | gawk 'BEGIN{RS=" "}//' > $@.objects
+	@#  did not create file $(file >$@.objects,$(filter %-ve.o,$^))
+	@#ncc -o $@ $(LDFLAGS) $(LIBFLAGS) @$@.objects
+	@#ls -l OBJECTS-ve.list
+	@#
+	@# ncc does not support @FILE for long command lines
+	@#ncc -o $@ $(LDFLAGS) $(LIBFLAGS) @OBJECTS-ve.list
+	@#
+	ncc -shared -o $@ $(LDFLAGS) $(LIBFLAGS) -Wl,--whole-archive $(ARCHIVE) -Wl,--no-whole-archive
 ifneq (${BIN_MK_VERBOSE},0)
 	echo "-------- Linking DONE --------"
 	# This would assume VE library target !!! -nreadelf -hds $@
 	echo "-------- Library $(LIBNAME) created in `pwd`"
+	-ls -l $@; echo 'nnm wordcount: ' `nnm $@ | wc`
 endif
 
 # Allow override of default compiler (maybe particular version is required)
@@ -148,7 +252,7 @@ $(bin_mk_info Ending with CXXLANG_FLAGS = $(CXXLANG_FLAGS))
 ifneq (${BIN_MK_VERBOSE},0)
 	which $(CLANG)
 	$(CLANG) --version
-	ls -l
+	@#ls -l
 endif
 	@#$(MAKE) $*-vi_bin.asm # Why does make not find this rule?
 	$(CLANG) $(filter-out -fPIC,$(CLANG_FLAGS)) -ggdb -S $< -o $*-vi_bin.s

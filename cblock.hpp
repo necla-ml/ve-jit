@@ -505,12 +505,12 @@ inline std::ostream& prefix_lines(std::ostream& os, std::string code,
 }
 
 inline Cblock& operator<<(Cblock& cb, PostIndent const& postIndent){
-    std::cout<<"+PostIndent";
+    //std::cout<<"+PostIndent";
     cb._postmanip = new Cbin(cb, postIndent);
     return cb;
 }
 inline Cblock& operator<<(Cblock& cb, PreIndent const& preIndent){
-    std::cout<<"+PreIndent";
+    //std::cout<<"+PreIndent";
     cb._premanip = new Cbin(cb, preIndent);
     return cb;
 }

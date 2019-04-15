@@ -243,6 +243,7 @@ std::string const & DllBuild::getLibName() const {
  * - adds a prefix to canned rules of \e bin.mk Makefile template
  * - notably, \e all: target is a shared library
  * - bin.mk now can produce multiple clang versions.
+ * - also creates basename.OBJECTS so Makefile can circumvent command line limits
  *
  * \c skip added so existing Makefile or source files would not get
  * rewritten.
@@ -258,7 +259,13 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
     string archive = "lib"+this->basename+".a";  // NEW
     this->mkfname  = this->basename+".mk";
     this->fullpath = dir.abspath+"/"+libname;
+
     ostringstream mkfile;
+    // at_file is so mkfile can use @FILE way to avoid command line length limits
+    string at_filename(this->basename+".OBJECTS");
+    ostringstream at_file;
+    
+    at_file<<"\n";
     mkfile<<"# Auto-generated Makefile for "<<libname;
     mkfile<<"\nLIBNAME:="<<libname
         <<"\nARCHIVE:="<<archive
@@ -336,11 +343,35 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
     }
     {
         ostringstream sources; sources<<"\nSOURCES:=";
-        ostringstream objects; objects<<"\nOBJECTS:=";
+        ostringstream objects; objects<<"\nOBJECTS_FILE:="<<at_filename<<"\nOBJECTS:=";
         ostringstream deps;    deps   <<"\n";
         ostringstream hello;   hello  <<"\n";
         ostringstream goodbye; goodbye<<"\ngoodbye:\n"
             <<"\t@echo 'Goodbye, "<<mkfname<<" ending'\n";
+#define DLLBUILD_SIMPLE_RENAMES 0
+#if DLLBUILD_SIMPLE_RENAMES
+        //
+        // To think about...
+        //
+        // By creating rename files for every possible target, we will always generate
+        // an alternate unroll_FUNC call for every FUNC in FUNC-vi.c.
+        // Downside:
+        //   1. you only want some unroll_FUNCs
+        //   2. FUNC names are not obtained from the sourcefile stem
+        //
+        // current method allows client-specified symbols to be renamed, but can
+        // still run into problems with multiply defined symbols for the *other* FUNCs
+        //
+        // XXX Eventually, will want also to objcopy -N <name>  to --strip-symbol
+        // the alternate-compile symbols that we want to remove
+        //
+        hello<<
+            "\n$(patsubst %-vi.c,%_unroll-ve.o.rename,$(SOURCES)): %_unroll-ve.o.rename:: %-vi.c"
+            "\n\t@# assume stem exactly matches the function name!"
+            "\n\techo '$* unroll_$*' > $@"
+            "\nhello: | $(patsubst %-vi.c,%_unroll-ve.o.rename,$(SOURCES))"
+            "\n\techo 'Hello, cjitConv.mk begins'"
+#endif
         for(size_t i=0U; i<size(); ++i){
             DllFile& df = (*this)[i];
             if(1){ // handle absent fields in DllFile
@@ -368,7 +399,8 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
             //
             vector<SymbolDecl> altsyms;
             for(auto const& object: df.objects){
-                objects<<" \\\n\t"<<object;
+                objects<<" \\\n\t"<<object; // add to makefile OBJECTS:=
+                at_file<<object<<"\n";      // also add to @FILE to circumvent command line limits
                 deps<<"\n"<<object<<": "<<dfSourceFile;
                 // What object file types do we recognize?
                 if(object.rfind("_unroll-ve.o")==object.size()-12){
@@ -390,7 +422,7 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
                         mkfile<<"\n"<<renameFile<<":"
                             <<"\n\t@rm -f "<<renameFile<<"\n"
                             <<renames;
-                        hello<<"\nhello: "<<renameFile; // create this FIRST
+                        hello<<"\nhello: |"<<renameFile; // create this FIRST (only if not present)
                     }
                 }
             }
@@ -404,11 +436,11 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
             df.abspath = dir.abspath+'/'+dfSourceFile;
             df.write(this->dir);            // source file input (throw if err)
         }
-        mkfile<<hello.str();
-        mkfile<<"\nhello:\n\techo 'Hello, "<<mkfname<<" begins'\n";
         mkfile<<"\n#sources\n"<<sources.str()<<endl;
         mkfile<<"\n#deps   \n"<<deps   .str()<<endl;
         mkfile<<"\n#objects\n"<<objects.str()<<endl;
+        mkfile<<hello.str();
+        mkfile<<"\nhello:\n\techo 'Hello, "<<mkfname<<" begins'\n";
         mkfile<<"\n"<<goodbye.str()<<endl;
         mkfile<<endl;
     }
@@ -422,6 +454,7 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
             if(ofs){
                 //ofs << mkfile.rdbuf();
                 ofs << mkfile.str();
+                ofs.flush();
                 ofs.close();
             }else{
                 THROW(" Trouble constructing ofs("<<absmkfile<<")");
@@ -430,8 +463,34 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
             cout<<" Trouble writing file "<<absmkfile<<endl;
             throw;
         }
-        //system(("ls -l "+dir.abspath).c_str());
         cout<<" makefile written: "<<absmkfile<<endl;
+    }
+
+    // NOTE alternate is to write the @FILE as a series of 'echo' commands, right
+    // into the makefile itself.
+    { // write at_file.str() to <dir.abspath>/<at_filename>
+        std::string absatfile;
+        try{
+            absatfile = dir.abspath+"/"+at_filename;
+            ofstream ofs(absatfile);
+            if(ofs){
+                //ofs << mkfile.rdbuf();
+                ofs << at_file.str();
+                ofs.flush();
+                ofs.close();
+            }else{
+                THROW(" Trouble constructing ofs("<<absatfile<<")");
+            }
+        }catch(...){
+            cout<<" Trouble writing file "<<absatfile<<endl;
+            throw;
+        }
+        cout<<" @FILE list of object files written: "<<absatfile<<endl;
+    }
+    // sometimes the 'make' does nothing ??? check that files are really there.
+    {
+        auto ls = "ls -l "+dir.abspath+" *.mk lib*";
+        system(ls.c_str());
     }
     prepped = true;
 }
@@ -466,6 +525,7 @@ static int try_make( std::string mk, std::string mklog, int const v/*verbose*/ )
     string mk_cmd = mk;
     if(!mklog.empty())
         mk_cmd.append(" >& ").append(mklog);
+    cout<<" Build command: "<<mk_cmd<<endl;
     redi::pstream mkstream(mk_cmd,
             pstreams::pstdin | pstreams::pstdout | pstreams::pstderr);
     mkstream << peof;
@@ -496,6 +556,8 @@ static int try_make( std::string mk, std::string mklog, int const v/*verbose*/ )
         std::ofstream ofs(mklog, ios_base::app);
         ofs<<string(40,'-')<<" stdout:"<<endl<<out<<endl;
         ofs<<string(40,'-')<<" stderr:"<<endl<<err<<endl;
+        ofs.flush();
+        ofs.close();
     }
     if(v>0 || error || status){
         cout<<string(40,'-')<<" stdout:"<<endl<<out<<endl;
@@ -505,8 +567,12 @@ static int try_make( std::string mk, std::string mklog, int const v/*verbose*/ )
         cout<<" Make error  = "<<error <<endl;
         cout<<" Make status = "<<status<<endl;
     }
-    if(error||status)
-        THROW(" Make failed! status="<<status<<" error="<<error);
+    if(error||status){
+        //THROW(" Make failed! status="<<status<<" error="<<error);
+        // no we will retry, and try to keep going...
+        cout<<"\n\n WARNING: please check build logs for more info"
+            <<"\n            We will try to continue anyways.\n"<<endl;
+    }
 #endif
     return status | error;
 }
