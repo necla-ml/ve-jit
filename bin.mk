@@ -108,7 +108,7 @@ ifneq ($(MEGA_ARCHIVE),)
 	nar rcs $(MEGA_ARCHIVE) $(AT_OBJECTS_FILE) $(ARCHIVE_OBJECTS) \
 		&& echo ' updated $(MEGA_ARCHIVE)' || echo 'Trouble updating $(MEGA_ARCHIVE) (continuing)'
 ifneq (${BIN_MK_VERBOSE},0)
-	-ls -l lib* $(MEGA_ARCHIVE); echo 'nnm $(MEGA_ARCHIVE) wordcount: ' `nnm libnew.a | wc`
+	-ls -l lib* $(MEGA_ARCHIVE); echo 'nnm $(MEGA_ARCHIVE) wordcount: ' `nnm $(MEGA_ARCHIVE) | wc`
 endif
 endif
 
@@ -123,7 +123,7 @@ $(MEGA_ARCHIVE)_first_version: # this created a nested archive, not good
 		cp -av $@ $(MEGA_ARCHIVE); \
 	fi
 ifneq (${BIN_MK_VERBOSE},0)
-	-ls -l lib* $(MEGA_ARCHIVE); echo 'nnm libnew.a wordcount: ' `nnm libnew.a | wc`
+	-ls -l lib* $(MEGA_ARCHIVE); echo 'nnm $(MEGA_ARCHIVE) wordcount: ' `nnm $(MEGA_ARCHIVE) | wc`
 endif
 
 # mri scripting via TINY also did not remove duplicate objects.

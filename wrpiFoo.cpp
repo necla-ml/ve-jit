@@ -9,6 +9,10 @@
 #include "throw.hpp"
 #include <cassert>
 
+#if defined(__ve) && !defined(__GNUG__)
+#warning "nc++ might need -std=gnu++11 to enable extended asm"
+#endif
+
 /** wrpiFoo calls will claim to clobber %s0--7, %s40--49 */
 #define VECLOBBER "%s12", \
     "%s0","%s1","%s2", \

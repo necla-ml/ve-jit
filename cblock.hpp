@@ -45,8 +45,10 @@
 
 // CBLOCK_DBG disabled (things running OK now)
 #if 1 || defined(NDEBUG)
+#define CBLOCK_DBG_ENABLED 0
 #define CBLOCK_DBG(V,N,...) do{}while(0)
 #else
+#define CBLOCK_DBG_ENABLED 1
 #define CBLOCK_DBG(V,N,...) do { \
     if((V)>=(N)){ \
         std::cout<<__VA_ARGS__; \

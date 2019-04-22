@@ -4,12 +4,17 @@
 //#include "cblock.hpp"    // prefix_lines (debug output)
 #include "throw.hpp"
 #include "jitpage.h"    // low level 'C' utilities
-#include "pstreams-1.0.1/pstream.h"
 #include <fstream>
 #include <cstring>
 #include <assert.h>
 #include <unistd.h>     // getcwd, sysconf, pathconf, access
 #include <sys/stat.h>   // stat (possibly faster than 'access') and I check size
+
+#define PSTREAMS 0
+#if PSTREAMS
+#include "pstreams-1.0.1/pstream.h"
+#endif
+
 using namespace std;
 
 /** 0 ~ we are linked with bin.mk object file,
@@ -290,6 +295,9 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
                             <<"\n    skip: "<<df_i.short_descr()
                             <<endl;
                     }else{
+                        cout<<" Duplicate DllFile "<<i<<" vs "<<j<<"! code/syms do not match "
+                                <<"\n    prev: "<<df_j.short_descr()
+                                <<"\n    skip: "<<df_i.short_descr();
                         THROW(" Duplicate DllFile "<<i<<" vs "<<j<<"! code/syms do not match "
                                 <<"\n    prev: "<<df_j.short_descr()
                                 <<"\n    skip: "<<df_i.short_descr());
@@ -515,17 +523,21 @@ void DllBuild::skip_prep(string basename, string subdir/*="."*/){
     }
 }
 static int try_make( std::string mk, std::string mklog, int const v/*verbose*/ ){
-#if 0
-    auto ret = system(mk.c_str());
-    if(ret){
-        THROW(" Build error: "+mk);
-    }
-#else // pstreams to capture stdout, stderr into log files etc.
-    using namespace redi;
     string mk_cmd = mk;
+#if 1
+    auto ret = system(mk_cmd.c_str());
+    if(ret){
+        //THROW(" Build error: "+mk);
+        cout<<" Build error: "<<mk_cmd<<endl;
+        cout<<" Build ret  : "<<ret<<endl;
+    }
+    return ret;
+#else // pstreams to capture stdout, stderr into log files etc.
     if(!mklog.empty())
         mk_cmd.append(" >& ").append(mklog);
     cout<<" Build command: "<<mk_cmd<<endl;
+
+    using namespace redi;
     redi::pstream mkstream(mk_cmd,
             pstreams::pstdin | pstreams::pstdout | pstreams::pstderr);
     mkstream << peof;
@@ -548,10 +560,10 @@ static int try_make( std::string mk, std::string mklog, int const v/*verbose*/ )
     mkstream.close();                 // retrieve exit status and errno
     status = mkstream.rdbuf()->status();
     error  = mkstream.rdbuf()->error();
-    if(1){
-        if(error || status){
-            cout<<" Please check build log in "<<mklog<<endl;
-        }
+    if(error || status){
+        cout<<" Please check build log in "<<mklog<<endl;
+    }
+    if(0){ //Is following correct?
         // even in quiet mode mode: write 'make' output into a file:
         std::ofstream ofs(mklog, ios_base::app);
         ofs<<string(40,'-')<<" stdout:"<<endl<<out<<endl;
@@ -573,8 +585,8 @@ static int try_make( std::string mk, std::string mklog, int const v/*verbose*/ )
         cout<<"\n\n WARNING: please check build logs for more info"
             <<"\n            We will try to continue anyways.\n"<<endl;
     }
-#endif
     return status | error;
+#endif
 }
 void DllBuild::make(std::string env){
     int const v = 0;

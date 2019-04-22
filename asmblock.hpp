@@ -2,6 +2,9 @@
 #define ASMBLOCK_HPP
 /* Copyright (c) 2019 by NEC Corporation
  * This file is part of ve-jit */
+/** \file
+ * UNUSED, INCOMPLETE
+ */
 #include "asmfmt.hpp"
 #include "throw.hpp"
 /** \file

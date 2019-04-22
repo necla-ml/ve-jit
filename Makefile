@@ -20,6 +20,8 @@ CFLAGS:=-O2 -g2 -pthread
 CFLAGS+=-Wall -Werror
 CFLAGS+=-Wno-unknown-pragmas
 # note 'gnu' is needed to support extended asm in nc++
+#      17 allows assert inside constexpr, but gnu++17 is not ok for both nc++ and g++
+#      (17 not supported by gc++-4.8.5 on ds02)
 CXXFLAGS:=$(CFLAGS) -std=gnu++11
 LIBVELI_TARGETS:=libveli-x86.a
 LIBJIT1_TARGETS:=libjit1-x86.a libjit1-x86.so
@@ -104,7 +106,7 @@ force: # force libs to be recompiled
 	$(MAKE) $(LIBVELI_TARGETS)
 
 # for tarball...
-VEJIT_SHARE:=cblock.cpp ve-asm/veli_loadreg.cpp dllbuild.cpp COPYING
+VEJIT_SHARE:=cblock.cpp ve-msk.cpp ve-asm/veli_loadreg.cpp dllbuild.cpp COPYING
 VEJIT_LIBS:=libjit1-x86.a libveli-x86.a libjit1-x86.so bin.mk-x86.lo
 VEJIT_LIBS+=libjit1-justc-x86.a libjit1-cxx-x86.lo # possible ld.so workaround
 ifeq ($(CC:ncc%=ncc),ncc)
@@ -121,6 +123,7 @@ vejit.tar.gz: jitpage.h intutil.h vfor.h \
 		asmfmt_fwd.hpp asmfmt.hpp codegenasm.hpp velogic.hpp \
 		cblock.hpp dllbuild.hpp \
 		asmfmt.cpp cblock.cpp dllbuild.cpp jitpage.c intutil.c \
+		ve-msk.hpp ve-msk.cpp \
 		jitpage.hpp jitpipe_fwd.hpp jitpipe.hpp cblock.hpp pstreams-1.0.1 bin_mk.c \
 		vechash.hpp vechash.cpp asmblock.hpp \
 		libjit1-cxx.cpp \
@@ -181,7 +184,7 @@ tools/%:
 #%-omp.o: %.c: $(CC) ${CFLAGS} -O2 -c $< -o $@
 #%-omp-ftrace1.o: %.c: $(CC) ${CFLAGS} -O2 -c $< -o $@
 libjit1.a: asmfmt-ve.o jitpage-ve.o intutil-ve.o \
-	vechash-ve.o cblock-ve.o asmblock-ve.o dllbuild-ve.o bin.mk-ve.lo
+	vechash-ve.o cblock-ve.o asmblock-ve.o dllbuild-ve.o bin.mk-ve.lo ve-msk-ve.o
 	rm -f $@
 	$(AR) rcs $@ $^
 	readelf -h $@
@@ -198,7 +201,7 @@ libjit1-justc-x86.a: jitpage-x86.o intutil-x86.o bin.mk-x86.lo
 # The other part of the VE bug workaround is to distribute the C++ part
 # of libjit1 as a .lo object file, or as a monolithic C++ source file.
 # I'll also include libveli .cpp codes into the monolithic version
-libjit1-cxx.cpp: asmfmt.cpp vechash.cpp cblock.cpp asmblock.cpp dllbuild.cpp \
+libjit1-cxx.cpp: asmfmt.cpp vechash.cpp cblock.cpp asmblock.cpp dllbuild.cpp ve-msk.cpp \
 	veliFoo.cpp wrpiFoo.cpp
 	sed -e '/^\#ifdef _MAIN/,/^\#endif/d' asmfmt.cpp > $@
 	#   cblock is header-only -- the .cpp file is self-test/demo
@@ -209,6 +212,7 @@ libjit1-cxx.cpp: asmfmt.cpp vechash.cpp cblock.cpp asmblock.cpp dllbuild.cpp \
 	cat dllbuild.cpp >> $@
 	cat veliFoo.cpp >> $@
 	cat wrpiFoo.cpp >> $@
+	cat ve-msk.cpp >> $@
 libjit1-cxx-ve.lo: libjit1-cxx.cpp
 	# gnu++11 allows extended asm...
 	$(CXX) ${CXXFLAGS} -fPIC -c $< -o $@
@@ -231,6 +235,8 @@ vechash-ve.o: vechash.cpp vechash.hpp asmfmt_fwd.hpp vfor.h throw.hpp
 	$(CXX) ${CXXFLAGS} -O2 -c vechash.cpp -o $@
 cblock-ve.o: cblock.cpp cblock.hpp
 	$(CXX) ${CXXFLAGS} -c $< -o $@
+ve-msk-ve.o: ve-msk.cpp ve-msk.hpp
+	$(CXX) ${CXXFLAGS} -c $< -o $@
 asmblock-ve.o: asmblock.cpp asmblock.hpp
 	$(CXX) ${CXXFLAGS} -c $< -o $@
 dllbuild-ve.o: dllbuild.cpp
@@ -250,10 +256,58 @@ vechash.lo: vechash.cpp vechash.hpp throw.hpp vfor.h
 	$(CXX) ${CXXFLAGS} -fPIC -O2 -c vechash.cpp -o $@
 cblock-ve.lo: cblock.cpp cblock.hpp
 	$(CXX) ${CXXFLAGS} -fPIC -c $< -o $@
+ve-msk-ve.lo: ve-msk.cpp ve-msk.hpp
+	$(CXX) ${CXXFLAGS} -fPIC -c $< -o $@
 asmblock-ve.lo: asmblock.cpp asmblock.hpp
 	$(CXX) ${CXXFLAGS} -fPIC -c $< -o $@
 dllbuild-ve.lo: dllbuild.cpp
 	$(CXX) $(CXXFLAGS) -fPIC -Wall -Werror -c $< -o $@
+
+libjit1-x86.a: asmfmt-x86.o jitpage-x86.o intutil-x86.o \
+		cblock-x86.o dllbuild-x86.o bin.mk-x86.lo \
+		vechash-x86.o asmblock-x86.o ve-msk.o
+	rm -f $@
+	ar rcs $@ $^
+	readelf -h $@
+	readelf -d $@
+libjit1-x86.so: asmfmt-x86.lo jitpage-x86.lo intutil-x86.lo \
+		cblock-x86.lo dllbuild-x86.lo bin.mk-x86.lo \
+		vechash-x86.lo asmblock-x86.lo ve-msk-x86.lo
+	gcc -o $@ -shared $^ # -ldl
+	readelf -h $@
+	readelf -d $@
+dllbuild-x86.lo: dllbuild.cpp dllbuild.hpp
+	g++ -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -c $<
+asmfmt-x86.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp stringutil.hpp jitpage.h
+	g++ ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
+asmfmt-x86.lo: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
+	g++ ${CXXFLAGS} -fPIC -O2 -c asmfmt.cpp -o $@
+intutil-x86.o: intutil.c intutil.h
+	g++ ${CFLAGS} -O2 -c $< -o $@
+intutil-x86.lo: intutil.c intutil.h
+	g++ ${CFLAGS} -fPIC -O2 -c $< -o $@
+jitpage-x86.o: jitpage.c jitpage.h
+	g++ $(CXXFLAGS) -O2 -c $< -o $@ -ldl
+jitpage-x86.lo: jitpage.c jitpage.h
+	g++ $(CXXFLAGS) -fPIC -O2 -c $< -o $@ -ldl
+cblock-x86.o: cblock.cpp cblock.hpp
+	g++ ${CXXFLAGS} -c $< -o $@
+cblock-x86.lo: cblock.cpp cblock.hpp
+	g++ ${CXXFLAGS} -fPIC -c $< -o $@
+ve-msk-x86.o: ve-msk.cpp ve-msk.hpp
+	g++ ${CXXFLAGS} -c $< -o $@
+ve-msk-x86.lo: ve-msk.cpp ve-msk.hpp
+	g++ ${CXXFLAGS} -fPIC -c $< -o $@
+asmblock-x86.o: asmblock.cpp asmblock.hpp
+	g++ ${CXXFLAGS} -g2 -std=c++11 -c $< -o $@
+asmblock-x86.lo: asmblock.cpp asmblock.hpp
+	g++ ${CXXFLAGS} -fPIC -c $< -o $@
+vechash-x86.o: vechash.cpp vechash.hpp
+	g++ ${CXXFLAGS} -g2 -std=c++11 -c $< -o $@
+vechash-x86.lo: vechash.cpp vechash.hpp
+	g++ ${CXXFLAGS} -fPIC -c $< -o $@
+dllbuild-x86.o: dllbuild.cpp dllbuild.hpp
+	g++ -o $@ $(CXXFLAGS) -Wall -Werror -c $<
 
 cblock-x86: cblock.cpp cblock.hpp
 	g++ ${CXXFLAGS} -DMAIN_CBLOCK -c $< -o cblock.o
@@ -385,48 +439,6 @@ dllvebug14: dllbug.cpp libvebug.so
 	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -L. -Wl,-rpath=`pwd` $^
 	./$@ 7
 	echo "Exit status $$?"
-
-libjit1-x86.a: asmfmt-x86.o jitpage-x86.o intutil-x86.o \
-		cblock-x86.o dllbuild-x86.o bin.mk-x86.lo \
-		vechash-x86.o asmblock-x86.o
-	rm -f $@
-	ar rcs $@ $^
-	readelf -h $@
-	readelf -d $@
-libjit1-x86.so: asmfmt-x86.lo jitpage-x86.lo intutil-x86.lo \
-		cblock-x86.lo dllbuild-x86.lo bin.mk-x86.lo \
-		vechash-x86.lo asmblock-x86.lo
-	gcc -o $@ -shared $^ # -ldl
-	readelf -h $@
-	readelf -d $@
-dllbuild-x86.lo: dllbuild.cpp dllbuild.hpp
-	g++ -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -c $<
-asmfmt-x86.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp stringutil.hpp jitpage.h
-	g++ ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
-asmfmt-x86.lo: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
-	g++ ${CXXFLAGS} -fPIC -O2 -c asmfmt.cpp -o $@
-intutil-x86.o: intutil.c intutil.h
-	g++ ${CFLAGS} -O2 -c $< -o $@
-intutil-x86.lo: intutil.c intutil.h
-	g++ ${CFLAGS} -fPIC -O2 -c $< -o $@
-jitpage-x86.o: jitpage.c jitpage.h
-	g++ $(CXXFLAGS) -O2 -c $< -o $@ -ldl
-jitpage-x86.lo: jitpage.c jitpage.h
-	g++ $(CXXFLAGS) -fPIC -O2 -c $< -o $@ -ldl
-cblock-x86.o: cblock.cpp cblock.hpp
-	g++ ${CXXFLAGS} -g2 -std=c++11 -c $< -o $@
-cblock-x86.lo: cblock.cpp cblock.hpp
-	g++ ${CXXFLAGS} -fPIC -c $< -o $@
-asmblock-x86.o: asmblock.cpp asmblock.hpp
-	g++ ${CXXFLAGS} -g2 -std=c++11 -c $< -o $@
-asmblock-x86.lo: asmblock.cpp asmblock.hpp
-	g++ ${CXXFLAGS} -fPIC -c $< -o $@
-vechash-x86.o: vechash.cpp vechash.hpp
-	g++ ${CXXFLAGS} -g2 -std=c++11 -c $< -o $@
-vechash-x86.lo: vechash.cpp vechash.hpp
-	g++ ${CXXFLAGS} -fPIC -c $< -o $@
-dllbuild-x86.o: dllbuild.cpp dllbuild.hpp
-	g++ -o $@ $(CXXFLAGS) -Wall -Werror -c $<
 
 #allsyms-x86: allsyms.cpp
 #	g++ -g2 -O2 -std=c++11 -D_GNU_SOURCE $< -o $@ -ldl

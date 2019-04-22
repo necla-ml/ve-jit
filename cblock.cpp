@@ -17,7 +17,7 @@ Cblock& Cblock::append(Cblock &cb){
     cb._parent = this;
     _sub.push_back(&cb);
     CBLOCK_DBG(v,10," this@"<<_parent->_name<<"/"<<_name<<"{");
-    for(auto s: _sub) std::cout<<" "<<s->_name;
+    if(v>=5){ for(auto s: _sub) std::cout<<" "<<s->_name; std::cout<<std::endl; }
     CBLOCK_DBG(v,10,"}"<<std::endl);
     return cb; // new behaviour
 }
