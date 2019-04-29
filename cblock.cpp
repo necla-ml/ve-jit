@@ -8,6 +8,26 @@
 
 namespace cprog{
 
+Cblock& Cblock::append(std::string codeline){
+    if( !codeline.empty() ){
+#if 0 // trial...
+        // to technically allow building up a single statement, we only
+        // stick in new line if the last line of _code contains a ';'
+        if( !_code.empty() ){
+            size_t lastline=_code.find_last_of('\n');
+            if( lastline == std::string::npos ) lastline=0; else ++lastline;
+            if(_code.find_first_of(";",lastline) != std::string::npos)
+                _code.append("\n");
+        }
+#endif
+        _code.append(codeline);
+    }
+    return *this;
+}
+Cblock& Cblock::operator>>(std::string codeline){
+    return append("\n").append(codeline);
+}
+
 Cblock& Cblock::append(Cblock &cb){
     int const __attribute__((unused)) v=0;
     CBLOCK_DBG(v,3," append! "<<std::endl);

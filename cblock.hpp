@@ -140,7 +140,7 @@ struct Cblock {
     /** shift-left operator appends codeline \e as-is. */
     Cblock& operator<<(std::string codeline) { return append(codeline); }
     /** prepends a newline, then adds codeline (same precedence as <<). */
-    Cblock& operator>>(std::string codeline) { return append("\n").append(codeline); }
+    Cblock& operator>>(std::string codeline); // { return append("\n").append(codeline); }
     /** \c codeline append to \c _code (\c Cblock appends to \c _sub).
      * Mostly append as-is, \em except if last line of code has a ';' in it,
      * we add a newline (tweak for C-code readability). */
@@ -309,10 +309,10 @@ struct Cblock {
   private:
     std::string _name;
     std::string _type;
-    CbmanipBase* _premanip;
+    CbmanipBase* _premanip;         ///< TODO support multiple?
     std::string _code;
-    std::vector<Cblock*> _sub;
-    CbmanipBase* _postmanip;
+    std::vector<Cblock*> _sub;      ///< TODO separate '_exit' block with \e always-last semantics?
+    CbmanipBase* _postmanip;        ///< TODO support multiple?
     int _nwrites;   // counter
     int _maxwrites; // limit for _nwrites
     friend Cblock& operator<<(Cblock& cb, PostIndent const& postIndent);
@@ -416,6 +416,7 @@ inline Cblock& Cblock::after(Cblock& prev) {
 #endif
 }
 
+#if 0
 inline Cblock& Cblock::append(std::string codeline){
     if( !codeline.empty() ){
 #if 0 // trial...
@@ -432,6 +433,7 @@ inline Cblock& Cblock::append(std::string codeline){
     }
     return *this;
 }
+#endif
 /// \group Cblock/Cunit helpers
 //@{ //}
 /** for simple scopes (terminate with just "}", and with a "body" sub-block...

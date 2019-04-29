@@ -601,6 +601,10 @@ void DllBuild::make(std::string env){
         mklog.append("2");
         cout<<"Trying make once again..."<<endl;
         bad = try_make(mk, mklog, 2);
+        if(bad){
+            cout<<"BUILD ERROR! see "<<mklog<<endl;
+            THROW("Build error");
+        }
     }
     if(v>0){cout<<" 'make' ran in: "<<dir.abspath<<endl;}
     made = true;
