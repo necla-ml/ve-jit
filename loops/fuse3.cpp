@@ -228,18 +228,6 @@ struct UnrollData : public UnrollSuggest {
     std::vector<Vab> pre;
 };
 
-/** string up-to-n first, dots, up-to-n last of vector \c v[0..vl-1] w/ \c setw(wide) */
-template<typename T>
-std::string vecprt(int const n, int const wide, std::vector<T> v, int const vl){
-    assert( v.size() >= (size_t)vl );
-    std::ostringstream oss;
-    for(int i=0; i<vl; ++i){
-        if( i < n ){ oss<<" "<<setw(wide)<<v[i]; }
-        if( i == n && i < vl-n ){ oss<<" ... "; }
-        if( i >= n && i >= vl-n ){ oss<<" "<<setw(wide)<< v[i]; }
-    }
-    return oss.str();
-}
 #include "divide_by_constants_codegen_reference.c"
 
 /** Generate reference vectors of vectorized 2-loop indices */
@@ -2070,7 +2058,7 @@ int main(int argc,char**argv){
  *
  *    - Works nicely if we have a double-vector rotate (we don't)
  *      or a rotate mod other values than MVL=256.
- *      Aurora doesn't, and the useful rotation cases
+ *      Aurora DOES NOT, and the useful rotation cases
  *      already have a low op-count update.
  *
  *    - A fast long-vector rotation can be simulating by calculating a

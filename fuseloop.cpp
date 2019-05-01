@@ -1,8 +1,7 @@
 #include "fuseloop.hpp"
-//#include <iostream>
+#include "vechash.hpp"    // VecHash2 (hash trace of reference loop execution for ref_vloop2)
+#include "stringutil.hpp" // vecprt, lcm[from intutil.hpp]
 #include <iomanip>
-#include "../vechash.hpp"
-#include "../stringutil.hpp" // vecprt, lcm[from intutil.hpp]
 
 namespace loop {
 

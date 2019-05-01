@@ -8,11 +8,18 @@ vejit
 *.asm
 *.dump
 *.i
+*.diff
+**mk*.log
+**x.log
 tmp_*
+[a-z].c
+[a-z].s
+build
 log
 jit*.log
 mk*.log
 bld*.log
+[a-z].log
 vejit.tar.gz
 asmfmt.log
 asmkern.bin
@@ -24,7 +31,6 @@ jitpp_hello
 asmfmt
 msk
 msk.S
-msk.i
 msk.log
 sys_tmp.S
 sys_tmp.bin
@@ -90,11 +96,6 @@ dllvebug[0-9]
 dllvebug1[0-9]
 dllbuild-veb
 dllbuild-x86b
-[a-z].log
-x.log
-mk.log
-**mk*.log
-**x.log
 dllbuild-ve
 dllbuild-veb
 dllbuild-x86
@@ -114,7 +115,6 @@ libclang_lucky.so
 libgcc_lucky.so
 libncc_lucky.so
 cblock
-*.diff
 test_*-x86
 nld.help
 nobjcopy.info
@@ -134,4 +134,3 @@ cblock-x86
 cblock-x86.lo
 cblock-x86.o
 cblock-*
-**oops

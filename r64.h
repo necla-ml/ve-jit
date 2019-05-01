@@ -58,8 +58,10 @@
      *       the SRD opcode
      *   - a 32-bit generator with 64 bits state that is fast is PCG XSH RS 64/32
      */
+#if 0 // there's a better way now... when I get around to it.
     struct PCG64 {
-     */
+    };
+#endif
     struct R64
     {
         R64(uint64_t const seed=123U) : r(seed) {}

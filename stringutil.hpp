@@ -8,8 +8,7 @@
 #include "intutil.hpp"
 #include <cstdio>   // tmpnam, tempnam?
 #include <unistd.h> // close
-#include <vector>
-#include <string>
+#include <iomanip>
 #include <algorithm>    // std::find?
 
 /// \group string modification
@@ -195,6 +194,19 @@ bool isimm(T const t){ // deprecated original name
     return isMval(t);
 }
 //@} VE immediate operands
+
+/** string up-to-n first, dots, up-to-n last of vector \c v[0..vl-1] w/ \c setw(wide) */
+template<typename T>
+std::string vecprt(int const n, int const wide, std::vector<T> v, int const vl){
+    assert( v.size() >= (size_t)vl );
+    std::ostringstream oss;
+    for(int i=0; i<vl; ++i){
+        if( i < n ){ oss<<" "<<std::setw(wide)<<v[i]; }
+        if( i == n && i < vl-n ){ oss<<" ... "; }
+        if( i >= n && i >= vl-n ){ oss<<" "<<std::setw(wide)<< v[i]; }
+    }
+    return oss.str();
+}
 
 /** open and close a tmp file from \c mkstemp, returning its name. */
 inline std::string my_tmpnam() {

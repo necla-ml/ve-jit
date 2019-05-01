@@ -120,9 +120,9 @@ all-vejit-libs:
 	./mklibs.sh 2>&1 | tee mklibs.log	# writes libs into vejit/lib/
 vejit.tar.gz: jitpage.h intutil.h vfor.h \
 		intutil.hpp stringutil.hpp throw.hpp \
-		asmfmt_fwd.hpp asmfmt.hpp codegenasm.hpp velogic.hpp \
+		asmfmt_fwd.hpp asmfmt.hpp codegenasm.hpp velogic.hpp fuseloop.hpp \
 		cblock.hpp dllbuild.hpp \
-		asmfmt.cpp cblock.cpp dllbuild.cpp jitpage.c intutil.c \
+		asmfmt.cpp cblock.cpp dllbuild.cpp jitpage.c intutil.c fuseloop.cpp \
 		ve-msk.hpp ve-msk.cpp \
 		jitpage.hpp jitpipe_fwd.hpp jitpipe.hpp cblock.hpp pstreams-1.0.1 bin_mk.c \
 		vechash.hpp vechash.cpp asmblock.hpp \
@@ -184,7 +184,7 @@ tools/%:
 #%-omp.o: %.c: $(CC) ${CFLAGS} -O2 -c $< -o $@
 #%-omp-ftrace1.o: %.c: $(CC) ${CFLAGS} -O2 -c $< -o $@
 libjit1.a: asmfmt-ve.o jitpage-ve.o intutil-ve.o \
-	vechash-ve.o cblock-ve.o asmblock-ve.o dllbuild-ve.o bin.mk-ve.lo ve-msk-ve.o
+	vechash-ve.o cblock-ve.o asmblock-ve.o dllbuild-ve.o bin.mk-ve.lo ve-msk-ve.o fuseloop-ve.o
 	rm -f $@
 	$(AR) rcs $@ $^
 	readelf -h $@
@@ -201,7 +201,7 @@ libjit1-justc-x86.a: jitpage-x86.o intutil-x86.o bin.mk-x86.lo
 # The other part of the VE bug workaround is to distribute the C++ part
 # of libjit1 as a .lo object file, or as a monolithic C++ source file.
 # I'll also include libveli .cpp codes into the monolithic version
-libjit1-cxx.cpp: asmfmt.cpp vechash.cpp cblock.cpp asmblock.cpp dllbuild.cpp ve-msk.cpp \
+libjit1-cxx.cpp: asmfmt.cpp vechash.cpp cblock.cpp asmblock.cpp dllbuild.cpp ve-msk.cpp fuseloop.cpp \
 	veliFoo.cpp wrpiFoo.cpp
 	sed -e '/^\#ifdef _MAIN/,/^\#endif/d' asmfmt.cpp > $@
 	#   cblock is header-only -- the .cpp file is self-test/demo
@@ -213,6 +213,7 @@ libjit1-cxx.cpp: asmfmt.cpp vechash.cpp cblock.cpp asmblock.cpp dllbuild.cpp ve-
 	cat veliFoo.cpp >> $@
 	cat wrpiFoo.cpp >> $@
 	cat ve-msk.cpp >> $@
+	cat fuseloop.cpp >> $@
 libjit1-cxx-ve.lo: libjit1-cxx.cpp
 	# gnu++11 allows extended asm...
 	$(CXX) ${CXXFLAGS} -fPIC -c $< -o $@
@@ -241,8 +242,10 @@ asmblock-ve.o: asmblock.cpp asmblock.hpp
 	$(CXX) ${CXXFLAGS} -c $< -o $@
 dllbuild-ve.o: dllbuild.cpp
 	$(CXX) $(CXXFLAGS) -Wall -Werror -c $< -o $@
+fuseloop-ve.o: fuseloop.cpp
+	$(CXX) $(CXXFLAGS) -Wall -Werror -c $< -o $@
 libjit1.so: jitpage.lo intutil.lo bin.mk-ve.lo \
-	asmfmt.lo asmblock-ve.lo cblock-ve.lo dllbuild-ve.lo # C++ things
+	asmfmt.lo asmblock-ve.lo cblock-ve.lo dllbuild-ve.lo fuseloop-ve.lo # C++ things
 	$(CXX) -o $@ -shared -Wl,-trace -wL,-verbose $^ #-ldl #-lnc++
 	readelf -h $@
 	readelf -d $@
@@ -262,22 +265,22 @@ asmblock-ve.lo: asmblock.cpp asmblock.hpp
 	$(CXX) ${CXXFLAGS} -fPIC -c $< -o $@
 dllbuild-ve.lo: dllbuild.cpp
 	$(CXX) $(CXXFLAGS) -fPIC -Wall -Werror -c $< -o $@
+fuseloop-ve.lo: fuseloop.cpp
+	$(CXX) $(CXXFLAGS) -fPIC -Wall -Werror -c $< -o $@
 
 libjit1-x86.a: asmfmt-x86.o jitpage-x86.o intutil-x86.o \
-		cblock-x86.o dllbuild-x86.o bin.mk-x86.lo \
-		vechash-x86.o asmblock-x86.o ve-msk.o
+		cblock-x86.o dllbuild-x86.o bin.mk-x86.lo fuseloop-x86.o \
+		vechash-x86.o asmblock-x86.o ve-msk-x86.o
 	rm -f $@
 	ar rcs $@ $^
 	readelf -h $@
 	readelf -d $@
 libjit1-x86.so: asmfmt-x86.lo jitpage-x86.lo intutil-x86.lo \
-		cblock-x86.lo dllbuild-x86.lo bin.mk-x86.lo \
+		cblock-x86.lo dllbuild-x86.lo bin.mk-x86.lo fuseloop-x86.lo \
 		vechash-x86.lo asmblock-x86.lo ve-msk-x86.lo
 	gcc -o $@ -shared $^ # -ldl
 	readelf -h $@
 	readelf -d $@
-dllbuild-x86.lo: dllbuild.cpp dllbuild.hpp
-	g++ -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -c $<
 asmfmt-x86.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp stringutil.hpp jitpage.h
 	g++ ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
 asmfmt-x86.lo: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
@@ -308,6 +311,12 @@ vechash-x86.lo: vechash.cpp vechash.hpp
 	g++ ${CXXFLAGS} -fPIC -c $< -o $@
 dllbuild-x86.o: dllbuild.cpp dllbuild.hpp
 	g++ -o $@ $(CXXFLAGS) -Wall -Werror -c $<
+dllbuild-x86.lo: dllbuild.cpp dllbuild.hpp
+	g++ -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -c $<
+fuseloop-x86.o: fuseloop.cpp fuseloop.hpp
+	g++ -o $@ $(CXXFLAGS) -Wall -Werror -c $<
+fuseloop-x86.lo: fuseloop.cpp fuseloop.hpp
+	g++ -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -c $<
 
 cblock-x86: cblock.cpp cblock.hpp
 	g++ ${CXXFLAGS} -DMAIN_CBLOCK -c $< -o cblock.o

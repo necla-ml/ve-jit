@@ -6,6 +6,10 @@ cblock
 cfuse
 fuse3
 fuse3-ve
-?.cpp
-?-gcc.S
-?-ve.S
+[a-z].cpp
+[a-z].c
+[a-z]-gc++.S
+[a-z]-clang.S
+[a-z]-gcc.S
+[a-z]-ncc.S
+[a-z]-ve.S

@@ -135,7 +135,14 @@ struct Cblock {
      * then we execute \c at(p), which matches a \em first-found existing
      * block, or throws (\c at never creates a new block).
      * \throw if \c p is a path-string with '/' and \c p is not found.
-     * see \c find(path) for a description of how path searches are done.*/
+     * see \c find(path) for a description of how path searches are done.
+     *
+     * "beg" and "end" are speical sub-block names related to the
+     * CBLOCK_SCOPE macro.
+     *
+     * NEW: any Cblock named "last" will remain as the terminal one, with
+     *      later sub-blocks appearing just-before-last.
+     */
     Cblock& operator[](std::string p);
     /** shift-left operator appends codeline \e as-is. */
     Cblock& operator<<(std::string codeline) { return append(codeline); }
@@ -145,7 +152,8 @@ struct Cblock {
      * Mostly append as-is, \em except if last line of code has a ';' in it,
      * we add a newline (tweak for C-code readability). */
     Cblock& append(std::string codeline);
-    /** \c codeline append to \c _code (\c Cblock appends to \c _sub) */
+    /** Sub-block \c cb appends to \c _sub, except if the terminal \c sub
+     * block is named "last", where \c cb is inserted just-before-last. */
     Cblock& append(Cblock &cb);
     // shorten append usage...
     //Cblock& operator<<=(Cblock &cb) {return this->append(cb); }
@@ -400,52 +408,61 @@ struct PreIndent : IndentSpec {
 inline std::string const& Cblock::getName() const {return _name;}
 
 inline Cblock& Cblock::after(Cblock& prev) {
-#if 0 // original
-    std::cout<<" Cblock@"<<_name; std::cout.flush();
-    //std::cout<<" Cblock@"<<fullpath(); std::cout.flush(); // XXX fullpath error if Cblock unlinked?
-    std::cout<<" after("<<prev.fullpath()<<" unlink..."; std::cout.flush();
-    Cblock& tmp = unlink();
-    std::cout<<" append..."; std::cout.flush();
-    assert( &tmp == this );
-    prev.append(tmp);
-    std::cout<<" done"<<std::endl; std::cout.flush();
-    return *this;
-#else // streamlined, with 'append' that returns the argument, instead of 'prev'
+    // streamlined, with 'append' that returns the argument, instead of 'prev'
     CBLOCK_DBG(_root->v,2," Cblock["<<fullpath()<<"].after("<<prev.fullpath()<<")\n");
     return prev.append(unlink());
-#endif
 }
 
-#if 0
-inline Cblock& Cblock::append(std::string codeline){
-    if( !codeline.empty() ){
-#if 0 // trial...
-        // to technically allow building up a single statement, we only
-        // stick in new line if the last line of _code contains a ';'
-        if( !_code.empty() ){
-            size_t lastline=_code.find_last_of('\n');
-            if( lastline == std::string::npos ) lastline=0; else ++lastline;
-            if(_code.find_first_of(";",lastline) != std::string::npos)
-                _code.append("\n");
-        }
-#endif
-        _code.append(codeline);
-    }
-    return *this;
-}
-#endif
 /// \group Cblock/Cunit helpers
 //@{ //}
 /** for simple scopes (terminate with just "}", and with a "body" sub-block...
  * - if AFTER is a cblock, we could just use AFTER.getRoot() and save an argument
  * - general case is a bit more flexible, but macro is fairly readable if combined with indenting
  * - create subnodes \e CBLK_VAR/{beg,body,exit}
- * - \e cleanup is always created empty.
  * \c BEG is code put into "CBLK_VAR/beg"
  * \c CBLK_VAR ends up pointing at "CBLK_VAR/body" node
  * \c AFTER is the node 'after' which CBLK_VAR gets inserted.
  *
  * - includes semicolon, for use as <em>CBLOCK_SCOPE(foo,"if(1)",cunit,"parent") { foo>>"//HI"; }</em>
+ *
+ * - Among many ways to structure producing sub-blocks, keeping good 'locality' is important
+ *   so that JIT subroutines become more independent of the enclosing parent.  So in the following,
+ *   code snippets related to loop_s are positioned relative to loop_s, rather than explicitly
+ *   assuming anything about the structure of the parent, loop_r/body.
+ *
+ * Example
+ * ```
+ * CBLOCK_SCOPE(loop_r,"for (int64_t r = kh_beg; r < kh_end; ++r)",pr,loop_x0);
+ * CBLOCK_SCOPE(loop_s,"for (int64_t s = 0; s < kernWidth; s++)",pr,loop_r);
+ * // the path of loop_s is ...loop_x0/body/loop_r/body/loop_s/body
+ * loop_s[".."]>>"vrs = vrs0;";     // into loop_r/body/loop_s CODE, **before** loop_s/beg opens the loop
+ * loop_s["last"]>>"update(vrs);";  // loop_s/body/last, always just before loop_s/body/end exits the loop
+ * loop_s[".."]["last"]>>"cout<<vrs; // debug the final value"; //after loop_s exits
+ * loop_s>>"FOO;";
+ * CBLOCK_SCOPE(loop_c,"for (int64_t c = 0; c < inChannelGroup; ++c)",pr,loop_s);
+ * loop_c>>"STUFF;"
+ * loop_s>>"//before loop_c";
+ * loop_s["postc"]>>"//after loop_c";
+ * ```
+ * Will produce something like
+ * ```
+ * for (int64_t r = kh_beg; r < kh_end; ++r){ // loop_r
+ *   vrs=vrs0; // tight binding to "loop_s" is more robust than binding to loop_r
+ *   for (int64_t s = 0; s < kernWidth; s++){ // loop_s
+ *     FOO;
+ *     //before loop_c
+ *     for (int64_t c = 0; c < inChannelGroup; ++c); // loop_c
+ *       STUFF;
+ *     }
+ *     //after loop_c
+ *     update(vrs); // in loop_s["last"], no matter what other sub-blocks were created
+ *     }
+ *   }
+ *   cout<<vrs; // debug the final value
+ * }
+ * ```
+ * where all snippets inside loop_r are actually tightly associated with loop_s.
+ * So that a function to easily embed loop_s JIT code \e wherever can be envisioned.
  */
 #define CBLOCK_SCOPE(CBLK_VAR,BEG,CUNIT,AFTER) auto& CBLK_VAR = mk_scope((CUNIT),#CBLK_VAR,(BEG)).after(AFTER)["body"];
 /** Sometimes you want to pass the block "body" to an outer scope as a pointer rather than a ref */
@@ -457,8 +474,10 @@ Cblock& mk_extern_c(Cunit& cunit, std::string name);
 Cblock& mk_cpp_if(Cunit& cunit, std::string name, std::string cond);
 /** make name/{beg,body,else,end} for plain if(cond){<body>}else{<else>} conditional block */
 Cblock& mk_cpp_ifelse(Cunit& cunit, std::string name, std::string cond);
-/* make name/{beg,body[,cleanup],end} nodes.
- * cleanup is for cunit.flavor!="C" (expect "asm").
+/* make name/{beg,body[,last],end} nodes.
+ * We return the Cblock "name/body"
+ * NEW: the 'cleanup' node is replaced by generic treatment of any sub-block
+ *      whose name is "last".
  */
 Cblock& mk_scope(Cunit& cunit, std::string name, std::string beg="", std::string end="");
 

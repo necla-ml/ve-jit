@@ -35,7 +35,12 @@ Cblock& Cblock::append(Cblock &cb){
     CBLOCK_DBG(v,10," this@"<<_parent->_name<<"/"<<_name<<" append");
     CBLOCK_DBG(v,10," (cb@"<<cb._name<<")\n");
     cb._parent = this;
-    _sub.push_back(&cb);
+
+    auto last_spot = _sub.end();
+    if( !_sub.empty() && _sub.back()->getName()=="last")
+        --last_spot;
+    _sub.insert(last_spot, &cb);
+
     CBLOCK_DBG(v,10," this@"<<_parent->_name<<"/"<<_name<<"{");
     if(v>=5){ for(auto s: _sub) std::cout<<" "<<s->_name; std::cout<<std::endl; }
     CBLOCK_DBG(v,10,"}"<<std::endl);
@@ -113,8 +118,10 @@ Cblock& Cblock::operator[](std::string p){
     for(auto s: _sub) if(s && s->_name==p) return *s;   // found ?
     //                                                  CREATE if not found in _sub[]
     CBLOCK_DBG(_root->v,2,"// new sub-block "<<_name<<"/"<<p<<" "<<_name<<".sub.size()="<<_sub.size()<<"\n");
-    _sub.push_back(new Cblock(this,p));
-    return *_sub.back();
+    //_sub.push_back(new Cblock(this,p));
+    //return *_sub.back();
+    //  new: special "last" _sub will stay last.
+    return this->append(*new Cblock(this,p));
 }
 
 Cblock * Cblock::find_immediate_sub(std::string p) const {
@@ -216,8 +223,8 @@ Cblock& mk_cpp_ifelse(Cunit& cunit, std::string name, std::string cond){
     block["end"]<<"#endif // "<<cond;
     return block;
 }
-/** create a name/{beg,body,cleanup,end} triple, with subblock named "body" properly indented.
- * - \e body and \e cleanup are always created empty.
+/** create a name/{beg,body,end} triple, with subblock named "body" properly indented.
+ * - \e body is always created empty.
  * - \e beg indents and \e end unindents
  * \return pointer to \e name/body node.
  * to insert a pre-"end" code, do \c return_value["../cleanup"]
@@ -244,7 +251,7 @@ Cblock& mk_scope(Cunit& cunit, std::string name, std::string beg /*=""*/, std::s
         block["beg"]<<"// BLOCK "<<name<<PostIndent(+cunit.shiftwidth);
         if(!beg.empty()) block["beg"]<<beg<<"\n";
         block["body"];    // empty
-        block["cleanup"]; // empty
+        //block["cleanup"]; // empty
         if(!end.empty()) block["end"]<<end<<"\n";
         block["end"]<<"// END "<<name<<PreIndent(-cunit.shiftwidth);
     }
@@ -934,8 +941,13 @@ string cjitConvolutionForward00( int const verbosity=0 /*struct param const* con
             >>"__vr vrsum = vzeros;"
             ;
     CBLOCK_SCOPE(loop_r,"for (int64_t r = kh_beg; r < kh_end; ++r)",pr,loop_x0);
-    loop_r>>"vrw = vrj";
+    //loop_r>>"vrw = vrj";
     CBLOCK_SCOPE(loop_s,"for (int64_t s = 0; s < kernWidth; s++)",pr,loop_r);
+    loop_s[".."]>>"vrw = vrj"; // current pos loop_r/body/loop_s CODE, **before** loop_s/beg opens the loop
+    loop_s["last"]             // into loop_s/body/last, just before loop_s/end exits the loop
+        >>"vrw = _ve_vaddsl_vsv(dilationWidth,  vrw) ; // <--- vector induced"
+        ;
+    loop_s[".."]["last"]>>"//loop_s has just exited!";
     loop_s
         >>"__vm256 vm2 = _ve_vfmkl_mcv(VECC_GE, vrw);        // condition(0 <= w)"
         >>"__vm256 vm3 = _ve_vfmkl_mcv(VECC_IG, _ve_vcmpsl_vsv(inWidth,vrw));  // condition(w < inWidth)"
@@ -950,9 +962,9 @@ string cjitConvolutionForward00( int const verbosity=0 /*struct param const* con
         >>"vrin = _ve_vmrg_vvvm(vzeros, vrin, vm23) ;"
         >>"vrsum = _ve_vfmads_vvsv(vrsum, *pKerValue, vrin) ;"
         ;
-    loop_s["induce vrw"]// BEFORE the '}' of loops_s (embedded blanks OK, but harder to read
-        >>"vrw = _ve_vaddsl_vsv(dilationWidth,  vrw) ; // <--- vector induced"
-        ;
+    //loop_s["induce vrw"]// BEFORE the '}' of loops_s (embedded blanks OK, but harder to read
+    //    >>"vrw = _ve_vaddsl_vsv(dilationWidth,  vrw) ; // <--- vector induced"
+    //    ;
     // loop_r path: .../loop_x0/body/loop_r/body
     //loop_r[".."] // too early (add to loop_x0/body; before loop_r even begins)
     //loop_r["../.."] // same as above

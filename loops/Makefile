@@ -14,7 +14,7 @@ force: force-lib
 .PHONY: ../libjit1-x86.a
 ../libjit1-x86.a:
 	#$(MAKE) -C .. $(patsubst ../%,%,$@)
-	rm -f $@ ../*-x86.o
+	#rm -f $@ ../*-x86.o
 	$(MAKE) -C .. $(patsubst ../%,%,$@)
 force-lib:
 	rm -f ../*-x86.a ../*-x86.o
@@ -29,7 +29,7 @@ ifneq ($(CC:ncc%=ncc),ncc)
 LDLIBS+=${X86LIBS}
 endif
 
-COMMON_HDRS:=../stringutil.hpp ../codegenasm.hpp ../asmfmt_fwd.hpp ../asmfmt_fwd.hpp
+COMMON_HDRS:=../stringutil.hpp ../codegenasm.hpp ../asmfmt_fwd.hpp ../asmfmt_fwd.hpp exechash.hpp ../fuseloop.hpp
 fuse2 fuse3 fuse2-ve fuse3-ve: $(COMMON_HDRS)
 fuse2: fuse2.cpp ../libjit1-x86.a ../libveli-x86.a
 	echo "CC=${CC}"
