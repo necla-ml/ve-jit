@@ -1,4 +1,8 @@
 SHELL=/bin/bash	
+NCXX:=nc++	
+CLANG_VI_FLAGS?=-show-spill-message-vec -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics
+CXXLANG_FLAGS:=-target linux-ve -O3 -mllvm $(CLANG_VI_FLAGS)
+
 .PHONY: all more force force-lib mega1-sample.log mega1
 all: fuse2 fuse2lin fuse3 mega1-sample.log
 	@echo 'ALL DONE with make all'
@@ -35,6 +39,8 @@ fuse2: fuse2.cpp ../libjit1-x86.a ../libveli-x86.a
 	echo "CC=${CC}"
 	echo "LDLIBS=${LDLIBS}"
 	#g++ -Wall -Wno-unknown-pragmas -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
+	g++ -Wall -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
+cfuse2: cfuse2.cpp ../libjit1-x86.a
 	g++ -Wall -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
 fuse3: fuse3.cpp ../libjit1-x86.a ../libveli-x86.a
 	echo "CC=${CC}"
@@ -757,6 +763,15 @@ tf2-0.log: fuse2 Makefile tf2-3.log
 		) 2>&1 | tee $@
 cfuse: cfuse.cpp
 	g++ -Wall -std=c++11 -I.. -O3 $< -o $@ ${LDFLAGS} ${LDLIBS}
+mul_add_shr_div: mul_add_shr_div.cpp ../timer.h ../intutil.h
+	g++ -Wall -std=c++11 -I.. -O3 $< -o $@
+tdivmod: tdivmod.cpp ../timer.h ../intutil.h
+	clang++ -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
+	clang++ -Wall -std=c++11 -I.. -O3 -S $< -o $@.s
+	clang++ -Wall -std=c++11 -I.. -O3 $< -o $@
+tdivmod-ve: tdivmod.cpp ../timer.h ../intutil.h
+	clang++ ${CXXLANG_FLAGS} -Wall -std=c++11 -I.. -O3 -S $< -o $@.s
+	$(NCXX) $(CFLAGS) $@.s -o $@
 %: %.cpp
 	g++ -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
 	g++ -Wall -std=c++11 -I.. -O3 $< -o $@

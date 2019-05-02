@@ -3,6 +3,8 @@
 
 /* \file
  * see https://stackoverflow.com/questions/11040646/faster-modulus-in-c-c
+ *
+ * These measurements don't quite reflect JIT implementations
  */
 #if 0
 /*
@@ -22,10 +24,12 @@ hiding latencies through parallelization.
 */
 #endif
 
+//#include "intutil.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/time.h>
+
 
 typedef int32_t s32;
 typedef uint32_t u32;
@@ -112,7 +116,9 @@ u32 fastmod(u32 v, struct fastdiv *d) {
 #endif
 
 u32 random32(u32 upper_bound) {
-    return arc4random_uniform(upper_bound);
+	static u64 r64=12345ULL;
+    //return arc4random_uniform(upper_bound);
+    return ((r64*=2862933555777941757UL)+=13U) % upper_bound;
 }
 
 u32 random32_range(u32 lower_bound, u32 upper_bound) {
@@ -128,6 +134,7 @@ void fill_arrays() {
     }
 }
 
+// pot ~ Power Of Two !
 void fill_arrays_pot() {
     u32 log_bound, rand_log;
     int i;
@@ -317,3 +324,4 @@ branching_pot_ns   : 2 ns
 branchless_npot_ns : 2 ns
 branchless_pot_ns  : 2 ns
 #endif
+// vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break

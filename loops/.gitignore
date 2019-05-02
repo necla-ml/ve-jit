@@ -13,3 +13,8 @@ fuse3-ve
 [a-z]-gcc.S
 [a-z]-ncc.S
 [a-z]-ve.S
+cfuse2
+tdivmod-ve
+tdivmod
+tdivmod-ve.s
+tdivmod.s

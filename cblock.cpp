@@ -398,6 +398,27 @@ Cblock* Cblock::find(std::string p) const {
 #endif
     }
 }
+/** attach to nearest-enclosing scope in a reasonable way. */
+Cblock& Cblock::define(std::string name, std::string subst){
+    // sanity checks on name?
+    Cblock *a, *z;
+    {
+        Cblock* enc = find("..*/body");
+        if(enc == nullptr){
+            a = this;
+            z = &(*this)["last"];
+        }else{
+            a = &enc->at("..");
+            z = &(*a)["last"];
+        }
+    }
+    assert( a!=nullptr );
+    assert( z!=nullptr );
+    (*a)>>"#define "<<name<<" "<<subst; // multiline backslash support?
+    (*z)>>"#undef "<<name;
+    return *this;
+}
+
 /** debug printout: see the DAG, not the actual code snippets */
 std::ostream& Cblock::dump(std::ostream& os, int const ind/*=0*/)
 {
@@ -595,6 +616,11 @@ void test_cblock_path(){
     assert( functions.find("..*/open") != nullptr );
     cout<<"\n\n"<<endl; cout.flush();
     assert( foo.find("..*/bar/") != nullptr ); // find in recursive "parent/sibling tree"
+    assert( foo.find("..*/bar") != nullptr ); // find in recursive "parent/sibling tree"
+    assert( foo.find("..*/foo/") != nullptr ); // find in recursive "parent/sibling tree"
+    assert( foo.find("..*/foo") != nullptr ); // find in recursive "parent/sibling tree"
+    assert( foo.find("..*/foo/") == &foo ); // find in recursive "parent/sibling tree"
+    assert( foo.find("..*/foo") == &foo ); // find in recursive "parent/sibling tree"
 
     // Cblock::operator[p] was extended.
     // ORIGINAL behaviour for non-path p [no /] is to create the component
@@ -943,6 +969,7 @@ string cjitConvolutionForward00( int const verbosity=0 /*struct param const* con
     CBLOCK_SCOPE(loop_r,"for (int64_t r = kh_beg; r < kh_end; ++r)",pr,loop_x0);
     //loop_r>>"vrw = vrj";
     CBLOCK_SCOPE(loop_s,"for (int64_t s = 0; s < kernWidth; s++)",pr,loop_r);
+    loop_s.def("LOOP_S_FOO","LOOP_S_BAR"); // demo the scoped #define function (NEW)
     loop_s[".."]>>"vrw = vrj"; // current pos loop_r/body/loop_s CODE, **before** loop_s/beg opens the loop
     loop_s["last"]             // into loop_s/body/last, just before loop_s/end exits the loop
         >>"vrw = _ve_vaddsl_vsv(dilationWidth,  vrw) ; // <--- vector induced"

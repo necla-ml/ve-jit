@@ -267,6 +267,7 @@ struct Cblock {
      * - '**' match zero or more subdirs
      * - '..*' \em strange recursive upward parent+subtree search excluding sub-tree of \c this
      *   - also called \c up since this is not a common path convention.
+     * \return nullptr if not found.
      */
     Cblock *find(std::string path) const;
     /** utility for dot-dot-star wildcard, <em>find-in-upwards-subtrees</em>,
@@ -282,17 +283,47 @@ struct Cblock {
         return *ret;
     }
     //Cblock& find(std::string p) const;
-#if 0 // scope macros
-    /* - cb.def("M","S") -- #define M S  and #undef M
-     *   - if exist "./beg" and "./end" put def+undef there
-     *   - else if name="beg" and exists "../end" put def+undef there
-     *   - else use closes upward beg/end scope:
-     *     - "..*\/beg" and "..*\/end"
-     * - Fancier
-     *   - cb.at(..*/foo/beg).def("M","S"); to force upward scope
+#if 1
+    /** Easy \c \#define \c \#undef attached to nearest-enclosing-scope.
+     *
+     * - cb.def("M","S") -- #define M S  and #undef M
+     *   - if node is "body" put def+undef at node.at("..") and node.at("..")["last"]
+     *     - probably also have "../beg" and "../end" nodes
+     *   - this is a subcase of general method to use "nearest enclosing scope":
+     *     - node.at("..*\/body\/..") and node.at("..*\/body\/..")["last"]
+     * - Fancier control could be had manually, like:
+     *   - cb.at("..*\/loop_high/body").def("M","S"); to force upward scope
      *   - consider how to change arb cblock into a scoped one.
      *     - Ex. foo--> foo_scope/{beg,body,end} where body "is" the old node "foo" ?
+     *
+     * \return *this
      */
+    Cblock& define(std::string name, std::string subst);
+    /** For ease of JIT mirroring codes, if default output format of \c t is
+     * enough, you can <EM>\#define name string_representation_of_t</EM>.
+     * Often you will set up a macro so the the JIT \c name is the same as the
+     * variable name (and the JIT substitution is its text).
+     * Example:
+     * ```
+     *   int const million = 1000000;
+     *   cb.def("million",million);
+     *   // or some macro \#define DEF(CB,VAR) (CB).def(#VAR,VAR) 
+     * ```
+     * should yield `#define million 1000000`.  Using \c define or \c def
+     * should replace the old way of suppying \e both CONST1(VAR) and FREE1(VAR)
+     * as ">>"-strings, which has maintainability issues with scoping.
+     *
+     * - The default output format of \c t may be insufficient
+     *   - (Ex: float precision, long long unsigned type, "27(0)" asm consts,
+     *     or you want an expression substituted)
+     *   - then you should \c define(name,subst) with the \c subst you need.
+     */
+    template<typename T>
+    Cblock& def(std::string name, T const& t){
+        std::ostringstream oss;
+        oss<<t;
+        return this->define(name, oss.str());
+    }
 #endif
 
   private:
