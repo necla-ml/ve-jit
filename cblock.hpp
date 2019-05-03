@@ -72,13 +72,6 @@ struct IndentSpec;
 struct PostIndent;
 struct PreIndent;
 
-// jithex, jitdec are in code genasm.hpp, but want header-only ... XXX FIXME
-inline std::string asDec(std::size_t s){
-    std::ostringstream oss;
-    oss<<s;
-    return oss.str();
-}
-
 /// \group Cblock I/O helpers
 //@{
 /** stateless Cblock output manipulators for operator<< */

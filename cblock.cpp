@@ -1,7 +1,7 @@
 /* Copyright (c) 2019 by NEC Corporation
  * This file is part of ve-jit */
 #include "cblock.hpp"
-#include <sstream>
+#include "stringutil.hpp"
 
 // cblock.hpp can give large compilation times for nc++ inlining... so
 // make this file non-empty to help speed compilation

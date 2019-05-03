@@ -6,10 +6,53 @@
  * pure-header std::string stuff */
 
 #include "intutil.hpp"
+#include <vector>
 #include <cstdio>   // tmpnam, tempnam?
 #include <unistd.h> // close
 #include <iomanip>
 #include <algorithm>    // std::find?
+
+/// \group simple constant outputs
+//@{
+/** format arbitrary '<<' code into ostringstream \c oss, output as a line
+ * to CBLOCK, and flush \c oss so it can be reused.
+ * \pre there exists a scratch \c oss in current scope. */
+#define CBLK(CBLOCK,...) do{ oss<<__VA_ARGS__; CBLOCK>>oss.str(); oss.str(""); }while(0)
+/** Assuming ostringstream named \c oss, format some stuff returning a string,
+ * and flush \c oss so it can be reused.
+ * \pre there exists a scratch \c oss in current scope. */
+#define OSSFMT(...) (oss<<__VA_ARGS__, flush(oss))
+/** Return current string, with side effect of emptying \c oss.
+ * Aids ostringstream reuse during formatted string productions. */
+inline std::string flush(std::ostringstream& oss){
+    std::string s(oss.str());
+    oss.str("");
+    return s;
+}
+template<typename T>
+inline std::string jitdec(T const t){
+    std::ostringstream oss;
+    oss << t;
+    return oss.str();
+}
+template<typename T>
+inline std::string jithex(T const t){
+    std::ostringstream oss;
+    oss << "0x" << std::hex << t << std::dec;
+    return oss.str();
+}
+/** decimal for |i| less than a million; o/w hex */
+inline std::string hexdec(int64_t const i){
+    return (i>-1000000 && i<1000000
+            ? jitdec(i)
+            : jithex(i));
+}
+inline std::string asDec(std::size_t s){
+    std::ostringstream oss;
+    oss<<s;
+    return oss.str();
+}
+//@}
 
 /// \group string modification
 //@{
@@ -114,27 +157,6 @@ inline std::string reduce(const std::string& str,
     }
 
     return result;
-}
-//@}
-
-/// \group simple constant outputs
-//@{
-template<typename T>
-std::string jitdec(T const t){
-    std::ostringstream oss;
-    oss << t;
-    return oss.str();
-}
-template<typename T>
-std::string jithex(T const t){
-    std::ostringstream oss;
-    oss << "0x" << std::hex << t << std::dec;
-    return oss.str();
-}
-inline std::string hexdec(int64_t const i){
-    return (i>-1000000 && i<1000000
-            ? jitdec(i)
-            : jithex(i));
 }
 //@}
 

@@ -40,20 +40,6 @@ using namespace std;
 using namespace loop;
 using namespace cprog;
 
-/** format arbitrary '<<' code into ostringstream \c oss, output as a line to CBLOCK,
- * and flush \c oss so it can be reused. */
-#define CBLK(CBLOCK,...) do{ oss<<__VA_ARGS__; CBLOCK>>oss.str(); oss.str(""); }while(0)
-/** Assuming ostringstream named \c oss, format some stuff returning a string, and
- * flush \c oss so it can be reused. */
-#define OSSFMT(...) (oss<<__VA_ARGS__, flush(oss))
-/** Return current string, with side effect of emptying \c oss.
- * Aids ostringstream reuse during formatted string productions. */
-inline std::string flush(std::ostringstream& oss){
-    std::string s(oss.str());
-    oss.str("");
-    return s;
-}
-
 // /** scope init for AsmFmtCols */
 // typedef std::list<std::pair<std::string,std::string>> AsmScope;
 

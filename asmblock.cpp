@@ -2,7 +2,7 @@
  * This file is part of ve-jit */
 #include "asmblock.hpp"
 #include "asmfmt.hpp"
-#include <sstream>
+#include "stringutil.hpp"
 
 #ifdef MAIN_ASMBLOCK
 using namespace asmprog;
