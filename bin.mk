@@ -263,8 +263,9 @@ endif
 	$(CLANG) $(CLANG_FLAGS) -fPIC -S $< -o $*-vi.s
 	$(NCC) $(CFLAGS) -o $@ -c $*-vi.s
 # create a second object file, with unrolling and change func name
+# Ex. export CLANG_UNROLL='-loop-unroll-count=2 -unroll-allow-partial -fsave-optimization-record'
 %_unroll-ve.o: %-vi.c
-	$(CLANG) $(CLANG_FLAGS) -funroll-loops -S $< -o $*_unroll-vi.s
+	$(CLANG) $(CLANG_FLAGS) -funroll-loops '-Rpass=loop.*' $(CLANG_UNROLL) -S $< -o $*_unroll-vi.s
 	@#$(NCC) $(CFLAGS) -o $@ -c $*_unroll-vi.s
 	$(NCC) $(CFLAGS) -fPIC -o $*_unroll-ve.o.tmp -c $*_unroll-vi.s
 	@#nobjcopy --redefine-sym $*=$*_unroll $*_unroll-ve.o.tmp $@

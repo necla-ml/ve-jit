@@ -15,6 +15,9 @@
 #include "pstreams-1.0.1/pstream.h"
 #endif
 
+/** need a better way to [easily] disable unrolled compiles */
+#define UNROLLS 1
+
 using namespace std;
 
 /** 0 ~ we are linked with bin.mk object file,
@@ -101,7 +104,12 @@ std::vector<std::string> DllFile::obj(std::string fname){
     cout<<" Dllfile::obj(\""<<fname<<"\")..."<<endl; cout.flush();
     if((p=fname.rfind('-'))!= std::string::npos){
         if(0){ ;
-        }else if((p=fname.rfind("-vi.c"))==fname.size()-5){ pp=p; alts.push_back("_unroll-ve.o");
+        }else if((p=fname.rfind("-vi.c"))==fname.size()-5){
+            pp=p;
+            // need a better way to disable unrolled compiles XXX
+#if UNROLLS
+            alts.push_back("_unroll-ve.o");
+#endif
         }else if((p=fname.rfind("-vi.cpp"))==fname.size()-7){ pp=p;
         }else if((p=fname.rfind("-ncc.c"))==fname.size()-6){ pp=p;
         }else if((p=fname.rfind("-ncc.cpp"))==fname.size()-8){ pp=p;

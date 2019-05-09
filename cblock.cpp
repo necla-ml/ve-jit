@@ -199,7 +199,7 @@ Cblock& mk_extern_c(Cunit& cunit, std::string name){
         "#ifdef __cplusplus\n"
         "}//extern \"C\"\n"
         "#endif //C++\n";
-    return block;
+    return block["body"];
 #endif
 }
 /** [beg]:"\#if cond" + [body] + [end]:"\#endif // cond".
@@ -354,7 +354,8 @@ Cblock* Cblock::find(std::string p) const {
         // This is recursive _parent search, never looking underneath this
         if( !_parent || _parent==this || isRoot() ){
             CBLOCK_DBG(v,1," no parent for Cblock "<<_name<<"\n");
-            THROW("Not possible to continue upward parent search");
+            //THROW("Not possible to continue upward parent search");
+            return nullptr;
         }
         if( _parent->_name == remain ){
             CBLOCK_DBG(v,1," FOUND exact match of parent "<<_parent->_name<<" with remain\n");
@@ -403,19 +404,27 @@ Cblock& Cblock::define(std::string name, std::string subst){
     // sanity checks on name?
     Cblock *a, *z;
     {
-        Cblock* enc = find("..*/body");
-        if(enc == nullptr){
-            a = this;
-            z = &(*this)["last"];
-        }else{
-            a = &enc->at("..");
-            z = &(*a)["last"];
-        }
+        a = find("..*/body/.."); // try a nearest enclosing scope
+        //if(!a) a = find("..");   // else "parent" [ optional? ]
+        if(!a) a = this;         // else "right here"
+        z = &(*a)["last"]["undefs"]; // try extra hard for undef to be 'last'
     }
     assert( a!=nullptr );
     assert( z!=nullptr );
     (*a)>>"#define "<<name<<" "<<subst; // multiline backslash support?
-    (*z)>>"#undef "<<name;
+    (*z)>>"#undef "<<name.substr(0,name.find('('));
+    return *this;
+}
+
+/** attach to nearest-enclosing scope in a reasonable way. */
+Cblock& Cblock::define_here(std::string name, std::string subst){
+    // sanity checks on name?
+    Cblock *a = this;
+    Cblock *z = &(*a)["last"]["undefs"];
+    assert( a!=nullptr );
+    assert( z!=nullptr );
+    (*a)>>"#define "<<name<<" "<<subst; // multiline backslash support?
+    (*z)>>"#undef "<<name.substr(0,name.find('('));
     return *this;
 }
 
@@ -687,14 +696,17 @@ void test_cblock_path(){
 }
 void test_cblock_short(){
     Cunit pr("program");
-    pr.v = 0;
+    pr.v = 10;
     pr["comments"]>>"// Cunit output from "<<__FILE__;
     // Very important to use 'auto&' instead of plain 'auto'
     pr["includes"]>>"#include <stdio.h>";
     pr["macros"]>>"#define MSG \"hello\"";
     //mk_extern_c(pr,"extern_C").after(pr["macros"]);
     //  new function: after can accept an absolute path
-    mk_extern_c(pr,"extern_C").after("/macros");
+    // OLD: mk_extern_c(pr,"extern_C").after("/macros");
+    mk_extern_c(pr,"extern_C");  // new subnode "now" (after macros), returns /extern_C/body
+    // FULL extern_C tree is at /extern_C/body/.."
+    // now let's continue making thing at root level (NOT within extern_C)
 
     // creates "functions", appends foo/decl foo/body foo/end
     auto& foo_body = mk_func(pr,"foo","int foo()").after(pr["functions"])["body"];
@@ -731,6 +743,7 @@ void test_cblock_short(){
     // or Pre-Manip, Pre+Manip for _pre.push_front/back <----
 #endif
     // output order can be adjusted with after:
+    cout<<pr.tree()<<endl;
     pr["functions"].after("/**/extern_C/body"); // The "/**" is just for show
     pr["end"]<<"// vim: ts=4 sw=4 et cindent cino=^=l0,\\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\\:,0#,!^F,o,O,e,0=break";
     //main.after("extern_C/open");
@@ -747,7 +760,7 @@ void test_cblock_short2(){
     pr["comments"]>>"// Cunit output from "<<__FILE__;
     pr["includes"]>>"#include <iostream>";
     pr["macros"]>>"define MSG \"hello\"";
-    mk_extern_c(pr,"extern_C").after("/macros");
+    mk_extern_c(pr,"extern_C");         // OLD! NO GOOD! .after("/macros");
     // a somewhat more complicated function...
     auto& foo_body = mk_func(pr,"foo","int randomizer()").after(pr["functions"])["body"];
     foo_body["entry"]<<"int ret=-1;";   // foo/body/entry (anchored)
@@ -828,10 +841,7 @@ string cjitConvolutionForward00( int const verbosity=0 /*struct param const* con
         ;
     pr["macros"]<<"\n#define VLEN (256)"
         ;
-    //auto & fns = mk_extern_c(pr,"extern_C").after(pr["/macros"])["body"];
-    auto & fns = mk_extern_c(pr,"extern_C")["body"];
-    //auto & fns = mk_extern_c(pr,"extern_C")["body/.."];
-
+    auto & fns = mk_extern_c(pr,"extern_C");
     std::string fn_declare;
     {
         std::string funcname("cjitConvFwd00");
@@ -1147,7 +1157,6 @@ vednnConvolutionForward_direct_default3(
   return VEDNN_SUCCESS;
 }
 #endif
-// vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
 void test_cblock_macros(){
     Cunit pr("program");
     pr.v = 0;
@@ -1167,6 +1176,91 @@ void test_cblock_macros(){
     pr.write(cout);
     cout<<string(80,'-')<<endl;
 }
+void test_cblock_define(){
+    Cunit pr("program");
+    pr.v = 2;
+    pr.root.define("PR_ROOT_0");
+    (pr["body"]>>"// pr[\"body\"] HERE")
+        .define("PR_BODY_DEF");
+    (pr["foo"]>>"// pr[\"foo\"] HERE")
+        .define("PR_FOO_DEF")
+        .define("MULTILINE1", "do{ \\\n  //something in enclosing scope via 'define' \\\n} while(0)")
+        ;
+    CBLOCK_SCOPE(blk1,"",pr,pr.root);
+    blk1.define("BLK1_DEF1");
+    blk1>>"// blk1 HERE";
+    (blk1["last"]>>"// blk1 LAST")
+        .define("BLK1_LAST_DEF");
+    auto& nextsub = (blk1["next"]>>"// blk1/next")["nextsub"];
+    (nextsub>>"// blk1/next/nextsub...NEXTSUB_DEF?")
+        .define("NEXTSUB_DEF")
+        .define_here("LOCAL_HELP", "do{ \\\n  //something local via 'define_here' \\\n} while(0)")
+        >>"LOCAL_HELP;"
+        >>"LOCAL_HELP;"
+        ;
+    blk1["last"]>>"// blk1/last HERE";
+    CBLOCK_SCOPE(subblock,"",pr,blk1);
+    subblock.define("SUBBLOCK_DEF")>>"//subblock";
+    CBLOCK_SCOPE(seqsubblock,"",pr,blk1);
+    seqsubblock.define("SEQSUBBLOCK_DEF")>>"//seqsubblock";
+    blk1.define("BLK1_DEF2");
+    pr.v = 0;
+    cout<<string(80,'-')<<endl;
+    pr.write(cout);
+    cout<<string(80,'-')<<endl;
+}
+/** a 1-liner sample kernel "type sum = a + b;" */
+void kernel_define_sum(Cblock& cb, std::string type, std::string sum, std::string a, std::string b){
+    cb>>type<<" "<<sum<<" = "<<a<<" + "<<b<<";";
+}
+/** a scope kernel "{ foo(); ++COUNTER; } */
+Cblock& kernel_scope(Cblock& cb, std::string arg){
+    CBLOCK_SCOPE(kernel_scope,"",cb.getRoot(),cb);
+    kernel_scope>>"foo("<<arg<<");"
+        >>"++COUNTER";
+    return kernel_scope;
+}
+Cblock& kernel_sum_k(Cblock& cb, uint64_t n){    
+    static int disambig=0;
+    ++disambig;
+    std::ostringstream oss;
+    auto kName = OSSFMT("kernel_sum_k"<<disambig);
+    auto& kern = mk_scope(cb.getRoot(),kName,OSSFMT("for(size_t a=0; a<"<<n<<"; ++a)"))
+        .after(cb).at("body");
+    kern>>"k+=a;";
+    return kern;
+}
+void test_cblock_kernel(){
+    Cunit pr("program");
+    pr.v = 0;
+    // overall structure
+    pr["comments"]>>"// Cunit output from "<<__func__;
+    pr["includes"]>>"#include <assert.h>";
+    pr["macros"];
+    auto& cfuncs = mk_extern_c(pr,"extern_C");
+    pr["end"]<<"// vim: ts=4 sw=4 et cindent cino=^=l0,\\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\\:,0#,!^F,o,O,e,0=break";
+    // now fill in a function
+    pr.v = 1;
+    CBLOCK_SCOPE(fn,"int fn(int i)",pr,cfuncs);
+    fn>>"assert(i>=0);";
+    kernel_define_sum(fn,"int","j","i","i");
+
+    auto& sub = kernel_scope(fn,"i");
+    sub.define("COUNTER","j");
+
+    kernel_define_sum(fn,"//int","k","i","j"); // oh. would go before sub, which introduced a [] subblock!
+    kernel_define_sum(fn["1"],"int","k","i","j"); // I want it after sub.
+
+    kernel_sum_k(fn["ksum3"],3);
+    fn["2"]>>"// now use the kernel again";
+    kernel_sum_k(fn["ksum5"],5);
+
+    sub>>"// I can add a  comment to sub, after the fact";
+    fn["last"]>>"return 75/k;";
+    pr.v=0;
+    cout<<string(80,'-')<< pr.str() <<string(80,'-')<<endl;
+    cout<<string(80,'-')<< pr.tree() <<string(80,'-')<<endl;
+}
 int main(int,char**){
     test_cblock_basic();
     test_cblock_path();
@@ -1174,6 +1268,8 @@ int main(int,char**){
     test_cblock_short2();
     test_cblock_dump();
     test_cblock_macros();
+    test_cblock_define();
+    test_cblock_kernel();
     string code = cjitConvolutionForward00(); // optional arg: verbosity=0
     cout<<string(80,'-')<< code <<string(80,'-')<<endl;
     assert(code.size()>0);

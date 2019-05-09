@@ -291,7 +291,9 @@ struct Cblock {
      *
      * \return *this
      */
-    Cblock& define(std::string name, std::string subst);
+    Cblock& define(std::string name, std::string subst="");
+    /** define with narrow scope (current point in this, to this->["last"]["undefs"]). */
+    Cblock& define_here(std::string name, std::string subst="");
     /** For ease of JIT mirroring codes, if default output format of \c t is
      * enough, you can <EM>\#define name string_representation_of_t</EM>.
      * Often you will set up a macro so the the JIT \c name is the same as the
@@ -316,6 +318,12 @@ struct Cblock {
         std::ostringstream oss;
         oss<<t;
         return this->define(name, oss.str());
+    }
+    template<typename T>
+    Cblock& def_here(std::string name, T const& t){
+        std::ostringstream oss;
+        oss<<t;
+        return this->define_here(name, oss.str());
     }
 #endif
 
