@@ -290,7 +290,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     bool const have_jjMODvl = (vl0%jj!=0 && jj%vl0==0 && nloop>=jj/vl0);
     if( 1 || have_jjMODvl ){
         cout<<" nloop="<<nloop<<" jj/vl0="<<jj/vl0<<endl;
-        if( have_jjMODvl ) assert( jj/vl0 > 1 );
+        if( have_jjMODvl ){ assert( jj/vl0 > 1 ); }
         if( have_jjMODvl_reset ) assert( have_jjMODvl );
     }
     bool const have_sq = (jj!=1 && jj<vl0)                              // when iloop==0
@@ -617,8 +617,8 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj, int cons
         // have_FOO and cnt_FOO : FOO register usage condition and actual use count
         bool const have_vl_over_jj = nloop>1 && vl0%jj==0;
         bool const have_bA_bD = nloop>1 && vl%jj!=0 && jj%vl!=0;
-        bool const have_jjMODvl_reset      = (vl0%jj!=0 && jj%vl0==0 && nloop >jj/vl0); // case 'g'
-        bool const have_jjMODvl = (vl0%jj!=0 && jj%vl0==0 && nloop>=jj/vl0);
+        bool const have_jjMODvl       = (vl0%jj!=0 && jj%vl0==0 && nloop>=jj/vl0); // case 'f' or
+        bool const have_jjMODvl_reset = (vl0%jj!=0 && jj%vl0==0 && nloop >jj/vl0); // case 'g'
         if( 1 || have_jjMODvl ){
             cout<<" jj/vl0="<<jj/vl0<<endl;
             if( have_jjMODvl ) assert( jj/vl0 > 1 );

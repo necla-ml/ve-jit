@@ -495,6 +495,33 @@ inline Cblock& Cblock::after(Cblock& prev) {
  * ```
  * where all snippets inside loop_r are actually tightly associated with loop_s.
  * So that a function to easily embed loop_s JIT code \e wherever can be envisioned.
+ *
+ * Note: All nodes can be made into subtress with ["xxx"].  Often you can write
+ * code snippets whenever to a nodes code string.
+ * Ex. loop_s[".."]>>"#pragma unroll(4)"; will be incorrect if a subsequent
+ * loop_s[".."] sets up the induction variable \c vrs, because the pragma must
+ * be \e "immediately-before".
+ * 
+ * While you delay the pragma production to properly order it, a more robust idiom is:
+ * ```
+ * int const unroll_s = 4; // or some calculated max value?
+ * CBLOCK_SCOPE(loop_s,
+ * OSSFMT("#pragma unroll("<<unroll_s<<")\n"
+ *        "for (int64_t s = 0; s < kernWidth; s++)", pr, loop_r))
+ * ```
+ * A monolithically inserted code snippet can never be broken apart by Cblock ops.
+ *
+ * Other tricks to force node order include pre-defining code blocks and retaining
+ * references: `auto& a=cb["a"]; auto& b=cb["b"]; auto& c=cb["c"]; b>>"//to B";`.
+ *
+ * Or you can play with the generator's positioning of the ["xx"] creation
+ * operation, because this generates node xx at the end of all \e currently-known
+ * nodes.
+ *
+ * Other times, conditionally required code snippets require special declarations
+ * or cleanup code elsewhere.  Special care is needed (no generic quick-fix).
+ *
+ * up writing to loop_s["last"], sometimes to be safer things like Cblock::define will actaully write to loop_s["last"]["last"]
  */
 #define CBLOCK_SCOPE(CBLK_VAR,BEG,CUNIT,AFTER) auto& CBLK_VAR = mk_scope((CUNIT),#CBLK_VAR,(BEG)).after(AFTER)["body"];
 /** Sometimes you want to pass the block "body" to an outer scope as a pointer rather than a ref */
@@ -506,7 +533,7 @@ Cblock& mk_extern_c(Cunit& cunit, std::string name);
 Cblock& mk_cpp_if(Cunit& cunit, std::string name, std::string cond);
 /** make name/{beg,body,else,end} for plain if(cond){<body>}else{<else>} conditional block */
 Cblock& mk_cpp_ifelse(Cunit& cunit, std::string name, std::string cond);
-/* make name/{beg,body[,last],end} nodes.
+/* make name/{beg,first,body[,last],end} nodes.
  * We return the Cblock "name/body"
  * NEW: the 'cleanup' node is replaced by generic treatment of any sub-block
  *      whose name is "last".

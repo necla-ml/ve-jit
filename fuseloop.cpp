@@ -101,8 +101,8 @@ std::string str(UnrollSuggest const& u, std::string const& pfx /*=""*/){
           case(UNR_DIVMOD): oss<<" unroll("<<unroll_any<<")"; break;
         }
     }
-    if(u.vll) oss<<" [Alt vll="<<u.vll;
-    oss<<"\n";
+    if(u.vll) oss<<" [Alt vll="<<u.vll<<"]";
+    //oss<<"\n";
     return oss.str();
 }
 std::ostream& operator<<(std::ostream& os, UnrollSuggest const& u){
@@ -148,6 +148,7 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int cons
     // has no load instructions like Sx = S[Sw], where Sw is a cyclic register index.
     //
     // Aurora has register-indirect addressing M[V[Sw]] only for some vector ops,
+    // [scatter/gather]
     // and even there it is not loading register values, but memory values.
     //
     // if have_jjMODvl, this is an easy generic-loop case (treated here)
@@ -184,13 +185,30 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int cons
             <<endl;
         //assert( !have_b_period );
     }else if( jj%vl == 0 ){
-        //unroll = UNR_JJMODVL_NORESET; // XXX FIXME fastest case
-        ret.suggested = strategy = UNR_JJMODVL_RESET; // XXX FIXME
-        if(v)cout<<" C.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
-            <<strategy<<"\n\t"
-            <<", b_period="<<b_period<<b_period_pow2
-            <<" has a trivial jj%vl==0 update [no precalc, any small unroll]"
-            <<endl;
+        // fuse2.cpp shows 4 different update impls, one being trivial
+        // debug -- NORESET is definitely attainable
+        //bool const have_jjMODvl_reset = (vl0%jj!=0 && jj%vl0==0 && nloop >jj/vl0); // case 'g'
+        //bool const have_jjMODvl       = (vl0%jj!=0 && jj%vl0==0 && nloop>=jj/vl0);
+        //assert( have_jjMODvl );
+        if(nloop > jj/vl){ // have_jjMODvl_reset
+            //assert(have_jjMODvl_reset);
+            ret.suggested = strategy = UNR_JJMODVL_RESET;
+            // depending on jj/vl==2, other power-of-two, or anything else,
+            // have 3 different simple updates.
+            if(v)cout<<" C.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
+                <<strategy<<"\n\t"
+                    <<", b_period="<<b_period<<b_period_pow2
+                    <<" has a simple jj%vl==0 update [no precalc, any small unroll]"
+                    <<endl;
+        }else{
+            // update is trivial FOR(i,vl) b[i] = b[i] + vl;
+            ret.suggested = strategy = UNR_JJMODVL_NORESET;
+            if(v)cout<<" c.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
+                <<strategy<<"\n\t"
+                    <<", b_period="<<b_period<<b_period_pow2
+                    <<" has a trivial jj%vl==0 update [no precalc, any small unroll]"
+                    <<endl;
+        }
         //assert( !have_b_period );
         //assert("Never got case B"==nullptr);
     }else if( jj_pow2 ){
@@ -304,7 +322,7 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
     }
     double const f=0.90;
     int const vl = u.vl;
-    int const vl_max = max(1,vl-1);
+    int const vl_max = max(1,(u.suggested==UNR_UNSET? vl: vl-1));
     if( vl_min < 1 || vl_min > vl ){ // vl_min default (or out-of-range)?
         vl_min = max( 1, (int)(f*vl) );
     }
@@ -312,9 +330,10 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
     //
     auto const sugg = u.suggested; // induction strategy
     bool const jj_pow2 = positivePow2(u.jj);
-    if( sugg != UNR_NLOOP1 && sugg!=UNR_VLMODJJ && sugg!=UNR_JJMODVL_RESET && !jj_pow2 ){
+    if( sugg != UNR_NLOOP1 && sugg!=UNR_VLMODJJ && sugg!=UNR_JJMODVL_NORESET
+            && sugg!=UNR_JJMODVL_RESET && !jj_pow2 ){
         // quick check for very easy cases (just print msg)
-        // (always print, even for a vll < vl_min)
+        // PURELY INFORMATIVE: always print, even for a vll < vl_min
         int const jj = u.jj;
         if( jj < vl ){
             int const vll = vl/jj*jj;
@@ -343,16 +362,39 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
     // If u.vl is already "efficient", still try for a decent low-vl alternate
     UnrollSuggest ret = UnrollSuggest(); // If no good alt, ret is 'empty'
     u.vll = 0;                           //             and u.vll is zero
-    cout<<"Checking vll "; cout.flush();
-    for( int vll = vl_max; vll >= vl_min; --vll){
-        cout<<" "<<vll; cout.flush();
-        UnrollSuggest us = unroll_suggest(vll, u.ii, u.jj, u.b_period_max, 0/*verbose*/);
-        if( us.suggested != UNR_DIVMOD ){
-            ret = us;    // return the nice alt
-            cout<<"\nALTERNATE strategy at vll="<<vll<<" ("
-                <<int(vll*1000./vl)*0.1<<"% of vl)\n  "<<ret<<endl;
-            u.vll = vll; // also record existence-of-alt into u
-            break;
+    if( u.suggested == UNR_JJMODVL_NORESET )
+        cout<<"  ---> UNR_DIVMOD_NORESET trivial, no better alt"<<endl;
+    else if( u.suggested == UNR_NLOOP1 )
+        cout<<"  ---> NLOOP1 has no better alt"<<endl;
+    else if( u.suggested == UNR_VLMODJJ )
+        cout<<"  ---> UNR_VLMODJJ trivial, no better alt"<<endl;
+    else{
+        cout<<"Checking vll "; cout.flush();
+        for( int vll = vl_max; vll >= vl_min; --vll){
+            cout<<" "<<vll; cout.flush();
+            UnrollSuggest us = unroll_suggest(vll, u.ii, u.jj, u.b_period_max, 0/*verbose*/);
+            if( u.suggested != UNR_UNSET && us.suggested == UNR_DIVMOD ){
+                // this is the worst, so it cannot be an improvement (and might even have nloop higher)
+                continue;
+            }else{
+                cout<<"\nALTERNATE strategy at vll="<<vll<<" ("
+                    <<int(vll*1000./vl)*0.1<<"% of vl)\n  "<<us<<endl;
+                // Is this alt any different?
+                if(us.suggested == u.suggested && us.unroll>=u.unroll){ // it can't be much better
+                    cout<<"  ---> skipped because it's too similar to original"<<endl;
+                    continue;
+                }
+                if(u.suggested==UNR_JJMODVL_RESET /*other JJMODVL trivial, never here*/
+                        && (us.suggested==UNR_JJPOW2_NLOOP || us.suggested==UNR_JJPOW2_BIG)){
+                    cout<<"  ---> JJPOW2 without precalc (4 vec ops) never beats JJMODVL"<<endl;
+                    continue;
+                }
+                if(us.suggested == UNR_JJPOW2_BIG){
+                    ret = us;    // return the nice alt
+                    u.vll = vll; // also record existence-of-alt into u
+                    break;
+                }
+            }
         }
     }
     cout<<endl;

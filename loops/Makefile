@@ -8,8 +8,8 @@ all: fuse2 fuse2lin fuse3 mega1-sample.log
 	@echo 'ALL DONE with make all'
 	@echo ' extra targets:'
 	@echo '    more  force-lib ../libjit1[-x86].a'
-	@echo '    mega1 mega1.log mega2 mega2.log'
-more: all tf2-1.log tf2-2.log tf2-3.log tf2-4.log tf2-0.log tf2-5.log tf2-m.log tf2-sample.log
+	@echo '    mega1 mega1.log mega2 mega2.log mega1-sample.log'
+more: all tf2-1.log tf2-2.log tf2-3.log tf2-4.log tf2-0.log tf2-5.log tf2-m.log mega1-sample.log
 
 # This may be somewhat lengthy
 force: force-lib
@@ -89,8 +89,11 @@ mega2: Makefile fuse2
 	./fuse2 -t $$vlen $$ii $$jj; \
 	done; done; done; \
 	) >> $@.log;
-	grep 'ExecHash' $@.log >> $@-hash.log; \
-	sort -k2,3 --unique $@-hash.log > $@-hash-unique.log
+	grep 'ExecHash' $@.log >> $@-hash.log
+	sort -k2,3 --unique $@-hash.log > $@-uniq.log
+	sort -r -n -k5 -k7 --stable $@-uniq.log > $@-uniqs.log
+mega2.log mega2-hash.log mega2-uniq.log mega2-uniqs.log:
+	if [ ! -f "$@" ]; then $(MAKE) mega2; fi
 mega1-sample.log: Makefile fuse2
 	# all code paths from mega1-uniqs.log,
 	#    stressing VL=256 and Vl=255
@@ -776,7 +779,8 @@ tdivmod-ve: tdivmod.cpp ../timer.h ../intutil.h
 	g++ -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
 	g++ -Wall -std=c++11 -I.. -O3 $< -o $@
 clean:
-	rm -f *.i *.o fuse2 fuse2lin fuse2-ve fuse3 fuse3-ve repro a.out *.gch
+	rm -f *.i *.o *.gch a.out fuse2 fuse2lin fuse2-ve fuse3 fuse3-ve repro \
+		cfuse2 tdivmod tdivmod-ve
 	rm -f a.s  cblock cfuse libgcc_lucky.so
 	rm -f *.exe *.exe.stackdump
 realclean: clean	
