@@ -4,6 +4,7 @@
 #include "codegenasm.hpp" // really?
 #include "stringutil.hpp"
 #include "asmfmt.hpp"
+#include "cblock.hpp"
 #include <list>
 #include <utility>
 #include <string>
@@ -137,6 +138,49 @@ void VecHash2::kern_asm_begin( AsmFmtCols &ro_regs, AsmFmtCols &state,
         // TBD: vector state
         //state.ins("vbrdl vh_x,0","vechash2 state init DONE");
     }
+}
+void VecHash2::kern_C_begin( cprog::Cblock &defines, cprog::Cblock &state,
+        char const* client_vs/*=nullptr*/, uint32_t const seed/*=0*/ )
+{
+    ostringstream oss;
+    defines
+        >>OSSFMT("uint64_t const rnd64a = "<<scramble64::r1<<"ULL;")
+        >>OSSFMT("uint64_t const rnd64b = "<<scramble64::r2<<"ULL;")
+        >>OSSFMT("uint64_t const rnd64c = "<<scramble64::r3<<"ULL;")
+        ;
+    state>>OSSFMT("uint64_t vh2_j = "<<hex<<((uint64_t)seed<<32)<<"ULL; // vh2 state");
+    if(client_vs){ // client has a vseq=0..MVL ?
+        state.define("vh_vs",client_vs);
+    }else{
+        state<<OSSFMT("_ve_lvl(256);\n"
+                "__vr const vh_vs = _ve_vseq_v()"<<client_vs<<"; // vh2 vseq");
+    }
+}
+void VecHash2::kern_C( cprog::Cblock &parent,
+        std::string va, std::string vb, std::string vl, std::string hash)
+{
+    ostringstream oss;
+    CBLOCK_SCOPE(vh,"",parent.getRoot(),parent);
+    vh  >>"// vechash2 : kernel begins"
+        >>OSSFMT("//  in: 2 u64 vectors "<<va<<", "<<vb<<", VL="<<vl)
+        >>OSSFMT("//  inout: "<<hash<<" (scalar reg)")
+        >>OSSFMT("//  state: vh2_j")
+        >>OSSFMT("//  const: rnd64a, rnd64b, rnd64c, vh_vs")
+        >>OSSFMT("//  scratch: vh2_r, vh2_vx, vh2_vy, vh2_vz")
+        ;
+    vh  >>OSSFMT("__vr vh2_vx = _ve_vmulul_vsv(rnd64b,"<<va<<");")
+        >>"__vr vh2_vy = _ve_vaddul_vsv(vh2_j,vh_vs); // init state j"
+        >>OSSFMT("__vr vh2_vz = _ve_vmulul_vsv(rnd64b,"<<vb<<");")
+        >>"vh2_vy = _ve_vmulul_vsv(rnd64a,vh2_vy);"
+        >>"vh2_vx = _ve_vaddul_vsv(vh2_vx,vh2_vz);"
+        >>"vh2_vz = _ve_vaddul_vsv(vh2_vx,vh2_vy); // vz ~ sum of xyz scrambles"
+        >>"__vr vh2_vx = _ve_vrxor_vv(vh2_vz); // missing instruction ?"
+        >>"uint64_t vh2_r = ve_lvs_svs_u64(vh2_vx,0)"
+        >>OSSFMT("vh2_j += "<<vl)
+        >>OSSFMT(hash<<" = "<<hash<<" ^ vh2_r")
+        ;
+}
+void VecHash2::kern_C_end( cprog::Cblock &cb ){
 }
 /** input strings are registers.
  * \c va, \c vb (vectors) of length \c vl (scalar) are to be mixed in

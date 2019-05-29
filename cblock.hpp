@@ -239,9 +239,15 @@ struct Cblock {
     std::ostream& dump(std::ostream& os, int const ind=0);
     /** return string for subtree, unindented, no effect on \c write */
     std::string str();
+    /** return immediate code string, no subblocks, ex for empty check */
+    std::string const& code_str() const {return this->_code;}
 
+    /** reset code, subblocks and pre-/post-manipulators */
+    Cblock& clear();
+    /** swap all `_code` for something new */
+    Cblock& set(std::string s) {_code=s; return *this;}
     Cblock& setType(std::string type) {_type=type; return *this;}
-    Cblock& setName(std::string type); // {this->type=type; return *this;} and update root!
+    Cblock& setName(std::string type); ///< `{this->type=type; return *this;}` and update root!
     std::string const& getName() const;
     Cunit& getRoot() const;
     //Cblock& append(std::string code) {this->code += code; return *this;} // maybe inefficient
@@ -336,7 +342,6 @@ struct Cblock {
     //@}
   private:
     friend struct Cunit;
-    void clear(){ for(auto s: _sub) delete(s); _sub.clear(); }
     /** Remove \c this from \c _parent.sub[] .
      * \throw if attempting to unlink the root
      * \post \c _parent==nullptr
@@ -347,8 +352,8 @@ struct Cblock {
     struct Cunit * const _root;
     struct Cblock * _parent;
   private:
-    std::string _name;
-    std::string _type;
+    std::string _name;              ///< terminal \e path component (from root)
+    std::string _type;              ///< unused?
     CbmanipBase* _premanip;         ///< TODO support multiple?
     std::string _code;
     std::vector<Cblock*> _sub;      ///< TODO separate '_exit' block with \e always-last semantics?

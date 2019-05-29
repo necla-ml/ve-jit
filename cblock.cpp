@@ -486,6 +486,15 @@ std::string Cblock::str(){
     this->write( oss, false/*chkWrite*/ );
     return oss.str();
 }
+Cblock& Cblock::clear(){
+    _code="";
+    for(auto s: _sub) delete(s);
+    _sub.clear();
+    _type="";
+    if(_premanip){ delete(_premanip); _premanip=nullptr;}
+    if(_postmanip){ delete(_postmanip); _postmanip=nullptr;}
+    return *this;
+}
 
 }//cprog::
 

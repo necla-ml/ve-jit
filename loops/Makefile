@@ -40,8 +40,6 @@ fuse2: fuse2.cpp ../libjit1-x86.a ../libveli-x86.a
 	echo "LDLIBS=${LDLIBS}"
 	#g++ -Wall -Wno-unknown-pragmas -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
 	g++ -Wall -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
-cfuse2: cfuse2.cpp ../libjit1-x86.a
-	g++ -Wall -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
 fuse3: fuse3.cpp ../libjit1-x86.a ../libveli-x86.a
 	echo "CC=${CC}"
 	echo "LDLIBS=${LDLIBS}"
@@ -764,8 +762,6 @@ tf2-0.log: fuse2 Makefile tf2-3.log
 		&& ./fuse2 -t 64 40 12 \
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
-cfuse: cfuse.cpp
-	g++ -Wall -std=c++11 -I.. -O3 $< -o $@ ${LDFLAGS} ${LDLIBS}
 mul_add_shr_div: mul_add_shr_div.cpp ../timer.h ../intutil.h
 	g++ -Wall -std=c++11 -I.. -O3 $< -o $@
 tdivmod: tdivmod.cpp ../timer.h ../intutil.h
@@ -775,6 +771,12 @@ tdivmod: tdivmod.cpp ../timer.h ../intutil.h
 tdivmod-ve: tdivmod.cpp ../timer.h ../intutil.h
 	clang++ ${CXXLANG_FLAGS} -Wall -std=c++11 -I.. -O3 -S $< -o $@.s
 	$(NCXX) $(CFLAGS) $@.s -o $@
+cfuse: cfuse.cpp ../libjit1-x86.a
+	g++ -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+cfuse2: cfuse2.cpp ../libjit1-x86.a ../fuseloop.hpp ../cblock.hpp ../vechash.hpp ./exechash.hpp
+	g++ -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+cfuse3: cfuse3.cpp ../libjit1-x86.a
+	g++ -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 %: %.cpp
 	g++ -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
 	g++ -Wall -std=c++11 -I.. -O3 $< -o $@

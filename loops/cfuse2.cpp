@@ -36,6 +36,11 @@
 #define FOR(I,VL) for(int I=0;I<VL;++I)
 #endif
 
+#define DEF(VAR) def(#VAR,VAR)
+
+#define CBLOCK_FOR(CBVAR,UN_ROLL,INTRO,CBPARENT) \
+    CBLOCK_SCOPE(CBVAR,OSSFMT(UNROLL(UN_ROLL) INTRO),CBPARENT.getRoot(),CBPARENT)
+
 using namespace std;
 using namespace loop;
 using namespace cprog;
@@ -430,12 +435,11 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj, int cons
     ExecHash tr;
     //CodeGenAsm cg;
     //std::string code;
-    // What vl should we really use? vlen or an alternative (lower) length?
-    register int vl = vlen;
     int const b_period_max = 8; // how many regs can you spare?
 
     // This is pinned at [max] vl, even if it may be "inefficient".
-    auto u = unroll_suggest( vl,ii,jj, b_period_max );
+    auto u = unroll_suggest( vlen,ii,jj, b_period_max );
+    int vl = u.vl;
 
     auto uAlt = unroll_suggest(u);  // suggest an alternate nice vector length, sometimes.
     if(opt_t==3){ // we FORCE the alternate strategy
@@ -566,52 +570,41 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj, int cons
 
         register uint64_t cnt = iijj; // NEW: iijj to one [i.e. remain], rather than [0..iijj)
 
-#if 0
-        AsmFmtCols fd,fp,fi,fk,fl,fz;
-        fp.com("fuse2 presets").setParent(&fd);
-        fi.setParent(&fp);
-        fk.setParent(&fp);
-        fl.setParent(&fp);
-        fz.setParent(&fp);
+#define STYLE_GOTO 0
+#define STYLE_FORLOOP 1
+        /** 0: `goto` 1: `for(cnt=0; cnt<ii*jj; ++cnt)` */
+#define STYLE 1
+#define SAVE_RESTORE_VLEN 0
+#define HASH_KERNEL 0
+        Cunit pr("cfuse2","C",0/*verbose*/);
+        auto& inc = pr.root["includes"];
+        auto& fns = pr.root["fns"];
+        CBLOCK_SCOPE(cfuse2,"int main(int,char**)",pr,fns["main"]);
+        auto& fd = cfuse2["../first"];  //cfuse2["defines"];
+#if STYLE==STYLE_GOTO
+        auto& fp = cfuse2["init"];        //fp>>"//cfuse2 presets";
+        auto& fi = cfuse2["induce"]["body"];
+        CBLOCK_SCOPE(fk,"",pr,fi);
 #else
-        Cunit pr("cfuse2","C",1);
-        CBLOCK_SCOPE(cfuse2,"",pr,pr.root);
-        auto& fd = cfuse2["defines"];
-        auto& fp = fd["preset"]; fp>>"//cfuse2 presets";
-        auto& fi = fd["induce"]; // really?
-        //auto& fk = fd["kernel"];
-        CBLOCK_SCOPE(fk,"",pr,fd);
-        fk  >>"// Even though we replace a 'C' for()for(), we use goto style"
-            >>"// so that: (i) initialization and induction code is separated,"
-            >>"// (ii) loop exit test can be optimized in some cases, and"
-            >>"// (iii) we have a ** single insertion point ** for kernel code"
-            >>"// (iv) avoid branches in or out of loop scope;"
-            >>"// (v) this is the natural structure for the assembler version (fuse2.cpp)"
-            >>"//"
-            >>"// ... but this loop style cannot be unrolled automatically"
-            >>"//     (should try out the loop option with cnt==0 as special"
-            >>"//      case because maybe the compiler will peel the loop"
-            >>"//      automatically --> more readable JIT code !!! )"
-            ;
-        //
-        //   gcc apparently has loop splitting,
-        //   but llvm might not:
-        //
-        //   http://lists.llvm.org/pipermail/llvm-bugs/2018-April/063932.html
-        //
-        //   "[llvm-bugs] [Bug 36990] New: LLVM is missing loop splitting"
-        //
-        // with little activity in the last year.
-        //
-
-        auto& fl = fd["loopend"];
-        auto& fz = fd["last"];
+        fd  >>"int64_t const iijj = (uint64_t)ii * (uint64_t)jj;"
+            <<OSSFMT(" // cnt to "<<ii<<"*"<<jj<<"="<<iijj<<" by "<<vl0);
+        CBLOCK_SCOPE(loop_ab, (nloop>1
+                    ?"for(int64_t cnt=0; cnt<<iijj; cnt+=vl0)"
+                    :"if(1 /*nloop<=1*/)"),pr,cfuse2["loop"]);
+        //auto& fp = loop_ab["../first"];
+        //CBLOCK_SCOPE(fp, (nloop>1?"if(cnt==0)":""),pr,loop_ab["../first"]);
+        CBLOCK_SCOPE(fp, "",pr,loop_ab["../first"]);
+        cout<<"fp..beg="<<fp["../beg"].code_str()<<endl;
+        auto& fi = loop_ab["last"];
+        auto& fk = loop_ab["kernel"];
+        //CBLOCK_SCOPE(fk,"",pr,fi);
 #endif
+        auto& fl = cfuse2["last"]["first"];
+        auto& fz = fl["last"]["last"];
 
-        // important: vechash puts a scope onto fp, so later code snippets
-        // fk,fl,fz should not "miss" any current scopes. (i.e. it is up
-        // to us to create an appropriate tree of scopes).
-
+        inc >>"#include \"veintrin.h\""
+            >>"#include \"stdint.h\""
+            ;
         // local labels:
         string fusename;
         {
@@ -623,197 +616,29 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj, int cons
             //.def("BASE", "L_"+fusename+"_BASE")
             .def("INDUCE", "L_"+fusename+"_INDUCE")
             .def("KERNEL_BLOCK", "L_"+fusename+"_KERNEL_BLOCK")
-            .def("vl0", vl0)
-            .def("FASTDIV_C",FASTDIV_C)
-#if 0
-            .def("FASTDIV_"+jitdec(jj)+"(VR_IN,VR_DIV,VR_REM)", "do{ \\\n"
-                    "    __vr tmp1 =_ve_vmulul_vsv(VR_IN, FASTDIV_MUL_"+jitdec(jj)+");\\\n"
-                    "    VR_DIV = _ve_vsrl_vsv(tmp1, "+jitdec(FASTDIV_C)+"); \\\n"
-                    "    __vr tmp2 = _ve_vmulul_vsv(VR_DIV, "+jitdec(jj)+"); \\\n"
-                    "    VR_REM = _ve_vsubul_vvv(VR_IN, tmp2); \\\n"
-                    "}while(0)"
-                )
-#endif
-            >>"int64_t vl;"
-            >>"int64_t ii;"
-            >>"int64_t jj;"
-            >>"int64_t base;"
+            .DEF(vl0)
+            .DEF(ii)
+            .DEF(jj)
             ;
 
         { // illustrate use of auto-register assignments,
-            // even before the scope is officially defined in an AsmFmtCols
-            // UTILITY LAMBDAS
-            // pre-assign some registers to fd "defines" scope
-            // I don't care about speed, for now.
-
-            // Allocations // const registers
-            if( have_sq )   fd>>"int64_t sq;";
-            // Allocations // state registers
-            // Note that many of these are optional, so register assignments
-            // for different kernels may be ... different.
-#define SAVE_RESTORE_VLEN 1
-#define HASH_KERNEL 1
-            if(nloop>1)                     
-            if(nloop>1 && (iijj%vl0) )      fd>>"int64_t vl;"; //block_alloc_scalar("vl");
-            if(SAVE_RESTORE_VLEN)           fd>>"//int64_t vl_save;"; //block_alloc_scalar("vl_save");
-            if(HASH_KERNEL) fd>>"//int64_t reg_hash;"; //ve_propose_reg("reg_hash",block,fd,SCALAR);
-            if(HASH_KERNEL) fd>>"//int64_t tmp;"; //block,fd,SCALAR_TMP);
-            if(have_jj_shift)
-                fp.def("jj_shift",jj_shift);
-
-#if 0
-            // ii and jj usage ends pretty early, so [hand-optimization...]
-            // we can re-use some always-there regs...
-            if( have_jjMODvl_reset ){
-                //block.push_back({"jjovl","%s7"});
-                // new: iloop%vl as a cyclic counter simplifies things...
-                block.push_back({"tmod","ii"});
-                if(jj/vl>2) block.push_back({"tm0","jj"});
-            }else{
-                if(have_vl_over_jj && !have_jj_M){
-                    if(vl/jj > 127) block.push_back({"vlojj","ii"}); // register absolutely needed
-                    //else block.push_back({"vlojj",jitdec(vl/jj)}); // we'll jitdec(vl/jj) below
-                }else if( have_jj_M ){
-                    // For jj=1,2 don't need jj_M, so smallest jj for jj_M is 3,
-                    // So vlojj is ** at most ** MVL/jj or 256/3 ~ 85
-                    assert( vl/jj <= 85 );
-                    // we never need vlojj in a register in this case
-                    // Note: we also need the jj value if nloop > 1, so put jj_M into ii...
-                    block.push_back({"jj_M", "ii"}); // not a short/nice value
-                }
-            }
-#endif
-            // this forcing of "register re-use" is of course bogus for C intrinsics XXX
-            if( have_jjMODvl_reset ){
-                fp.def("tmod","ii");
-                if(jj/vl>2) fp.def("tm0","jj");
-            }else{
-                if(have_vl_over_jj && !have_jj_M){
-                    if(vl/jj > 127) fp.def("vlojj","ii");
-                }else if( have_jj_M ){
-                    assert( vl/jj <= 85 );
-                    //fp.def("jj_M","ii");
-                }
-            }
-
-            // vector regs
-            fd  >>"__vr a;" >>"__vr b;";
-            if(have_jj_M){
-                fd  >>"__vr vx;">>"__vr vy;";
-            }
-            if((have_jj_M && nloop>1)){
-                fd  >>"__vr bA;">>"__vr bD";
-            }
+            //if(SAVE_RESTORE_VLEN)           fd>>"//int64_t vl_save;"; //block_alloc_scalar("vl_save");
+            //if(HASH_KERNEL) fd>>"//int64_t reg_hash;"; //ve_propose_reg("reg_hash",block,fd,SCALAR);
+            //if(HASH_KERNEL) fd>>"//int64_t tmp;"; //block,fd,SCALAR_TMP);
         }
 
         //fd.scope(block,"vectorized double-loop --> index vectors");
         //+++++++++++++++++ constant registers +++++++++++++++++++
         //fd.ins("lvl vl0",                   "VL = vl0");
-        fd>>"_ve_lvl(vl0);  // VL = vl0";
+        fd>>OSSFMT("_ve_lvl(vl0);  // VL = "<<vl0);
         if( have_sq ){
-            //fd.ins("vseq sq");
-            fd>>"__vr const sq = _ve_vseq_v();";
             FOR(i,vl) sq[i] = i;       // vseq_v
         }
 
         //+++++++++++++++++ fuse2 state registers +++++++++++++++++++
-        if(nloop>1 && (iijj%vl0) ){
-            fp>>"vl = 0;"; //fp.ins("or  vl, vl0,vl0", "vl = vl0");
-        }
         if(SAVE_RESTORE_VLEN){
-            //fp.ins("svl vl_save","save original VL --> vl_save [opt]");
-            fp>>"//vl_save = _ve_svl_s; // <--- this intrinsic was not there?";
+            fp>>"//int64_t vl_save = _ve_svl_s; // <--- this intrinsic was not there?";
         }
-        if(HASH_KERNEL){
-            fp>>"reg_hash = 0;"; //fp.ins("lea reg_hash, 0");
-        }
-        fp>>"_ve_lvl(vl0); // VL = vl0"; //fp.ins("lvl vl0",                   "VL = vl0");
-
-        if(nloop > 1 /*&& iijj%vl0==0*/ ){
-            auto comment="cnt=ii*jj= "+jitdec(ii)+"*"+jitdec(jj)+" to 1 by "+jitdec(vl0);
-#if 0
-            auto ops = opLoadregStrings(iijj);
-            if(ops.lea.empty() && ops.log.empty() && ops.shl.empty() && ops.ari.empty()){
-                fp.ins(multiReplace("OUT", "cnt", choose(ops)));
-            }else{
-                fp.ins("mulu cnt, ii,jj", comment);
-            }
-#else
-            fp>>"// "<<comment;
-            fp>>"cnt = (unsigned)ii * (unsigned)jj;";
-#endif
-        }
-        fp>>"// ii and jj regs now reusable"; //fp.rcom("ii and jj regs now reusable");
-
-        if( have_jjMODvl_reset ){
-            //fp.ins("lea jjovl,"+jitdec(jj/vl),      "jjovl = jj/vl = "+jitdec(jj)+"/"+jitdec(vl));
-            //fp.ins("xor tmod, %s0,%s0",             "tmod=0, cycling < (jj/vl="+jitdec(jj/vl)+")");
-            CBLK(fp,"int64_t tmod = 0; // tmod=0, cycling < (jj/vl="<<jj/vl<<")");
-        }else{
-            // NB: jj_M and vlojj are const registers, so they go into fd code
-            if(have_vl_over_jj && !have_jj_M){
-                if(vl/jj > 127)
-                    //fd.ins("lea vlojj,"+jitdec(vl/jj),
-                    //        "A vlojj = vl/jj = "+jitdec(vl)+"/"+jitdec(jj));
-                    CBLK(fd,"vlojj = "<<vl/jj<<"; // A vlojj=vl/jj="<<vl<<"/"<<jj);
-            }else if( have_jj_M ){
-                //fd.ins(ve_load64("jj_M",jj_M)," fastdiv by "+jitdec(jj));
-                fd.def("jj_M",jithex(jj_M))<<" // fastdiv by "+asDec(jj);
-            }else{
-                assert( !have_jj_M && !have_vl_over_jj );
-            }
-        }
-
-#if 0
-        cout<<" ********************** VECHASH VECHASH *********************"<<endl;
-        // NOTE: fd is the parent but fp is where the code "should" really appear
-        //       I think.   --- how to attache scope_parent concept to AsmFmtCols?
-        if(have_sq)
-            VecHash2::kern_asm_begin(fd,fp, "sq");
-        else
-            VecHash2::kern_asm_begin(fd,fp); // it'll grab %v40 or such and hold it
-        // TODO: a way for subkernel to request state registers from caller.
-#else
-        fd>>"// VecHash kernel defines?";
-        fp>>"// VecHash kernel precalc?";
-#endif
-
-#if 0
-        // are we doing any b_period or nloop precalc?
-        int const b_period_max = 8; // how many regs can you spare?
-        //int const b_period = unroll_suggest( vl, jj, b_period_max );
-        auto const suggest = unroll_suggest( vl,ii,jj, b_period_max );
-
-#if 0    // later ...
-        // use \c suggestion to create UnrollData
-        auto const unr = mkUnroll_data( vl, ii, jj, b_period_max );
-#else // for now...
-        // TODO : precal for low b_periods XXX
-        // Precalc for init-phase [iloop==0] when 1<jj<vl,
-        // o/w use trivial 2-op instructions to initialize them
-        bool const init_precalc = (1<jj && jj< vl0);
-        //
-        // Precalc for induction-phase only sometimes useful...
-        bool const ind_precalc = (suggest==UNR_NLOOP1
-                || suggest==UNR_JJMODVL_RESET // TBD??
-                || suggest==UNR_JJPOW2_CYC
-                || suggest==UNR_NLOOP
-                || suggest==UNR_CYC);
-        // Calculate init and ind precalc data vectors
-        if( init_precalc ){
-            ;
-        }else if( ind_precalc ){
-            ;
-        }
-#endif
-        // precalc
-        //int const bigfrac_vl_jj = (have_jjMODvl? jj_over_vl: have_vl_over_jj? vl_over_jj: bogus);
-        //cout<<"=== //   register uint64_t bigfrac_vl_jj = "<<bigfrac_vl_jj<<"; // immediate";
-#endif
-        // reformulate as iloop==0 init-code, and
-        // then jump into loop (after induction formula)
-        //    (more assembly-like)
-
         verbose = 0; // cleans up the pseudocode output a bit
         // during loop, output pseudocode just once
         bool onceI = true; // induce-block code output at most once
@@ -821,7 +646,31 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj, int cons
         bool onceL = true; // loop continueation code output exactly once
         // if no loop, some loop block are not required
         if(nloop==1){ onceI=false; onceL=false; } // no code for these blocks
+        bool def_cnt = false; // track multiple cases requiring same var defined
+        // TODO: some kernels may REQUIRE sqij[i] = a[i]*jj+b[i] "pixel index" vector too.
+        //   and this has a trivial (1 add) update (no multiply needed).
+        // TODO: some kernels may require fast inductive LINEAR COMBINATION,
+        //   lin[i] = linA*a[i] + linB*b[i] + linC input,
+        //   given jit constants linA, linB, linC,
+        //   for which we sometimes can do better than brute-force calc
+        // Ex. our loops are really for(i=I..I+ii)for(j=J..J+jj)
+        //     or the loops represent "outer" tensor dimensions
+        //     or we have some other (stride/dilation?) multiplying factors
+        //        to map into a different tensor.
+        bool def_sqij = false;
 
+        string alg_descr;
+        {
+            std::ostringstream oss;
+            oss<<" Fuse2 alg: vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop;
+            if(vl0%jj==0) oss<<" vl%jj==0";
+            else if(jj%vl==0) oss<<" jj%vl==0";
+            else if(positivePow2(jj)) oss<<" jj=2^"<<jj_shift;
+            alg_descr = oss.str();
+        }
+        fp>>"// "<<alg_descr;
+        fp>>"//  "<<OSSFMT(u);
+        fp>>OSSFMT("//  for(i=0.."<<ii<<"))for(j=0.."<<jj<<") --> __vr a, b of of i,j loop indices, VL="<<vl0);
         // We are writing
         //     ```for( ; cnt < iijj; cnt += vl )```
         //     NEW: ```for( ; cnt>0; cnt -= vl )```
@@ -836,21 +685,25 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj, int cons
             if(nloop==1) assert(have_vl_over_jj==0);
             // now load the initial vector-loop registers:
             // sq[i] and jj are < FASTDIV_SAFEMAX, so we can avoid % and / operations
+            std::string vREG=(STYLE==STYLE_GOTO? "__vr ":"");
+#if STYLE!=STYLE_GOTO
+            fd>>"__vr a, b; // vector loop index registers";
+#endif
             if( jj==1 ){
                 tr+="init:iloop 1 jj==1";
                 FOR(i,vl) a[i] = i;    // sq/jj   or perhaps change have_sq?
                 FOR(i,vl) b[i] = 0;    // sq%jj
                 assert(have_bA_bD==0); assert(have_sq==0); assert(have_jj_shift==0);
-                fp>>"a = _ve_vseq_v();         // a[i] = i";
-                fp>>"b = _ve_vbrd_vs_i64(0LL); // b[i] = 0";
+                fp>>vREG<<"a = _ve_vseq_v();         // a[i] = i";
+                fp>>vREG<<"b = _ve_vbrd_vs_i64(0LL); // b[i] = 0";
             }else if(jj>=vl){
                 tr+="init:iloop 1 jj>=vl";
                 if(verbose)cout<<" b";
                 FOR(i,vl) a[i] = 0;    // sq < vl, so sq/jj < 1
                 FOR(i,vl) b[i] = i;
                 if(nloop<=1) {assert(have_bA_bD==0); assert(have_sq==0); assert(have_jj_shift==0);}
-                fp>>"a = _ve_vbrd_vs_i64(0LL); // a[i] = 0";
-                fp>>"b = _ve_vseq_v();         // b[i] = i;";
+                fp>>vREG<<"a = _ve_vbrd_vs_i64(0LL); // a[i] = 0";
+                fp>>vREG<<"b = _ve_vseq_v();         // b[i] = i;";
             }else if( positivePow2(jj) ){
                 tr+="init:iloop 1 pow2jj";
                 if(verbose)cout<<" c";
@@ -861,7 +714,9 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj, int cons
                 ++cnt_sq; ++cnt_jj_shift;
                 //fp.ins("vsrl.l.zx a, sq,"+jitdec(jj_shift), "a[i]=sq[i]/jj =sq[i]>>"+jitdec(jj_shift));
                 //fp.ins("vand.l    b, "+jitimm(jj_minus_1)+",sq", "b[i]=sq[i]%jj =sq[i] & (2^"+jitdec(jj_shift)+"-1)");
-                CBLK(fp,"_ve_vsrl_vvs(a, sq, jj_shift); // a[i]=sq[i]/jj = sq[i]>>"<<jj_shift);
+                fd.DEF(jj_shift);
+                fp>>vREG<<"a = _ve_vsrl_vvs(sq, jj_shift); // a[i]=sq[i]/jj = sq[i]>>"<<jitdec(jj_shift);
+                fp>>vREG<<"b = _ve_vand_vsv("<<jithex(jj-1)<<",sq);       // b[i]=sq[i]%jj";
             }else{
                 tr+="init:iloop 1 fastdiv";
                 if(verbose)cout<<" d";
@@ -874,320 +729,259 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj, int cons
                 // use mul_add_shr (fastdiv) approach if jj+vl>FASTDIV_SAFEMAX (1 more vector_add_scalar)
                 if(nloop<=1) assert(have_bA_bD==0); assert(have_sq==1); assert(have_jj_shift==0);
                 ++cnt_sq; ++cnt_jj_M;
-                //fp.ins("vmulu.l   vx, sq,jj_M",      "fast division by jj="+jitdec(jj));
-                //fp.ins("vsrl.l.zx a, vx,"+jitdec(FASTDIV_C), "  a[i] = sq[i]*jj_M >> "+jitdec(FASTDIV_C));
-                //fp.ins("vmulu.l   vy, a,jj",         "form sq[i]%jj");
-                //fp.ins("vsubu.l   b, sq,vy",         "  b[i] = sq[i] - a[i]*jj");
-                CBLK(fp,"vx = _ve_vmulul_vsv(sq, jj_M);    // vx[i]=sq[i]/"<<jitdec(jj)<<" via fastdiv");
-                CBLK(fp,"a  = _ve_vsrl_vsv(vx, FASTDIV_C); // a[i] = sq[i]*jj_M >> "<<jitdec(FASTDIV_C));
-                CBLK(fp,"vy = _ve_vmulul_vsv(a, jj);       // form sq[i]%jj");
-                CBLK(fp,"b  = _ve_vsubul_vvv(sq,vy);       // b[i] = sq[i] - a[i]*jj");
+                fp  >>vREG<<"a = FASTDIV_"<<asDec(jj)<<"(sq);                           // a[i] = sq[i]/jj"
+                    >>vREG<<"b = _ve_vsubul_vvv(sq,_ve_vmulul_vsv(jj, a)); // b[i] = sq[i] - jj*a[i]";
             }
-        }
-#if 0
-        // base register holds absolute address of BASE label
-        bool have_base_addr = false;
-        auto reladdr=[&have_base_addr](std::string label){
-            std::ostringstream oss;
-            if(have_base_addr){
-                oss<<label+" -BASE+."<<"(,%base)";
-            }else{
-                oss<<label<<" /* ERROR failed to initialize BASE for relative addressing*/";
-            }
-            return oss.str();
-
-        };
-#endif
-        string alg_descr;
-        {
-            std::ostringstream oss;
-            oss<<" Fuse2 alg: vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop;
-            if(vl0%jj==0) oss<<" vl%jj==0";
-            else if(jj%vl==0) oss<<" jj%vl==0";
-            else if(positivePow2(jj)) oss<<" jj=2^"<<jj_shift;
-            alg_descr = oss.str();
         }
         if(onceI){
             tr+="rel addr(BASE:+base register";
-            //fp.ins("sic base", "BASE -> register for relocatable branching [opt: move upward]");
-            //fp.lab("BASE",alg_descr);
-            fp>>"// branch to BASE ...";
-            //have_base_addr = true;
-        }else{
-            //fp.lcom(alg_descr);
-            fp>>alg_descr;
+#if STYLE==STYLE_GOTO
+            if(nloop > 1) {
+                fp>>"goto KERNEL_BLOCK; // STYLE 0 ==> use goto";
+            }
+#endif
         }
-        if(onceI && nloop > 1) {
-            //fp.ins("b "+reladdr("KERNEL_BLOCK"), "goto KERNEL_BLOCK");
-            fp>>"goto KERNEL_BLOCK;";
-        }
-        cout<<" fp.cnt="<<cnt;
+        //cout<<" fp.cnt="<<cnt;
         goto KERNEL_BLOCK;
         // INDUCE-BLOCK
 INDUCE:
-        if(onceI) //fi.lab("INDUCE");
-            fi>>"INDUCE:";
+        assert( nloop > 1 );
         if( iijj % vl0 ){ // special loop condition case
             tr+="induce:iijj%vl0 cnt update";
+            def_cnt = true; // later we'll define cnt = ii*jj
             //cnt += vl0;     // (vl, if you you to exacty hit iijj)
             //if(onceI) fi.ins("addu.l cnt, vl0, cnt", "cnt 0..iijj-1");
             cnt -= vl0;
-            cout<<" fi.cnt="<<cnt;
-            if(onceI) //fi.ins("subu.l cnt, cnt, vl0", "loop counter: cnt 0..iijj-1");
-              CBLK(fi,"cnt = cnt - vl0;");
-        }
-#define VL_LAST_ITER 1
-#if VL_LAST_ITER==1
-#if 0
-        // if careful about vl (possible lower value for last iter) vs vl0 can update here:
-        if( cnt + vl > iijj ){ // last time might have reduced vl
-            vl = iijj - cnt;
-            cout<<" vl reduced for last loop to "<<vl<<endl;
-        }
-#endif
-        // Careful: vl = new value for last iteration, vl0 = original = old value
-        if( iijj % vl0 ){
+            //cout<<" fi.cnt="<<cnt;
             tr+="induce:iijj%vl0 last iter EARLY lower vl";
+            // Careful: vl = new value for last iteration, vl0 = original = old value
             // VE has single-op MIN
             //vl = std::min( (uint64_t)vl, /*remain =*/ iijj - cnt );
             vl = std::min( (uint64_t)vl, /*remain =*/ cnt );
             if(onceI){
-                //AsmScope const block = {{"remain","%s40"}};
-                //fi.scope(block, "last time reduce vl");
-                //fi.ins("subu.l remain,iijj,cnt",    "remain = iijj -cnt");
-                //fi.ins("mins.l vl, vl0, remain",    "vl = min(vl,remain)");
-                //fi.ins("lvl vl");
-                //fi.pop_scope();
-
-                //fi.ins("mins.l vl, vl0,cnt",        "vl = min(vl0,cnt) for last iter,");
-                //fi.ins("lvl vl",                    "   since iijj%vl0!=0. vl0 unchanged.");
-                fi  >>"vl = (vl0<cnt? vl0: cnt); // vl = min(vl0,cnt) for last iter,"
-                    >>"_ve_lvl(vl);              //    since iijj%vl0!=0. vl0 unchanged.";
+                fd  >>"int64_t vl = vl0;";
+                if(STYLE==STYLE_GOTO){
+                    fi  >>"INDUCE:    // (ii*jj)%vl0 != 0 --> change VL for last iteration"
+                        >>"cnt -= vl0;"
+                        >>"vl = (vl0<cnt? vl0: cnt); // vl = min(vl0,cnt) for last iter,"
+                        >>"_ve_lvl(vl);              //";
+                }else{
+                    fi  >>"// (ii*jj)%vl0 != 0 --> last iter VL change"
+                        >>"vl = (vl0<iijj-cnt? vl0: iijj-cnt); // vl = min(vl0,iijj-cnt)"
+                        >>"_ve_lvl(vl);";
+                }
             }
         }
-#endif
-        if(1){
-            assert( nloop > 1 );
-            // 2. Induction from a->ax, b->bx
-            if(vl0%jj == 0){  // avoid div,mod -----1 vec op
-                tr+="induce:vl0%jj a[]+=vl/jj, b[] const";
-                // this includes cases with b_period==1 and high nloops
-                if(verbose){cout<<" e";cout.flush();}
-                FOR(i,vl) a[i] = a[i] + vl_over_jj;
-                ++cnt_vl_over_jj; assert(have_vl_over_jj); assert(!have_bA_bD);
-                if(onceI){
-                    // VADD vx, vy/sy/I, vz [,vm]
-                    //fi.ins("vadd a, "+(vl/jj>127?"vlojj":jitdec(vl/jj))+",a"
-                    //        ,        "a[i] += (vl/jj="+jitdec(vl0/jj)+"), b[] unchanged");
-                    fi>>"a =_ve_vadds_vsv("<<(vl/jj>127?"vlojj":jitdec(vl/jj))<<", a);"
-                        <<" // a[i] += (vl/jj="+jitdec(vl0/jj)+"), b[] unchanged";
+        // 2. Induction from a->ax, b->bx
+        if(vl0%jj == 0){  // avoid div,mod -----1 vec op
+            tr+="induce:vl0%jj a[]+=vl/jj, b[] const";
+            // this includes cases with b_period==1 and high nloops
+            if(verbose){cout<<" e";cout.flush();}
+            FOR(i,vl) a[i] = a[i] + vl_over_jj;
+            ++cnt_vl_over_jj; assert(have_vl_over_jj); assert(!have_bA_bD);
+            if(onceI && STYLE==STYLE_GOTO && fi[".."].code_str().empty() ) fi[".."]>>"INDUCE:    // vl0%jj==0";
+            if(onceI){
+                // VADD vx, vy/sy/I, vz [,vm]
+                //fi.ins("vadd a, "+(vl/jj>127?"vlojj":jitdec(vl/jj))+",a"
+                //        ,        "a[i] += (vl/jj="+jitdec(vl0/jj)+"), b[] unchanged");
+                if(vl/jj>127){
+                    fd>>OSSFMT("int64_t const vlojj = "<<vl0/jj<<"; // vl/jj="<<vl<<"/"<<jj);
+                }else{
+                    fd.define("vlojj",OSSFMT(vl0/jj<<"/*vl/jj*/"));
                 }
-            }else if(jj%vl0 == 0 ){  // -------------1 or 2 vec op (conditional)
-                // unroll often nice w/ have_b_period (with maybe more regs)
-                assert( have_bA_bD==0); assert(have_jj_shift==0); assert(have_vl_over_jj==0);
-                assert( jj > vl0 ); assert( jj/vl0 > 1 ); assert( have_jjMODvl );
-                if( !have_jjMODvl_reset ){
-                    tr+="induce:jj%vl0 A: b[]+=vl0, a[] const";
-                    // Note: this case should also be a "trivial" case for unroll suggestion
+                fi>>OSSFMT("a =_ve_vadds_vsv(vlojj, a);"
+                        <<" // a[i] += (vl/jj="<<vl0/jj<<"), b[] unchanged");
+            }
+        }else if(jj%vl0 == 0 ){  // -------------1 or 2 vec op (conditional)
+            // unroll often nice w/ have_b_period (with maybe more regs)
+            assert( have_bA_bD==0); assert(have_jj_shift==0); assert(have_vl_over_jj==0);
+            assert( jj > vl0 ); assert( jj/vl0 > 1 ); assert( have_jjMODvl );
+            if( !have_jjMODvl_reset ){
+                tr+="induce:jj%vl0 A: b[]+=vl0, a[] const";
+                // Note: this case should also be a "trivial" case for unroll suggestion
+                if(verbose){cout<<" f";cout.flush();}
+                FOR(i,vl) b[i] = b[i] + vl0;
+                ++cnt_jjMODvl; assert( have_jjMODvl );
+                if(onceI && STYLE==STYLE_GOTO && fi[".."].code_str().empty() ) fi[".."]>>"INDUCE:    // jj%vl0 == 0";
+                if(onceI) //fi.ins("add b, "+jitdec(vl0)+",b",    "b[i] += vl0, a[] const");
+                /**/ CBLK(fi,"b = _ve_vadds_vsv("<<jitdec(vl0)<<",b); // b[i] += vl0, a[] const");
+            }else{
+                // This case is potentially faster with a partial precalc unroll
+                // The division should be done with compute_uB
+                assert( have_jjMODvl && have_jjMODvl_reset );
+                // recall: have_jjMODvl_reset [HERE] is
+                // (vl0%jj!=0 && jj%vl0==0 && nloop >jj/vl0), so nloop > jj/vl0 > 1
+                // ==> Cannot optimize loop exit by querying the "reset" condition.
+#if 0
+                //Lpi easy = iloop % jj_over_vl;       // scalar cyclic mod
+                Lpi easy = fastmod_uB( iloop, jj_over_vl_M, jj_over_vl );
+                // #pragma..unroll(jj/vl0) could be branchless
+                // can be optimized further into 3 minimal-op cases
+                if( easy ){                         // bump b[i], a[i] unchanged
                     if(verbose){cout<<" f";cout.flush();}
                     FOR(i,vl) b[i] = b[i] + vl0;
                     ++cnt_jjMODvl; assert( have_jjMODvl );
-                    if(onceI) //fi.ins("add b, "+jitdec(vl0)+",b",    "b[i] += vl0, a[] const");
-                    /**/ CBLK(fi,"b = _ve_vadds_vsv("<<jitdec(vl0)<<",b); // b[i] += vl0, a[] const");
-                }else{
-                    // This case is potentially faster with a partial precalc unroll
-                    // The division should be done with compute_uB
-                    assert( have_jjMODvl && have_jjMODvl_reset );
-                    // recall: have_jjMODvl_reset [HERE] is
-                    // (vl0%jj!=0 && jj%vl0==0 && nloop >jj/vl0), so nloop > jj/vl0 > 1
-                    // ==> Cannot optimize loop exit by querying the "reset" condition.
-#if 0
-                    //Lpi easy = iloop % jj_over_vl;       // scalar cyclic mod
-                    Lpi easy = fastmod_uB( iloop, jj_over_vl_M, jj_over_vl );
-                    // #pragma..unroll(jj/vl0) could be branchless
-                    // can be optimized further into 3 minimal-op cases
-                    if( easy ){                         // bump b[i], a[i] unchanged
-                        if(verbose){cout<<" f";cout.flush();}
-                        FOR(i,vl) b[i] = b[i] + vl0;
-                        ++cnt_jjMODvl; assert( have_jjMODvl );
-                    }else{                              // RESET b[i], bD[i]==1
-                        if(verbose){cout<<" g";cout.flush();}
-                        FOR(i,vl) b[i] = sq[i];
-                        FOR(i,vl) a[i] = a[i] + 1;
-                        ++cnt_sq; assert( have_sq==1 );
-                        ++cnt_jjMODvl_reset;
-                    }
+                }else{                              // RESET b[i], bD[i]==1
+                    if(verbose){cout<<" g";cout.flush();}
+                    FOR(i,vl) b[i] = sq[i];
+                    FOR(i,vl) a[i] = a[i] + 1;
+                    ++cnt_sq; assert( have_sq==1 );
+                    ++cnt_jjMODvl_reset;
+                }
 #else
-                    // iloop % jj_over_vl is implemented as a cyclic [0,jj/vl0) count
-                    if(jj/vl0==2){                          // cyclic period 2 counter
-                        tr+="induce:jj%vl0 case: tmod toggle";
-                        assert(jj/vl0==2);
-                        tmod = 1-tmod;
-                    }else if(positivePow2(jj/vl0)){         // cyclic power-of-2 counter
-                        tr+="induce:jj%vl0 tmod shift,and";
+                // iloop % jj_over_vl is implemented as a cyclic [0,jj/vl0) count
+                if(jj/vl0==2){                          // cyclic period 2 counter
+                    tr+="induce:jj%vl0 case: tmod toggle";
+                    assert(jj/vl0==2);
+                    tmod = 1-tmod;
+                }else if(positivePow2(jj/vl0)){         // cyclic power-of-2 counter
+                    tr+="induce:jj%vl0 tmod shift,and";
+                    uint64_t const shift = positivePow2Shift((uint32_t)(jj/vl0));
+                    uint64_t const mask  = (1ULL<<shift) - 1U;
+                    tmod = (tmod+1U) & mask;
+                }else{                                  // cyclic period jj/vl0 counter
+                    tr+="induce:jj%vl0 tmod cmov";
+                    tmod += 1;
+                    int64_t const tmp = tmod - jj_over_vl;
+                    if(tmp==0) tmod=tmp; // cmov tmod,tmp,tmp
+                }
+
+                if( tmod ){
+                    tr+="induce:jj%vl0 tmod: b[]+=vl0";
+                    if(verbose){cout<<" f";cout.flush();}
+                    FOR(i,vl) b[i] = b[i] + vl0;
+                    ++cnt_jjMODvl; assert( have_jjMODvl );
+                }else{                              // RESET b[i], bD[i]==1
+                    tr+="induce:jj%vl0 !tmod (reset): b[]=0,1,..., and a[]+=1";
+                    if(verbose){cout<<" g";cout.flush();}
+                    FOR(i,vl) b[i] = sq[i];
+                    FOR(i,vl) a[i] = a[i] + 1;
+                    ++cnt_sq; assert( have_sq==1 );
+                    ++cnt_jjMODvl_reset;
+                }
+#endif
+                if(onceI){
+                    fd>>OSSFMT("int64_t tmod = 0; // tmod=0, cycling < (jj/vl="
+                            <<jj/vl<<")");
+                    CBLK(fi,"// jj%vl0==0 : iloop%(jj/vl0) check via cyclic tmod < jj/vl0="<<jj/vl0);
+                    if(jj/vl0==2){
+                        if(onceI && STYLE==STYLE_GOTO && fi[".."].code_str().empty() ) fi[".."]>>"INDUCE:    // period jj/vl0=2";
+                        fi<<"--tmod;";
+                    }else if(positivePow2(jj/vl0)){     // cyclic power-of-2 counter
+                        if(onceI && STYLE==STYLE_GOTO && fi[".."].code_str().empty() ) fi[".."]>>"INDUCE:    // period jj/vl0=2^N";
                         uint64_t const shift = positivePow2Shift((uint32_t)(jj/vl0));
                         uint64_t const mask  = (1ULL<<shift) - 1U;
-                        tmod = (tmod+1U) & mask;
-                    }else{                                  // cyclic period jj/vl0 counter
-                        tr+="induce:jj%vl0 tmod cmov";
-                        tmod += 1;
-                        int64_t const tmp = tmod - jj_over_vl;
-                        if(tmp==0) tmod=tmp; // cmov tmod,tmp,tmp
+                        //fi.ins("add tm0, 1,tmod",               "tmod period jj/vl0="+jitdec(jj/vl0));
+                        //fi.ins("and tmod, tm0,"+jitimm(mask),   "     pow2 mask to reset");
+                        CBLK(fi,"tmod = (tmod+1) & "<<jithex(mask)<<"; // cyclic power-of-2 counter");
+                    }else{                              // cyclic period jj/vl0 counter
+                        //fi.ins("add tmod, 1,tmod",              "tmod period jj/vl0="+jitdec(jj/vl0));
+                        if(onceI && STYLE==STYLE_GOTO && fi[".."].code_str().empty() ) fi[".."]>>OSSFMT("INDUCE:    // period jj/vl0="<<jj/vl0);
+                        //fi.ins("sub tm0,tmod,"+jitdec(jj/vl0));
+                        //fi.ins("cmov.eq tmod,tm0,tm0",          "cmov reset tmod=0");
+                        fi  >>OSSFMT("++tmod;               // tmod period jj/vl0 = "<<jj/vl0)
+                            >>OSSFMT("if(tmod=="<<setw(3)<<jitdec(jj/vl0)<<") tmod=0; // should generate cmov reset tmod=0?");
                     }
-
-                    if( tmod ){
-                        tr+="induce:jj%vl0 tmod: b[]+=vl0";
-                        if(verbose){cout<<" f";cout.flush();}
-                        FOR(i,vl) b[i] = b[i] + vl0;
-                        ++cnt_jjMODvl; assert( have_jjMODvl );
-                    }else{                              // RESET b[i], bD[i]==1
-                        tr+="induce:jj%vl0 !tmod (reset): b[]=0,1,..., and a[]+=1";
-                        if(verbose){cout<<" g";cout.flush();}
-                        FOR(i,vl) b[i] = sq[i];
-                        FOR(i,vl) a[i] = a[i] + 1;
-                        ++cnt_sq; assert( have_sq==1 );
-                        ++cnt_jjMODvl_reset;
-                    }
-#endif
-                    if(onceI){
-#if 0
-                        //
-                        // Hmm. # of scalar/conditional ops is rather large.
-                        //      This may not even be a speedup over divmod!
-                        //
-                        //AsmScope const block = {{"tmp","%s40"}};
-                        //fi.scope(block,"vectorized double-loop --> index vectors");
-                        fi.com("jj%vl0==0 : iloop%(jj/vl0) check via cyclic tmod < jj/vl0="+jitdec(jj/vl0));
-                        if(jj/vl0==2){                      // cyclic period 2 counter
-                            fi.ins("sub tmod, 1,tmod",              "tmod period 2 (toggle 0|1)");
-                        }else if(positivePow2(jj/vl0)){     // cyclic power-of-2 counter
-                            uint64_t const shift = positivePow2Shift((uint32_t)(jj/vl0));
-                            uint64_t const mask  = (1ULL<<shift) - 1U;
-                            //tmod = (tmod+1) & mask;
-                            fi.ins("add tm0, 1,tmod",               "tmod period jj/vl0="+jitdec(jj/vl0));
-                            fi.ins("and tmod, tm0,"+jitimm(mask),   "     pow2 mask to reset");
-                        }else{                              // cyclic period jj/vl0 counter
-                            fi.ins("add tmod, 1,tmod",              "tmod period jj/vl0="+jitdec(jj/vl0));
-                            fi.ins("sub tm0,tmod,"+jitdec(jj/vl0));
-                            fi.ins("cmov.eq tmod,tm0,tm0",          "cmov reset tmod=0");
-                        }
-                        fi.ins("beq.w.t tmod,"+reladdr("RESET"));
-                        fi.ins("vadd b, b,vl0",             "b[i] += vl0 (easy, a[] unchanged)")
-                            .ins("b "+reladdr("INDUCE_DONE"), "branch around reset case");
-                        fi.lab("RESET")
-                            .ins("or b,0,sq",               "b[i] = sq[i] (reset case)")
-                            .ins("vadd a,1,a",              "a[i] += 1");
-                        fi.lab("INDUCE_DONE");
-                        //fi.pop_scope();
-#else
-                        CBLK(fi,"// jj%vl0==0 : iloop%(jj/vl0) check via cyclic tmod < jj/vl0="<<jj/vl0);
-                        if(jj/vl0==2){
-                            fi<<"--tmod;";
-                        }else if(positivePow2(jj/vl0)){     // cyclic power-of-2 counter
-                            uint64_t const shift = positivePow2Shift((uint32_t)(jj/vl0));
-                            uint64_t const mask  = (1ULL<<shift) - 1U;
-                            //fi.ins("add tm0, 1,tmod",               "tmod period jj/vl0="+jitdec(jj/vl0));
-                            //fi.ins("and tmod, tm0,"+jitimm(mask),   "     pow2 mask to reset");
-                            CBLK(fi,"tmod = (tmod+1) & "<<jithex(mask)<<"; // cyclic power-of-2 counter");
-                        }else{                              // cyclic period jj/vl0 counter
-                            //fi.ins("add tmod, 1,tmod",              "tmod period jj/vl0="+jitdec(jj/vl0));
-                            //fi.ins("sub tm0,tmod,"+jitdec(jj/vl0));
-                            //fi.ins("cmov.eq tmod,tm0,tm0",          "cmov reset tmod=0");
-                            fi  >>"++tmod;  // tmod period jj/vl0 = "<<jitdec(jj/vl0)
-                                >>"if(tmod=="<<jitdec(jj/vl0)<<") tmod=0; // should generate cmov reset tmod=0?";
-                        }
-                        //fi.ins("beq.w.t tmod,"+reladdr("RESET"));
-                        fi  >>"if(tmod == 0) goto RESET;";
-                        //fi.ins("vadd b, b,vl0",             "b[i] += vl0 (easy, a[] unchanged)")
-                        //    .ins("b "+reladdr("INDUCE_DONE"), "branch around reset case");
-                        fi  >>"b = _ve_vaddul_vsv(vl0,b);      // b[i] += vl0 (easy, a[] unchanged)"
-                            >>"goto INDUCE_DONE;";
-                        //fi.lab("RESET")
-                        //    .ins("or b,0,sq",               "b[i] = sq[i] (reset case)")
-                        //    .ins("vadd a,1,a",              "a[i] += 1");
-                        //fi.lab("INDUCE_DONE");
-                        //fi.pop_scope();
-                        fi  >>"RESET:"
-                            >>"b = sq;                  // b[i] = sq[i] (reset case)"
-                            >>"a = _ve_vaddul_vsv(1,a); // a[i] += 1"
-                            >>"INDUCE_DONE:";
-#endif
-                    }
+                    //fi.ins("beq.w.t tmod,"+reladdr("RESET"));
+                    //fi.ins("vadd b, b,vl0",             "b[i] += vl0 (easy, a[] unchanged)")
+                    //    .ins("b "+reladdr("INDUCE_DONE"), "branch around reset case");
+                    //fi.lab("RESET")
+                    //    .ins("or b,0,sq",               "b[i] = sq[i] (reset case)")
+                    //    .ins("vadd a,1,a",              "a[i] += 1");
+                    //fi.lab("INDUCE_DONE");
+                    //fi.pop_scope();
+                    fi  >>"if(tmod){" // using mk_scope or CBLOCK_SCOPE is entirely optional...
+                        >>"    b = _ve_vaddul_vsv(vl0,b); // b[i] += vl0 (easy, a[] unchanged)"
+                        >>"}else{"
+                        >>"    a = _ve_vaddul_vsv(1,a);   // a[i] += 1"
+                        >>"    b = sq;                    // b[i] = sq[i] (reset case)"
+                        >>"}";
                 }
-                if( have_jjMODvl_reset ) assert( have_jjMODvl );
-                assert( !have_bA_bD );
-            }else if( positivePow2(jj) ){ // ------4 vec ops (add, shr, and, add)
-                tr+="induce:pow2(jj): a[], b[] via shift+mask";
-                if(verbose){cout<<" h";cout.flush();}
-                assert( vl0%jj != 0 ); assert( jj%vl0 != 0 ); assert(have_bA_bD==1);
-                assert(have_jj_shift==1); assert(have_vl_over_jj==0);
-                // no...assert(have_sq==(jj>1&&jj<vl0));
-                FOR(i,vl) bA[i] = vl0 + b[i];           // bA = b + vl0; add_vsv
-                FOR(i,vl) bD[i] = (bA[i] >> jj_shift);  // bD = bA / jj; div_vsv
-                FOR(i,vl) b [i] = (bA[i] & jj_minus_1); // bM = bA % jj; mod_vsv
-                FOR(i,vl) a [i] = a[i] + bD[i]; // aA = a + bD; add_vvv
-                ++cnt_bA_bD; ++cnt_jj_shift; assert( have_bA_bD );
-                if(onceI){
+            }
+            if( have_jjMODvl_reset ) assert( have_jjMODvl );
+            assert( !have_bA_bD );
+        }else if( positivePow2(jj) ){ // ------4 vec ops (add, shr, and, add)
+            tr+="induce:pow2(jj): a[], b[] via shift+mask";
+            if(verbose){cout<<" h";cout.flush();}
+            assert( vl0%jj != 0 ); assert( jj%vl0 != 0 ); assert(have_bA_bD==1);
+            assert(have_jj_shift==1); assert(have_vl_over_jj==0);
+            // no...assert(have_sq==(jj>1&&jj<vl0));
+            FOR(i,vl) bA[i] = vl0 + b[i];           // bA = b + vl0; add_vsv
+            FOR(i,vl) bD[i] = (bA[i] >> jj_shift);  // bD = bA / jj; div_vsv
+            FOR(i,vl) b [i] = (bA[i] & jj_minus_1); // bM = bA % jj; mod_vsv
+            FOR(i,vl) a [i] = a[i] + bD[i]; // aA = a + bD; add_vvv
+            ++cnt_bA_bD; ++cnt_jj_shift; assert( have_bA_bD );
+            if(onceI){
 #if 0
-                    fi.ins("vaddu.l bA,"+jitdec(vl0)+",b"
-                            , "bA[i] = b[i]+vl0 (jj="+jitdec(jj)+" power-of-two)")
-                        .ins("vsrl.l.zx bD,bA,"+jitdec(jj_shift)
-                                , "bD[i] = bA[i]>>jj_shift["+jitdec(jj_shift)+"]")
-                        // note: VAND vy~M possible, while AND has sy~I, sz~M
-                        .ins("vand b,"+jitimm(jj_minus_1)+",bA"
-                                , "b[i] = bA[i]&jj_mask = bA[i]%"+jitdec(vl0))
-                        .ins("vaddu.l a,a,bD"
-                                , "a[i] += bD[i]");
+                fi.ins("vaddu.l bA,"+jitdec(vl0)+",b"
+                        , "bA[i] = b[i]+vl0 (jj="+jitdec(jj)+" power-of-two)")
+                    .ins("vsrl.l.zx bD,bA,"+jitdec(jj_shift)
+                            , "bD[i] = bA[i]>>jj_shift["+jitdec(jj_shift)+"]")
+                    // note: VAND vy~M possible, while AND has sy~I, sz~M
+                    .ins("vand b,"+jitimm(jj_minus_1)+",bA"
+                            , "b[i] = bA[i]&jj_mask = bA[i]%"+jitdec(vl0))
+                    .ins("vaddu.l a,a,bD"
+                            , "a[i] += bD[i]");
 #else
-                    fi  >>"bA = _ve_vaddul_vsv("<<jitdec(vl0)<<",b);"
-                        " // bA[i] = b[i]+vl0 (jj="<<jitdec(jj)<<" power-of-two)"
-                        >>"bD = _ve_vsrl_vvs(bA,"<<jitdec(jj_shift)<<";"
-                        " // bD[i] = bA[i]>>jj_shift["<<jitdec(jj_shift)<<"]"
-                        >>"b  = _ve_vand_vsv("<<jithex(jj_minus_1)<<",bA);"
-                        " // b[i] = bA[i]&jj_mask = bA[i]%"<<jitdec(vl0)
-                        >>"a = _ve_vaddul_vvv(a,bD);   // a[i] += bD[i]"
-                        ;
+                fi  >>"bA = _ve_vaddul_vsv("<<jitdec(vl0)<<",b);"
+                    " // bA[i] = b[i]+vl0 (jj="<<jitdec(jj)<<" power-of-two)"
+                    >>"bD = _ve_vsrl_vvs(bA,"<<jitdec(jj_shift)<<";"
+                    " // bD[i] = bA[i]>>jj_shift["<<jitdec(jj_shift)<<"]"
+                    >>"b  = _ve_vand_vsv("<<jithex(jj_minus_1)<<",bA);"
+                    " // b[i] = bA[i]&jj_mask = bA[i]%"<<jitdec(vl0)
+                    >>"a = _ve_vaddul_vvv(a,bD);   // a[i] += bD[i]"
+                    ;
 #endif
+            }
+        }else{ // div-mod ---------------------6 vec ops: add (mul,shr) (mul,sub) add
+            tr+="induce: a[], b[] update via fastdiv";
+            if(verbose){cout<<" i";cout.flush();}
+            FOR(i,vl) bA[i] = vl0 + b[i];            // add_vsv
+            FOR(i,vl) bD[i] = ((jj_M*bA[i]) >> FASTDIV_C);  // fastdiv_uB   : mul_vvs, shr_vs
+            FOR(i,vl) b [i] = bA[i] - bD[i]*jj;     // long-hand    : mul_vvs, sub_vvv
+            FOR(i,vl) a [i] = a[i] + bD[i];         // add_vvv
+            ++cnt_bA_bD; ++cnt_jj_M;
+            assert(have_bA_bD); assert(have_sq==(jj>1&&jj<vl0)); assert(!have_jj_shift);
+            assert(!have_vl_over_jj);
+            if(onceI){
+#if 0
+                bool rerun_init_code = (u.suggested==UNR_NLOOP || u.suggested==UNR_CYC
+                        || u.suggested==UNR_CYC);
+                if(rerun_init_code){
+                }else{
+                    fp["../beg"].set("if(cnt=0){");
                 }
-            }else{ // div-mod ---------------------6 vec ops: add (mul,shr) (mul,sub) add
-                tr+="induce: a[], b[] update via fastdiv";
-                if(verbose){cout<<" i";cout.flush();}
-                FOR(i,vl) bA[i] = vl0 + b[i];            // add_vsv
-                FOR(i,vl) bD[i] = ((jj_M*bA[i]) >> FASTDIV_C);  // fastdiv_uB   : mul_vvs, shr_vs
-                FOR(i,vl) b [i] = bA[i] - bD[i]*jj;     // long-hand    : mul_vvs, sub_vvv
-                FOR(i,vl) a [i] = a[i] + bD[i];         // add_vvv
-                ++cnt_bA_bD; ++cnt_jj_M;
-                assert(have_bA_bD); assert(have_sq==(jj>1&&jj<vl0)); assert(!have_jj_shift);
-                assert(!have_vl_over_jj); assert( jj+vl0 < (int)FASTDIV_SAFEMAX );
-                if(onceI){
-                    //local regs: bA,vx,bD,vy    input/output regs: a, b
-                    //AsmScope const block = {{"tmp2","%s41"}};
-#if 0
-                    //fi.scope(block,"generic fastdiv induction");
-                    if(0){//plain: output reg != input reg
-                        fi.ins("vaddu bA,vl0,b",               "bA[i] = b[i] + vl0")
-                            .ins("vmulu.l   vx,bA,jj_M")
-                            .ins("vsrl.l.zx bD,vx,"+jitdec(FASTDIV_C), "bD[i]= bA[i]/[jj="+jitdec(jj)+"] fastdiv")
-                            .ins("vmulu.l   vy,jj,bD")
-                            .ins("vaddu.l   a, a,bD",          "a[i] += bD[i]")
-                            .ins("vsubu.l   b, bA,vy",         "b[i] -= bD[i]*jj");
-                    }else{//re-use regs
-                        fi.ins("vaddu b ,vl0,b",               "b[i] = b[i] + vl0")
-                            .ins("vmulu.l   bD,b ,jj_M")
-                            .ins("vsrl.l.zx bD,bD,"+jitdec(FASTDIV_C), "bD[i]= bA[i]/[jj="+jitdec(jj)+"] fastdiv")
-                            .ins("vmulu.l   vy,jj,bD")
-                            .ins("vaddu.l   a, a,bD",          "a[i] += bD[i]")
-                            .ins("vsubu.l   b, b ,vy",         "b[i] -= bD[i]*jj");
-                    }
-#else
-                    fi  >>"b = _ve_vaddul_vsv(vl0,b);          // b[i] = b[i] + vl0"
-                        >>"bD= _ve_vmulul_vsv(jj_M,b);"
-                        >>"bD= _ve_vsrl_vvs(bD,FASTDIV_C);     // bD[i]= bA[i]/[jj="<<jitdec(jj)<<"]"
-                        >>"vy= _ve_vmulul_vvv(jj, bD);"
-                        >>"a = _ve_vaddul_vvv(a, bD);          // a[i] += bD[i]"
-                        >>"b = _ve_vsubul_vvv(b, vy);          // b[i] -= bD[i]*jj"
-                        ;
 #endif
+                if( iijj + vl0 < FASTDIV_SAFEMAX ){ // use 'pixel register' sqij
+                    def_sqij=true;
+                    fi>>"sqij = _ve_vaddul_vsv(vl0,sqij);                // sqij[i] += "<<jitdec(vl0);
+                    // (same as INIT_BLOCK code)
+                    fp.clear(); fp["../beg"].clear(); fp["../end"].clear();
+                    fp["last"].set(OSSFMT(
+                                "a = FASTDIV_"<<jj<<"(sqij); // a[i] = sqij[i]/jj recalc\n"
+                                "b = _ve_vsubul_vvv(sqij,_ve_vmulul_vsv(jj, a)); // b[i] = sqij[i] - jj*a[i]"));
+                }else if(jj+vl < FASTDIV_SAFEMAX) { // o/w use safer induction formula
+                    // Ex. ./cfuse2 -t 256 1500 1500, 1500 x 1500 image will be enough to overflow
+                    // FASTDIV "full recalc" based on pixel number.
+                    // But we can still induce based on current b[i] vector with less chance
+                    // of overflow because b[i] < jj (much smaller)
+                    assert( jj + vl < FASTDIV_SAFEMAX );
+                    fi  >>"// FASTDIV induce from prev b to avoid overflow"
+                        >>"__vr bD = FASTDIV_"<<asDec(jj)<<"(_ve_vaddul_vsv(vl0,b));   // bD[i]=(b[i]+vl0)/[jj="<<jitdec(jj)<<"]"
+                        >>"a = _ve_vaddul_vvv(a, bD);                     // a[i] += bD[i]"
+                        >>"b = _ve_vsubul_vvv(b, _ve_vmulul_vsv(jj, bD)); // b[i] -= jj*bD[i]"
+                        ;
+                }else{
+                    // Ex. ./cfuse2 -t 256 3 4000001 has jj too large for 2-op FASTDIV
+                    cout<<"unhandled case: need large-number vector-division-by-constant "<<jj<<endl;
+                    def_sqij=true;
+                    fi  >>"sqij = _ve_vaddul_vsv(vl0,sqij);                // sqij[i] += "<<jitdec(vl0);
+                    // (same as INIT_BLOCK code)
+                    fp.clear(); fp["../beg"].clear(); fp["../end"].clear();
+                    fp["last"].set(OSSFMT(
+                                "a = _ve_vdivsl_vvs(sqij, outWidth) // a[i] = sqij[i]/jj XXX SLOW XXX\n"
+                                "b = _ve_vsubul_vvv(sqij,_ve_vmulul_vsv(jj, a)); // b[i] = sqij[i] - jj*a[i]"));
+                    THROW("MISSING OPTIMIZATION:\nPlease implement mul-add-shift division algorithm HERE");
                 }
             }
         }
@@ -1221,8 +1015,10 @@ INDUCE:
         }
 #endif
         if(onceI){
+#if STYLE==STYLE_GOTO
             //fi.lcom("...KERNEL_BLOCK fall-through, a[], b[] induced");
             fi>>"// ...KERNEL_BLOCK fall-through, a[], b[] induced";
+#endif
             onceI = false;
         }
 
@@ -1230,13 +1026,10 @@ KERNEL_BLOCK:
         tr+="KERNEL_BLOCK";
         if(onceK){ //cout<<"=== // #KERNEL_BLOCK: (fallthrough)\n"
             //<<"=== //        # <your code here, using a[] b[] loop-index vectors\n";
-            if(nloop > 1) fk<<"KERNEL_BLOCK:"; //fk.lab("KERNEL_BLOCK");
+#if STYLE==STYLE_GOTO
+            if(nloop > 1) fk[".."]<<"KERNEL_BLOCK:";
+#endif
             //fk.com("", "KERNEL BLOCK(a[],b[])", "<YOUR CODE HERE>","");
-            fk  >>"//"
-                >>"// KERNEL BLOCK(a[],b[])"
-                >>OSSFMT("//    where a[],b[] are for(.."<<ii<<")for(.."<<jj<<"){...} indices, vl<="<<vl0)
-                >>"// <YOUR CODE HERE>"
-                >>"//";
 
             // interestingly, any re-usable data of the kernel should
             //  (somehow)
@@ -1251,8 +1044,15 @@ KERNEL_BLOCK:
             // Ex 2:  sq register can be hoisted (AND combined with our sq?)
             //        instead of being recalculated
             if( HASH_KERNEL ){
-                //VecHash2::kern_asm(fk,"a","b","vl","reg_hash","tmp"); 
-                fk>>"// VecHash2 C kernel TBD";
+                VecHash2::kern_C_begin(cfuse2["../first"], fd["last"], "sq",vlen);
+                fd["last"]>>"int64_t reg_hash = 0; // vh2({a,b}) hash output";
+                VecHash2::kern_C(fk,"a","b","vl","reg_hash");
+                fz>>"printf(\"jit VecHash2 = %llu\\n\",(long long unsigned)reg_hash);";
+            }else{
+                fk  >>"//"
+                    >>"// KERNEL BLOCK(a[],b[], cnt=a[0]*"<<asDec(jj)<<"+b[0])"
+                    >>OSSFMT("//    where a[],b[] are for(.."<<ii<<")for(.."<<jj<<"){...} indices, vl<="<<vl0)
+                    >>"// <YOUR CODE HERE>";
             }
         }
 
@@ -1279,7 +1079,7 @@ KERNEL_BLOCK:
         onceK = false;
 
         // DONE_CHECK
-        // XXX simplification : whole loop should be over 'remain' as
+        // simplification : whole loop should be over 'remain' as
         //
         //     remain -= vl;
         //     if(remain>0) goto INDUCE
@@ -1318,6 +1118,7 @@ KERNEL_BLOCK:
         }
 
         if(onceL){
+#if STYLE==STYLE_GOTO // goto form can do trickier loop exits to prune some ops
             if(nloop==1) fl>>"// (nloop == 1, no need to check if done)";
             else if(iijj%vl0){
                 //fl.lcom("DONE_CHECK A : loop again if vl is not the reduced last value");
@@ -1333,9 +1134,34 @@ KERNEL_BLOCK:
                 fl  >>"DONE_CHECK B : loop again if next cnt still < iijj"
                     >>"cnt -= vl; // (or vl0)"
                     >>"if(cnt > 0) goto INDUCE; // next a[],b[]";
+                def_cnt=true;
             }
+#endif
             onceL = false;
         }
+        // define/initialize 'def_' needed variables...
+        if(STYLE==STYLE_GOTO && def_cnt){
+            fd  >>"int64_t cnt = (uint64_t)ii * (uint64_t)jj;"
+                <<OSSFMT(" // cnt=ii*jj="<<ii<<"*"<<jj<<" to 1? by "<<vl0);
+        }
+        if(cnt_jj_M){
+            fd  .define(OSSFMT("FASTDIV_"<<jj<<"_M"), jithex(jj_M)+"/*in reg?*/")
+                .define(OSSFMT("FASTDIV_"<<jj<<"(VR)"),
+                        OSSFMT("_ve_vsrl_vvs(_ve_vmulul_vsv("
+                            "FASTDIV_"<<jj<<"_M, (VR)), "
+                            <<FASTDIV_C<<")"));
+        }
+        if(cnt_sq){
+            fd>>"__vr const sq = _ve_vseq_v();";
+        }
+        if(def_sqij){
+            if(cnt_sq) fd>>"__vr sqij = sq;";
+            else       fd>>"__vr sqij = _ve_vseq_v();";
+            fk>>"// *this* kernel also has defined sqij[]=a[]*"<<asDec(jj)<<"+b[]";
+        }else{
+            fp["../beg"].set("if(cnt=0){");
+        }
+        fk>>"//";
 
         // LOOP_DONE ...
         if(SAVE_RESTORE_VLEN){

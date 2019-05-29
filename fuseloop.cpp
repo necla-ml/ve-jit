@@ -72,11 +72,10 @@ std::string str(UnrollSuggest const& u, std::string const& pfx /*=""*/){
             cout.flush();
         }
         oss<<" nloop="<<u.nloop;
-        oss<<" b_period="<<b_period;
+        if(nloop>1) oss<<" b_period="<<b_period;
         int const unroll_any = min(nloop,u.b_period_max);
-        int unroll_cyc = bcyc_regs;
-        // but push cyclic up towards b_period_max
-        if(unroll_cyc>0) while(unroll_cyc < u.b_period_max) unroll_cyc+=bcyc_regs;
+        int unroll_cyc = bcyc_regs; // or some small multiple
+        if(bcyc_regs>0) unroll_cyc = unroll_any/bcyc_regs*bcyc_regs;
         // if specific unroll factors are needed, print them.
         switch(u.suggested){
           case(UNR_UNSET): break;
@@ -170,6 +169,7 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int cons
     // Precalc for a jj_pow2 case may or may not be good.
     if( nloop == 1 ){
         ret.suggested = strategy = UNR_NLOOP1;
+        ret.vl = iijj;
         if(v)cout<<" A.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
             <<strategy<<"\n\t"
             <<", b_period="<<b_period<<b_period_pow2<<" no loop [precalc, no unroll]"<<endl;
@@ -312,7 +312,7 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int cons
         }
     }
 #endif
-    cout<<" dbg: "<<strategy<<"  sugg "<<ret.suggested<<" unroll "<<ret.unroll<<endl;
+    //cout<<" dbg: "<<strategy<<"  sugg "<<ret.suggested<<" unroll "<<ret.unroll<<endl;
     assert(ret.suggested != UNR_UNSET);
     return ret;
 }
@@ -375,6 +375,7 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
             UnrollSuggest us = unroll_suggest(vll, u.ii, u.jj, u.b_period_max, 0/*verbose*/);
             if( u.suggested != UNR_UNSET && us.suggested == UNR_DIVMOD ){
                 // this is the worst, so it cannot be an improvement (and might even have nloop higher)
+                cout<<" ---> skipped: UNR_DIVMOD is never a good alt strategy"<<endl;
                 continue;
             }else{
                 cout<<"\nALTERNATE strategy at vll="<<vll<<" ("
@@ -389,7 +390,9 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
                     cout<<"  ---> JJPOW2 without precalc (4 vec ops) never beats JJMODVL"<<endl;
                     continue;
                 }
-                if(us.suggested == UNR_JJPOW2_BIG){
+                if(us.suggested == UNR_JJPOW2_BIG
+                        || u.suggested== UNR_DIVMOD ){
+                    cout<<" ACCEPTED!"<<endl;
                     ret = us;    // return the nice alt
                     u.vll = vll; // also record existence-of-alt into u
                     break;

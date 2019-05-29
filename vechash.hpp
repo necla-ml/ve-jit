@@ -12,10 +12,14 @@
 #include <iomanip>
 
 namespace scramble64 {
-    // These might be held in a common scalar register
-    extern uint64_t const r1;          //< REHASH_A
-    extern uint64_t const r2;          //< REHASH_B
-    extern uint64_t const r3;          //< REHASH_C [opt]
+// These might be held in a common scalar register
+extern uint64_t const r1;          //< REHASH_A
+extern uint64_t const r2;          //< REHASH_B
+extern uint64_t const r3;          //< REHASH_C [opt]
+}
+
+namespace cprog {
+class Cblock;       // fwd decl
 }
 
 /** Hash a sequence of vectors \c v_i[0..vl[i]-1].
@@ -120,6 +124,9 @@ class VecHash {
  * 3. You <B>should not</B> use \c VecHash::hash_combine(a,vl),
  *    then \c VecHash::hash_combine(b,vl) and repeat -- such a hash would
  *    epend on the choices you make for \c vl.
+ *
+ * OTOH, this impl is only independent of vl
+ * if presented {vl} form a non-increasing sequence.
  */
 struct VecHash2 {
     /** helper for generic vector hashing.
@@ -148,6 +155,7 @@ struct VecHash2 {
     int const mvl;
     /** hash combine a pair of same-size vectorized sequences. */
     uint64_t hash_combine( uint64_t const* v, uint64_t const* w, int const vl ){
+        int const verbose=0;
         assert( vl > 0 && vl <= mvl ); // vl==0 OK, but wasted work.
         using namespace scramble64;  // r1, r2, r3 scramblers
         //VFOR(i,vl) vs[i] = i;
@@ -157,12 +165,14 @@ struct VecHash2 {
         VFOR(i,vl) vy[i] = r1 * vy[i];           // hash vs[]=j..j+vl-1
         VFOR(i,vl) vx[i] = vx[i] + vz[i];        // hash_v[] + hash_w[]
         VFOR(i,vl) vz[i] = vx[i] + vy[i];        // add hash_vs[]
-        std::cout<<" pre-xor-reduce vx[0]="<<std::hex<<vx[0]<<std::dec<<std::endl;
-        std::cout<<" pre-xor-reduce vy[0]="<<std::hex<<vy[0]<<std::dec<<std::endl;
-        std::cout<<" pre-xor-reduce vz[0]="<<std::hex<<vz[0]<<std::dec<<std::endl;
+        if(verbose){
+            std::cout<<" pre-xor-reduce vx[0]="<<std::hex<<vx[0]<<std::dec<<std::endl;
+            std::cout<<" pre-xor-reduce vy[0]="<<std::hex<<vy[0]<<std::dec<<std::endl;
+            std::cout<<" pre-xor-reduce vz[0]="<<std::hex<<vz[0]<<std::dec<<std::endl;
+        }
         r = 0;
         VFOR(i,vl) r ^= vz[i];
-        std::cout<<" xor-reduce r="<<std::hex<<r<<std::dec<<std::endl;
+        if(verbose)std::cout<<" xor-reduce r="<<std::hex<<r<<std::dec<<std::endl;
         hashVal ^= r;                           // hashVal ^= vx[0]^vx[1]^...^vx[vl-1]
         j += vl;
         return hashVal;
@@ -174,6 +184,12 @@ struct VecHash2 {
             std::string va, std::string vb, std::string vl, std::string hash,
             std::string tmp );
     static void kern_asm_end( AsmFmtCols &a );
+    // output 'C' code snippets
+    static void kern_C_begin( cprog::Cblock &defines, cprog::Cblock &state,
+            char const* client_vs=nullptr, uint32_t const seed=0 );
+    static void kern_C( cprog::Cblock &parent,
+            std::string va, std::string vb, std::string vl, std::string hash);
+    static void kern_C_end( cprog::Cblock &cb );
   private:
     void init(){
         VFOR(i,mvl) vs[i] = i;   // const vector register

@@ -1,6 +1,6 @@
 /* Copyright (c) 2019 by NEC Corporation
  * This file is part of ve-jit */
-#include "jitpipe.hpp"
+#include "../jitpipe.hpp"
 #include <sstream>
 #include <fstream>
 #include <array>
