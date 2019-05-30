@@ -8,6 +8,16 @@
 
 namespace cprog{
 
+std::string ve_pragma_unroll(int64_t const N){
+    std::string ret(""); // return empty if N<0
+    if(N==0) return "#pragma nounroll\n";
+    else if(N>0){
+        std::ostringstream oss;
+        ret = OSSFMT("#pragma unroll("<<N<<")\n");
+    }
+    return ret;
+}
+
 Cblock& Cblock::append(std::string codeline){
     if( !codeline.empty() ){
 #if 0 // trial...

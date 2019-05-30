@@ -134,3 +134,4 @@ cblock-x86
 cblock-x86.lo
 cblock-x86.o
 cblock-*
+libjit1-cxx.cpp

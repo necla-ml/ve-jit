@@ -531,6 +531,15 @@ inline Cblock& Cblock::after(Cblock& prev) {
 #define CBLOCK_SCOPE(CBLK_VAR,BEG,CUNIT,AFTER) auto& CBLK_VAR = mk_scope((CUNIT),#CBLK_VAR,(BEG)).after(AFTER)["body"];
 /** Sometimes you want to pass the block "body" to an outer scope as a pointer rather than a ref */
 #define CBLOCK_SCOPE_PTR(CBLK_VAR,BEG,CUNIT,AFTER) (&( mk_scope((CUNIT),#CBLK_VAR,(BEG)).after(AFTER)["body"] ))
+/** \return empty if N<0, #pragma nounroll if N==0, or #pragma unroll(N). */
+std::string ve_pragma_unroll(int64_t const N);
+/** Usage \c OSSFMT(UNROLL(u)"for(...)"). */
+#define UNROLL(N) ve_pragma_unroll(N)<<
+#define NO_UNROLL(...) "#pragma nounroll\n"
+/** for-loop macro allowing tight-binding #pragma */
+#define CBLOCK_FOR(CBVAR,UN_ROLL,INTRO,CBPARENT) \
+    CBLOCK_SCOPE(CBVAR,OSSFMT(UNROLL(UN_ROLL) INTRO),CBPARENT.getRoot(),CBPARENT)
+
 
 /** make name/{beg,body,end} for C++ extern "C" scope and return name/body */
 Cblock& mk_extern_c(Cunit& cunit, std::string name);

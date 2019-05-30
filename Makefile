@@ -583,7 +583,7 @@ dllbuild-vec: dllbuild.cpp libjit1.so
 # a std::string containing 'C' code.
 clean:
 	rm -f *.o *.lo *.i *.ii *.out *.gch bin.mk*.o bin_mk.c
-	rm -f tmp_*.s tmp*lucky*
+	rm -f libjit1-cxx.cpp libjit1-cxx*.o libjit1-cxx*.lo tmp_*.s tmp*lucky*
 	for f in *.bin; do b=`basename $$f .bin`; rm -f $$b.asm $$b.o $$b.dis $$b.dump; done
 	for f in tmp_*.S; do b=`basename $$f .S`; rm -f $$b.asm $$b.dis $$b.dump; done
 	rm -rf tmp tmp-dllbuild
