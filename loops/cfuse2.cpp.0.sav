@@ -176,9 +176,8 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
     }else{
         THROW(OSSFMT("unknown kernel type "<<which<<" in fuse2_kernel"));
     }
-}
-
-void other_fastdiv_methods(int const jj){
+}    
+void other_fastdiv_methods(int const jj){    
     int const verbose=1;
     // other fast divide approaches...
     if(verbose>=1 && !positivePow2(jj)){
@@ -221,167 +220,6 @@ void other_fastdiv_methods(int const jj){
             <<" or "<<(void*)(intptr_t)jj_mod_inverse_lpi;
     }
 }
-/** return FASTDIV_jj(V,JJ,VOUT) macro to produce vector \c vDiv=vReg/jj
- * \c jj is a constant divisor.
- * \pre vReg has u32 values stored in a u64 vector register.
- * \pre jj>0
- * \pre if vIn_hi>0, then vReg input values are assumed to be &lt; \c vIn_hi
- * \return number of operations required.
- *
- * \c vIn_hi optional range-restriction may give better op-codes. For fused loops
- * `for(0..ii)for(0..jj)` with some max VL, you should set \c vIn_hi=ii*jj+VL,
- * and if this is < FASTDIV_SAFEMAX we'll use 2-op mul-shr instead.
- *
- * - Method:
- *   - count ops for 'struct fastdiv' method (mul, add(?), shift)
- *   - if jj is 2^N, use shift/mask (prev method finds this solution)
- *   - if op count is 3 and range restrictions met, use computeM_uB method (mul,shift)
- */
-int mk_FASTDIV(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi=0){
-    int const v=1;
-    int ret=0;
-    ostringstream oss;
-    // go up to some well-defined scope position and use a named-block to
-    // record that this macro exists (try not to duplicate the definition)
-    auto& scope=cb["..*/body/.."]; // where Cblock::define will place definitions
-    string tag = OSSFMT("fastdiv_"<<jj); // "we were here before" tag
-    if(v) cout<<"mk_FASTDIV_"<<jj<<" range "<<vIn_hi<<" to scope "<<scope.fullpath()
-        //<<" <"<<scope.str()<<">"
-        <<endl;;
-    if(scope.find(tag)){
-        if(v) cout<<"FASTDIV_"<<jj<<" macro already there"<<endl;
-    }else{
-        scope[tag].setType("TAG");
-        if(v) cout<<"FASTDIV_"<<jj<<" new macro, input range "<<vIn_hi<<endl;
-        struct fastdiv jj_fastdiv;
-        uint32_t fastdiv_ops = 0U;
-        {
-            fastdiv_make( &jj_fastdiv, (uint32_t)jj );
-            cout<<" mul,add,shr="<<(void*)(intptr_t)jj_fastdiv.mul
-                <<","<<jj_fastdiv.add<<","<<jj_fastdiv.shift;
-            if(jj_fastdiv.mul != 1) ++fastdiv_ops;
-            if(jj_fastdiv.add != 0) ++fastdiv_ops;
-            if(1) /*shift*/ ++fastdiv_ops;
-            if(v) cout<<" struct fastdiv (mul,add,shr) in "<<fastdiv_ops<<" ops"<<endl;
-        }
-        string fastdiv_macro;
-        // Can we instead use the always-2-op mul-shift method?
-        if(fastdiv_ops==3 && (vIn_hi>0 && vIn_hi <= FASTDIV_SAFEMAX)){
-            // fastdiv_ops==3 means we don't have a power-of-two easy case, so if
-            // the input vector u32's are "small", we can have a 2-op mul-shift.
-            uint64_t const jj_M = computeM_uB(jj); // 42-bit fastdiv_uB multiplier
-            string mac;
-
-            string mul = OSSFMT("FASTDIV_"<<jj<<"_MUL");
-            scope.define(mul,jithex(jj_M));
-            mac = OSSFMT("_ve_vmulul_vsv("<<mul<<",V);");
-
-            string shr = OSSFMT("FASTDIV_"<<jj<<"_SHR");
-            scope.define(shr,jitdec(FASTDIV_C));
-            mac = OSSFMT("_ve_vsrl_vvs("<<mac<<","<<shr<<")");
-
-            fastdiv_macro = mac;
-            ret = 2;
-            if(v) cout<<"mk_FASTDIV "<<ret<<" ops, macro="<<fastdiv_macro<<endl;
-        }else{ // use 'struct fastdiv' approach (3-op max, 1-op min)
-            string mac;
-            if(jj_fastdiv.mul != 1){
-                string mul = OSSFMT("FASTDIV_"<<jj<<"_MUL");
-                scope.define(mul,jithex(jj_fastdiv.mul));
-                mac=OSSFMT("_ve_vmulul_vsv("<<mul<<",V)");
-            }else{
-                mac="V";
-            }
-            if(jj_fastdiv.add != 0){
-                string add = OSSFMT("FASTDIV_"<<jj<<"_ADD");
-                scope.define(add,jitdec(jj_fastdiv.add));
-                mac=OSSFMT("_ve_vaddul_vsv("<<add<<","<<mac<<")");
-            }
-            if(jj_fastdiv.shift != 0){
-                string shr = OSSFMT("FASTDIV_"<<jj<<"_SHR");
-                scope.define(shr,jitdec(32+jj_fastdiv.shift));
-                mac=OSSFMT("_ve_vsrl_vvs("<<mac<<","<<shr<<")");
-            }
-
-            fastdiv_macro = mac;
-            ret = fastdiv_ops;
-            if(v) cout<<"mk_FASTDIV "<<ret<<" ops, macro="<<fastdiv_macro<<endl;
-        }
-        scope.define(OSSFMT("FASTDIV_"<<jj<<"(V)"),fastdiv_macro);
-    }
-    return ret;
-}
-
-/** return DIVMOD macro to produce vectors \c vDiv=vReg/jj and \c vMod=vReg%jj where
- * \c jj is a constant divisor.
- *
- * \c vIn_hi optional range-restriction may give better op-codes. For fused loops
- * `for(0..ii)for(0..jj)` with some max VL, you should set \c vIn_hi=ii*jj+VL,
- * and if this is < FASTDIV_SAFEMAX we'll use 2-op mul-shr instead.
- *
- * \pre vReg has u32 values stored in a u64 vector register.
- * \pre jj>0
- * \return number of operations required.
- *
- * - Method:
- *   - if jj is 2^N, use shift/mask
- *   - else if vReg has a range restriction, check if can use computeM_uB method (mul,shift)
- *   - else use fastdiv method (mul, add(?), shift)
- * - for modulus, use either
- *   - mask for jj=2^N
- *   - else mul-sub
- * 
- * \todo
- *  NOT CONSIDERED: are DIVMOD_jj_MUL|ADD immediate constants?
- *  Would the constants be better off in register variables?
- *  Is clang avoid possible lea crap in the inner loop code for non-immediate constants?
- *  (i.e. larger-than-u32 multipliers may use 3-op load on VE, instead of minimal 2 or 1-op sequence)
- * 
- *  If lea's are bothersome, then we would try to load constants into scalar registers
- *  in some (other?) outer block instead of having local scalar regs.
- *  VE scalars are often limited range or nice-looking bitmasks.
- * 
- *  For assembly (when will I have extend asm to beef up intrinsics?)
- *  I also have optimized scalar-load code that takes at most 2 ops and might mix
- *  execution units a little better than pure-lea approaches.
- * 
- */
-int mk_DIVMOD(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi=0){
-    int v=1;
-    ostringstream oss;
-    // go up to some well-defined scope position and use a named-block to
-    // record that this macro exists (try not to duplicate the definition)
-    auto& scope=cb["..*/body/.."]; // where Cblock::define will place definitions
-    if(v) cout<<"mk_DIVMOD_"<<jj<<" range "<<vIn_hi<<" to scope "<<scope.fullpath()
-        //<<" <"<<scope.str()<<">"
-        <<endl;
-    int nops=0;
-    string tag = OSSFMT("divmod_"<<jj);
-    if(scope.find(tag)){
-        if(v) cout<<"DIVMOD_"<<jj<<" macro already there"<<endl;
-    }else{
-        scope[tag].setType("TAG"); // create the tag block "we were here before"
-        if(v) cout<<"DIVMOD_"<<jj<<" new macro"<<endl;
-        int nops = mk_FASTDIV(cb,jj,vIn_hi);
-        string mac = OSSFMT(" \\\n    VDIV = FASTDIV_"<<jj<<"(V); \\\n");
-        if(nops==1){
-            assert(positivePow2(jj));
-            cout<<("MASK WITH jj-1 for modulus");
-            mac = OSSFMT(mac<<"    VMOD = _ve_vand_vsv(V,"<<jithex(jj-1)<<",V)");
-            ++nops;
-        }else{
-            // VE does not have FMA ops for any integer type.
-            //     so for 12/24-bit floats could consdier exact-floating calcs,
-            //     but conversion ops probably kill this idea (not tried).
-            cout<<("MUL-SUB modulus");
-            mac = OSSFMT(mac<<"    VMOD = _ve_vsubul_vvv(V,_ve_vmulul_vsv("<<jj<<",VDIV))");
-            nops+=2;
-        }
-        scope.define(OSSFMT("DIVMOD_"<<jj<<"(V,VDIV,VMOD)"),mac);
-    }
-    return nops;
-}
-
 // NOTE: we do a ">>FASTDIV_C", which we can't just elide on Aurora, even if FASTDIV_C==16
 
 /* Suppose for i:(0,ii){ for j:(o,jj) {} gets
@@ -1240,31 +1078,10 @@ INDUCE:
         }else{ // div-mod ---------------------6 vec ops: add (mul,shr) (mul,sub) add
             tr+="induce: a[], b[] update via fastdiv";
             if(verbose){cout<<" i";cout.flush();}
-#if 0 // now I support full-range FASTDIV_jj and DIVMOD_jj macros
             FOR(i,vl) bA[i] = vl0 + b[i];            // add_vsv
             FOR(i,vl) bD[i] = ((jj_M*bA[i]) >> FASTDIV_C);  // fastdiv_uB   : mul_vvs, shr_vs
             FOR(i,vl) b [i] = bA[i] - bD[i]*jj;     // long-hand    : mul_vvs, sub_vvv
             FOR(i,vl) a [i] = a[i] + bD[i];         // add_vvv
-            // Note;
-            //  this is 1 + 2 + 2 +1 = 6 vector ops. 2mul, 3add/sub, 1shift
-            //  using 1 big constant, and 2 tmp vector registers
-            //  WITH possibly some concurrent execution units
-            //  WITH restricted u32 input range
-            // cf. full recalc with sqij
-            //  1(sqij update) + 3(worst case div) + 2(mod) vecops: add, mul-add-shr, mul-sub
-            //  using 2 big consts, and no [explicit] tmp vector registers
-            //  WITHOUT parallel execution units possible
-            //  WITHOUT restricted u32 input range
-            //
-            //So it might be a slight bit faster than 'struct fastdiv' approach
-            //
-#else
-            // cnt is downwards in goto style, we want upward cnt here
-            uint64_t cnt_incr = (STYLE==STYLE_GOTO? iijj-cnt: cnt);
-            if(cnt_incr<5000) cout<<" div-mod cnt_incr="<<cnt_incr<<endl;
-            FOR(i,vl) a [i] = (cnt_incr+i)/jj; // just do it slowly for simulation purposes
-            FOR(i,vl) b [i] = (cnt_incr+i)%jj;
-#endif
             ++cnt_bA_bD; ++cnt_jj_M;
             assert(have_bA_bD); assert(have_sq==(jj>1&&jj<vl0)); assert(!have_jj_shift);
             assert(!have_vl_over_jj);
@@ -1277,19 +1094,14 @@ INDUCE:
                     fp["../beg"].set("if(cnt==0){");
                 }
 #endif
-                if( /*0 &&*/ iijj + vl0 < FASTDIV_SAFEMAX ){ // use 'pixel register' sqij
-                    // but this has less execution unit concurrency (bad dependency chain)
-                    // but also has one less op, so it *might* be a speed winner.
-                    // [ the next block could also do the same calc ]
+                if( iijj + vl0 < FASTDIV_SAFEMAX ){ // use 'pixel register' sqij
                     def_sqij=true;
                     fi>>"sqij = _ve_vaddul_vsv(vl0,sqij);                // sqij[i] += "<<jitdec(vl0);
                     // (same as INIT_BLOCK code)
-                    mk_DIVMOD(cfuse2,jj,iijj+vl0); // give iijj to recognize mul-shr opportunity
                     fp.clear(); fp["../beg"].clear(); fp["../end"].clear();
-                    //fp["last"].set(OSSFMT(
-                    //            "a = FASTDIV_"<<jj<<"(sqij); // a[i] = sqij[i]/jj recalc\n"
-                    //            "b = _ve_vsubul_vvv(sqij,_ve_vmulul_vsv(jj, a)); // b[i] = sqij[i] - jj*a[i]"));
-                    fp["last"].set(OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b); // a[]=sqij[]/jj; b[]=sqij[]%jj;"));
+                    fp["last"].set(OSSFMT(
+                                "a = FASTDIV_"<<jj<<"(sqij); // a[i] = sqij[i]/jj recalc\n"
+                                "b = _ve_vsubul_vvv(sqij,_ve_vmulul_vsv(jj, a)); // b[i] = sqij[i] - jj*a[i]"));
                 }else if(jj+vl < FASTDIV_SAFEMAX) { // o/w use safer induction formula
                     // Ex. ./cfuse2 -t 256 1500 1500, 1500 x 1500 image will be enough to overflow
                     // FASTDIV "full recalc" based on pixel number.
@@ -1303,21 +1115,15 @@ INDUCE:
                         ;
                 }else{
                     // Ex. ./cfuse2 -t 256 3 4000001 has jj too large for 2-op FASTDIV
+                    cout<<"unhandled case: need large-number vector-division-by-constant "<<jj<<endl;
                     def_sqij=true;
                     fi  >>"sqij = _ve_vaddul_vsv(vl0,sqij);                // sqij[i] += "<<jitdec(vl0);
                     // (same as INIT_BLOCK code)
-#if 0
-                    cout<<"unhandled case: need large-number vector-division-by-constant "<<jj<<endl;
                     fp.clear(); fp["../beg"].clear(); fp["../end"].clear();
                     fp["last"].set(OSSFMT(
                                 "a = _ve_vdivsl_vvs(sqij, outWidth) // a[i] = sqij[i]/jj XXX SLOW XXX\n"
                                 "b = _ve_vsubul_vvv(sqij,_ve_vmulul_vsv(jj, a)); // b[i] = sqij[i] - jj*a[i]"));
                     THROW("MISSING OPTIMIZATION:\nPlease implement mul-add-shift division algorithm HERE");
-#else // new mk_DIVMOD function expands to include generic cases of division by constant
-                    mk_DIVMOD(cfuse2, jj, iijj+vl0); // defines FASTDIV_jj(V) and DIVMOD_jj(V,A,B,VDIV,VMOD)
-                    fp.clear(); fp["../beg"].clear(); fp["../end"].clear();
-                    fp["last"].set(OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b); // a[]=sqij[]/jj; b[]=sqij[]%jj;"));
-#endif
                 }
             }
         }
@@ -1470,15 +1276,11 @@ KERNEL_BLOCK:
                 <<OSSFMT(" // cnt=ii*jj="<<ii<<"*"<<jj<<" to 1? by "<<vl0);
         }
         if(cnt_jj_M){
-#if 0 // move toward generic (and more flexible) FASTDIV_jj and DIVMOD_jj macros
             fd  .define(OSSFMT("FASTDIV_"<<jj<<"_M"), jithex(jj_M)+"/*in reg?*/")
                 .define(OSSFMT("FASTDIV_"<<jj<<"(VR)"),
                         OSSFMT("_ve_vsrl_vvs(_ve_vmulul_vsv("
                             "FASTDIV_"<<jj<<"_M, (VR)), "
                             <<FASTDIV_C<<")"));
-#else
-            mk_DIVMOD(cfuse2,jj,iijj+vl0);
-#endif
         }
         if(cnt_sq){
             fd["..*/first"]>>"__vr const sq = _ve_vseq_v();";
@@ -1486,7 +1288,7 @@ KERNEL_BLOCK:
         if(def_sqij){
             if(cnt_sq) fd>>"__vr sqij = sq;";
             else       fd>>"__vr sqij = _ve_vseq_v();";
-            //fk>>"// *this* kernel also has defined sqij[]=a[]*"<<asDec(jj)<<"+b[]";
+            fk>>"// *this* kernel also has defined sqij[]=a[]*"<<asDec(jj)<<"+b[]";
         }else if(nloop<=1){
             ;
         }else{
@@ -1508,10 +1310,8 @@ KERNEL_BLOCK:
 #if STYLE==STYLE_GOTO
         assert( cnt == 0 || (nloop<=1 && cnt == iijj) || (nloop>1 && cnt == iijj - iijj/vl0*vl0) ); //iijj/vl0*vl0 + vl0);
 #else
-        cout<<" end with cnt="<<cnt<<" cf. nloop*vl0="<<nloop*vl0<<endl;
-        cout<<" end with cnt="<<cnt<<" cf. (nloop-1)*vl0="<<(nloop-1)*vl0<<endl;
-        cout<<" end with cnt="<<cnt<<" cf. iijj/vl0*vl0="<<iijj/vl0*vl0<<endl;
-        assert( (nloop<=1 && cnt==0) || (nloop>1 && (uint64_t)cnt==iijj/vl0*vl0) );
+        cout<<" end with cnt="<<cnt<<endl;
+        assert( (nloop<=1 && cnt==0) || (nloop>1 && (int64_t)cnt==nloop*vl0) );
 #endif
         assert( nloop == iloop );
         assert( have_vl_over_jj     == (cnt_vl_over_jj    > 0) );
@@ -1537,7 +1337,6 @@ KERNEL_BLOCK:
         cout<<fp.flush_all(); // kern_asm has some scope here, now
         cout<<fd.flush_all();
 #else
-        cout<<pr.tree();
         string prog = pr.str();
         cout<<prog;
 #endif
