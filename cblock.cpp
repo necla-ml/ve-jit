@@ -448,12 +448,11 @@ std::ostream& Cblock::dump(std::ostream& os, int const ind/*=0*/)
     }
     //int const v = _root->v+2;
     std::string in("\n&&& "+std::string(ind,' '));
-    os<<in<<fullpath()
-        <<(_premanip? " premanip": "")
-        <<" code["<<_code.size()<<"]"
-        <<" sub["<<_sub.size()<<"]"
-        <<(_postmanip? "postmanip": "")
-        ;
+    os<<in<<fullpath()<<(_premanip? " premanip": "");
+    if(_code.size()) os<<" CODE["<<_code.size()<<"]";
+    if(_sub.size()) os<<" SUB["<<_sub.size()<<"]";
+    if(!_type.empty()) os<<" "<<_type;
+    os<<(_postmanip? "postmanip": "");
     for(auto s: _sub) s->dump(os,ind+1); // it's easy to generate **very** deep trees
     return os;
 }

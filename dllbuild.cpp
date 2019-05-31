@@ -506,7 +506,7 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
     // sometimes the 'make' does nothing ??? check that files are really there.
     {
         auto ls = "ls -l "+dir.abspath+" *.mk lib*";
-        system(ls.c_str());
+        if(system(ls.c_str())!=0) cout<<"Issues with command `"<<ls<<"`"<<endl;
     }
     prepped = true;
 }
