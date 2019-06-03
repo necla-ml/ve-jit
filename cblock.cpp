@@ -416,7 +416,10 @@ Cblock& Cblock::define(std::string name, std::string subst){
     // sanity checks on name?
     Cblock *a, *z;
     {
-        a = find("..*/body/.."); // try a nearest enclosing scope
+        Cblock *body = (getName()=="body"? this: find("..*/body)"));
+        if(!body) body=this;
+        a = body->find(".."); // try a nearest enclosing scope
+        // ORIG: a = find("..*/body/.."); // try a nearest enclosing scope
         //if(!a) a = find("..");   // else "parent" [ optional? ]
         if(!a) a = this;         // else "right here"
         z = &(*a)["last"]["undefs"]; // try extra hard for undef to be 'last'

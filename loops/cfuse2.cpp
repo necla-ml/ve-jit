@@ -48,8 +48,9 @@
 #define KERNEL_NONE 0
 #define KERNEL_HASH 1
 #define KERNEL_PRINT 2
+#define KERNEL_CHECK 3
 /** what kernel? */
-#define WHICH_KERNEL KERNEL_NONE
+#define WHICH_KERNEL KERNEL_CHECK
 
 void other_fastdiv_methods(int const jj);
 
@@ -160,11 +161,12 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
         ){
     static ostringstream oss;
 
-    bKrn["beg"]>>OSSFMT("// KERNEL("<<vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"])");
-    if(!extraComment.empty()) bKrn["beg"]<<" "<<extraComment;
     if( which==KERNEL_NONE ){ // just an optional extraComment
+        bKrn["beg"]>>OSSFMT("// KERNEL("<<vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"])");
         if(!extraComment.empty()) bKrn["beg"]<<extraComment;
     }else if( which==KERNEL_HASH ){
+        bKrn["beg"]>>OSSFMT("// KERNEL("<<vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"])");
+        if(!extraComment.empty()) bKrn["beg"]<<" "<<extraComment;
         std::string vh2 = pfx + "VecHash2";
         // constants moved upwards to beginning of scope enclosing bDef
         auto& bDefConst = bDef["..*/first"];
@@ -178,18 +180,66 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
         }
         VecHash2::kern_C(bKrn["body"],vA,vB,sVL,vh2);
     }else if( which==KERNEL_PRINT ){
+        // XXX Does clang have any option to pass __vr efficiently ?
+        bool const nice_vector_register_args = true;
+        if( !nice_vector_register_args ){ // inlined...
+            bKrn["beg"]>>OSSFMT("// KERNEL("<<vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"])");
+            if(!extraComment.empty()) bKrn["beg"]<<" "<<extraComment;
+            bKrn["prt"]>>"printf(\"a={\");"
+                >>"for(int i=0;i<"<<sVL<<";++i){ printf(\"%llu%c\","
+                >>"    (long long unsigned)_ve_lvs_svs_u64("<<vA<<",i),"
+                >>"    (i%8==0? \"\\n   \":\" \")); }"
+                >>"printf(\"}\\n\");"
+                >>"printf(\"b={\");"
+                >>"for(int i=0;i<"<<sVL<<";++i){ printf(\"%llu%c\","
+                >>"    (long long unsigned)_ve_lvs_svs_u64("<<vB<<",i),"
+                >>"    (i%8==0? \"\n   \":\" \")); }"
+                >>"printf(\"}\\n\");"
+                ;
+        }else{ // as function call (KERNEL_PRINT does not need speed)
+            bDef["..*/includes"]>>"#include <stdio.h>";
+            auto& bDefKernelFn = bDef["..*/fns/first"];
+            if(bDefKernelFn.find("cfuse2_kernel_print")==nullptr){
+                CBLOCK_SCOPE(cfuse2_kernel_print,
+                        "void cfuse2_kernel_print(__vr const a, __vr const b,"
+                        "\n        uint64_t const vl)",bDefKernelFn.getRoot(),bDefKernelFn);
+                cfuse2_kernel_print
+                    >>"printf(\"a={\");"
+                    >>"for(int i=0;i<vl;++i){ printf(\"%llu%c\","
+                    >>"    (long long unsigned)_ve_lvs_svs_u64("<<vA<<",i),"
+                    >>"    (i%8==0? \"\\n   \":\" \")); }"
+                    >>"printf(\"}\\n\");"
+                    >>"printf(\"b={\");"
+                    >>"for(int i=0;i<vl;++i){ printf(\"%llu%c\","
+                    >>"    (long long unsigned)_ve_lvs_svs_u64("<<vB<<",i),"
+                    >>"    (i%8==0? \"\n   \":\" \")); }"
+                    >>"printf(\"}\\n\");"
+                    ;
+            }
+            bKrn["prt"]<<"cfuse2_kernel_print("<<vA<<", "<<vB<<", "<<sVL<<");";
+            if(!extraComment.empty()) bKrn["prt"]<<" // "<<extraComment;
+        }
+        bOut>>"printf(\"cfuse KERNEL_PRINT done!\\n\");";
+    }else if( which==KERNEL_CHECK ){
+        // as function call (KERNEL_PRINT does not need speed)
         bDef["..*/includes"]>>"#include <stdio.h>";
-        bKrn["prt"]>>"printf(\"a={\");"
-            >>"for(int i=0;i<"<<sVL<<";++i){ printf(\"%llu%c\","
-            >>"        (long long unsigned)_ve_lvs_svs_u64("<<vA<<",i),"
-            >>"        (i%8==0? \"\\n   \":\" \")); }"
-            >>"printf(\"}\\n\");"
-            >>"printf(\"b={\");"
-            >>"for(int i=0;i<"<<sVL<<";++i){ printf(\"%llu%c\","
-            >>"        (long long unsigned)_ve_lvs_svs_u64("<<vB<<",i),"
-            >>"        (i%8==0? \"\n   \":\" \")); }"
-            >>"printf(\"}\\n\");"
-            ;
+        bDef["..*/includes"]>>"#include <assert.h>";
+        auto& bDefKernelFn = bDef["..*/fns/first"];
+        if(bDefKernelFn.find("cfuse2_kernel_print")==nullptr){
+            CBLOCK_SCOPE(cfuse2_kernel_check,
+                    "void cfuse2_kernel_check(__vr const a, __vr const b,"
+                    "\n        uint64_t const cnt, uint64_t const vl, uint64_t const jj)",
+                    bDefKernelFn.getRoot(),bDefKernelFn);
+            cfuse2_kernel_check
+                >>"for(uint64_t i=0;i<vl;++i){"
+                >>"    assert( _ve_lvs_svs_u64("<<vA<<",i) == (cnt+i)/jj );"
+                >>"    assert( _ve_lvs_svs_u64("<<vB<<",i) == (cnt+i)%jj );"
+                >>"}"
+                ;
+        }
+        bKrn["prt"]<<"cfuse2_kernel_check("<<vA<<", "<<vB<<", cnt, "<<sVL<<", "<<jitdec(jj)<<");";
+        if(!extraComment.empty()) bKrn["prt"]<<" // "<<extraComment;
+        bOut>>"printf(\"cfuse KERNEL_CHECK done! no errors\\n\");";
     }else{
         THROW(OSSFMT("unknown kernel type "<<which<<" in fuse2_kernel"));
     }
@@ -255,12 +305,15 @@ void other_fastdiv_methods(int const jj){
  *   - if op count is 3 and range restrictions met, use computeM_uB method (mul,shift)
  */
 int mk_FASTDIV(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi=0){
-    int const v=1;
+    int const v=1; // verbosity
+    bool const verify=true; // false after code burn-in
+    bool const macro_constants = false;
     int ret=0;
     ostringstream oss;
     // go up to some well-defined scope position and use a named-block to
     // record that this macro exists (try not to duplicate the definition)
-    auto& scope=cb["..*/body/.."]; // where Cblock::define will place definitions
+    // where Cblock::define will place definitions (may need tweaking?)
+    auto& scope=(cb.getName()=="body"? cb: cb["..*/body/.."]);
     string tag = OSSFMT("fastdiv_"<<jj); // "we were here before" tag
     if(v) cout<<"mk_FASTDIV_"<<jj<<" range "<<vIn_hi<<" to scope "<<scope.fullpath()
         //<<" <"<<scope.str()<<">"
@@ -290,40 +343,86 @@ int mk_FASTDIV(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi=0){
             uint64_t const jj_M = computeM_uB(jj); // 42-bit fastdiv_uB multiplier
             string mac;
 
-            string mul = OSSFMT("FASTDIV_"<<jj<<"_MUL");
-            scope.define(mul,jithex(jj_M));
+            string mul;
+            if(macro_constants||isIval(jj_M)){
+                mul = OSSFMT("FASTDIV_"<<jj<<"_MUL");
+                scope.define(mul,OSSFMT("((uint64_t)"<<jithex(jj_M)<<")"));
+            }else{
+                mul = OSSFMT("fastdiv_"<<jj<<"_MUL");
+                cb>>OSSFMT("uint64_t const "<<mul<<" = "<<jithex(jj_M));
+            }
             mac = OSSFMT("_ve_vmulul_vsv("<<mul<<",V);");
 
-            string shr = OSSFMT("FASTDIV_"<<jj<<"_SHR");
-            scope.define(shr,jitdec(FASTDIV_C));
-            mac = OSSFMT("_ve_vsrl_vvs("<<mac<<","<<shr<<")");
+            string shr;
+            if(1){
+                shr = OSSFMT("FASTDIV_"<<jj<<"_SHR");
+                scope.define(shr,jitdec(FASTDIV_C));
+            }else{
+                shr = OSSFMT("fastdiv_"<<jj<<"_SHR");
+                cb>>OSSFMT("uint64_t const "<<mul<<" = "<<jitdec(FASTDIV_C)<<";");
+            }
+            //mac = OSSFMT("_ve_vsrl_vvs("<<mac<<","<<shr<<")/*OK over [0,"<<vIn_hi<<")*/");
+            mac = OSSFMT("_ve_vsrl_vvs("<<mac<<","<<shr<<")/*OK over [0,2^"<<FASTDIV_C/2<<")*/");
 
             fastdiv_macro = mac;
             ret = 2;
             if(v) cout<<"mk_FASTDIV "<<ret<<" ops, macro="<<fastdiv_macro<<endl;
+            if(verify){ // quick correctness verification
+                uint32_t hi = vIn_hi;
+                if(hi==0){ hi = 257*min(jj,16384U); }
+                for(uint64_t i=0; i<=hi; ++i){ // NB: 64-bit i
+                    assert( ((i*jj_M)>>FASTDIV_C) == i/jj );
+                }
+            }
+
         }else{ // use 'struct fastdiv' approach (3-op max, 1-op min)
             string mac;
             if(jj_fastdiv.mul != 1){
-                string mul = OSSFMT("FASTDIV_"<<jj<<"_MUL");
-                scope.define(mul,jithex(jj_fastdiv.mul));
+                string mul;
+                if(macro_constants||isIval(jj_fastdiv.mul)){
+                    mul = OSSFMT("FASTDIV_"<<jj<<"_MUL");
+                    scope.define(mul,jithex(jj_fastdiv.mul));
+                }else{
+                    mul = OSSFMT("fastdiv_"<<jj<<"_MUL");
+                    cb>>OSSFMT("uint64_t const "<<mul<<" = "<<jithex(jj_fastdiv.mul)<<";");
+                }
                 mac=OSSFMT("_ve_vmulul_vsv("<<mul<<",V)");
             }else{
                 mac="V";
             }
             if(jj_fastdiv.add != 0){
-                string add = OSSFMT("FASTDIV_"<<jj<<"_ADD");
-                scope.define(add,jitdec(jj_fastdiv.add));
+                string add;
+                if(macro_constants||isIval(jj_fastdiv.add)){
+                    add = OSSFMT("FASTDIV_"<<jj<<"_ADD");
+                    scope.define(add,jitdec(jj_fastdiv.add));
+                }else{
+                    add = OSSFMT("fastdiv_"<<jj<<"_ADD");
+                    cb>>OSSFMT("uint64_t const "<<add<<" = "<<jitdec(jj_fastdiv.add)<<";");
+                }
                 mac=OSSFMT("_ve_vaddul_vsv("<<add<<","<<mac<<")");
             }
             if(jj_fastdiv.shift != 0){
-                string shr = OSSFMT("FASTDIV_"<<jj<<"_SHR");
-                scope.define(shr,jitdec(jj_fastdiv.shift));
+                string shr;
+                if(1){
+                    shr = OSSFMT("FASTDIV_"<<jj<<"_SHR");
+                    scope.define(shr,jitdec(jj_fastdiv.shift));
+                }else{
+                    shr = OSSFMT("fastdiv_"<<jj<<"_SHR");
+                    cb>>OSSFMT("uint64_t const "<<shr<<" = "<<jitdec(jj_fastdiv.shift)<<";");
+                }
                 mac=OSSFMT("_ve_vsrl_vvs("<<mac<<","<<shr<<")");
             }
-
             fastdiv_macro = mac;
             ret = fastdiv_ops;
             if(v) cout<<"mk_FASTDIV "<<ret<<" ops, macro="<<fastdiv_macro<<endl;
+            if(verify){ // quick correctness verification
+                uint32_t hi = vIn_hi;
+                if(hi==0){ hi = 257*min(jj,16384U); }
+                for(uint64_t i=0; i<=hi; ++i){ // NB: 64-bit i
+                    assert( (((uint64_t)i*jj_fastdiv.mul+jj_fastdiv.add)>>jj_fastdiv.shift) == i/jj );
+                }
+            }
+
         }
         scope.define(OSSFMT("FASTDIV_"<<jj<<"(V)"),fastdiv_macro);
     }
@@ -369,7 +468,7 @@ int mk_DIVMOD(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi=0){
     ostringstream oss;
     // go up to some well-defined scope position and use a named-block to
     // record that this macro exists (try not to duplicate the definition)
-    auto& scope=cb["..*/body/.."]; // where Cblock::define will place definitions
+    auto& scope=(cb.getName()=="body"? cb: cb["..*/body/.."]); // where Cblock::define will place definitions
     if(v) cout<<"mk_DIVMOD_"<<jj<<" range "<<vIn_hi<<" to scope "<<scope.fullpath()
         //<<" <"<<scope.str()<<">"
         <<endl;
@@ -393,6 +492,7 @@ int mk_DIVMOD(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi=0){
             //     but conversion ops probably kill this idea (not tried).
             cout<<("MUL-SUB modulus");
             mac = OSSFMT(mac<<"          VMOD = _ve_vsubul_vvv(V,_ve_vmulul_vsv("<<jj<<",VDIV))");
+            if(!isIval(jj)) mac.append(" /*is non-Ival in register?*/");
             nops+=2;
         }
         scope.define(OSSFMT("DIVMOD_"<<jj<<"(V,VDIV,VMOD)"),mac);
@@ -707,7 +807,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
 
 /** helper routine, after using unroll_suggest for a good VL \c vl0. */
 std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
-        int const which=KERNEL_PRINT, int const verbose=1){
+        int const which=WHICH_KERNEL, int const verbose=1){
     ostringstream oss;
     uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
     uint64_t const vl = min(iijj,(uint64_t)vl0);
@@ -718,6 +818,7 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
     inc >>"#include \"veintrin.h\""
         >>"#include <stdint.h>";
     auto& fns = pr.root["fns"];
+    fns["first"]; // reserve a node for optional function definitions
     CBLOCK_SCOPE(cfuse2,"int main(int,char**)",pr,fns["main"]);
     if(nloop==0){
         cfuse2>>OSSFMT("// for(0.."<<ii<<")for(0.."<<jj<<") --> NOP");
@@ -734,53 +835,74 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
 
         // some kernels might ask for const sq reg to always be defined
         auto have_sq = [&fd](){ return fd.find("sq") != nullptr; };
+        auto have_sqij = [&fd](){ return fd.find("have_sqij") != nullptr; };
         auto use_sq = [&fd,have_sq](){ // if nec, define const sequence register
             if(!have_sq()) fd["sq"]>>"__vr const sq = _ve_vseq_v(); // sq[i]=i";};
-        auto equ_sq = [have_sq](std::string v){
-            return v+(have_sq()
-                    ? " = sq;          "
+        auto equ_sq = [have_sq,have_sqij](std::string v){
+            return v+(have_sq() ? " = sq;          "
+                    : have_sqij() ? " = sqij;        "
                     : " = _ve_vseq_v();"); };
         auto kernComment = [have_sq,ii,jj](){
             return have_sq()? "sq[]=0.."+jitdec(ii*jj-1): "";
         };
         auto mk_divmod = [&](){ mk_DIVMOD(cfuse2,jj,iijj+vl0); };
 
-
         auto& fp = cfuse2["preloop"]; // pre-loop setup
         bool fp_sets_ab = false;
         if(nloop==1){
             auto& fk = fp["krn"];
             auto& fz = cfuse2["last"]["krn"];
-            fuse2_kernel(fk, fd, fz, ii,jj,vl, kernComment(), which);
+            if(which==KERNEL_CHECK && !fd.find("have_cnt")){
+                //fd>>"int64_t const cnt=0; /*simulate for-loop index for kernel";
+                fd.define("cnt","0");
+                fd["have_cnt"].setType("TAG");
+            }
+            if((which==KERNEL_PRINT || which==KERNEL_CHECK)
+                    && ! fd.find("have_vl")){
+                //fd  >>"int64_t const vl = vl0;";
+                fd.define("vl","vl0");
+                fd["have_vl"].setType("TAG");
+            }
             fz>>"// [krn output]";
+            fuse2_kernel(fk, fd, fz, ii,jj,vl, kernComment(), which);
             fp_sets_ab = true;
         }
         if(nloop>1){
             fp_sets_ab = true;
+            fd["have_cnt"].setType("TAG");
+            if((which==KERNEL_PRINT || which==KERNEL_CHECK)
+                    && ! fd.find("have_vl")){
+                fd  >>"int64_t vl = vl0;";
+                fd["have_vl"].setType("TAG");
+            }
             CBLOCK_FOR(loop_ab,0,"for(int64_t cnt=0 ; /*cnt<iijj*/; /*cnt+=vl0*/)",cfuse2);
             auto& ff = loop_ab["../first"];
             auto& fk = loop_ab["krn"];
             auto& fz = cfuse2["last"]["krn"];
-            fuse2_kernel(fk, fd, fz, ii,jj,vl, kernComment(), which);
             fz>>"// [krn output]";
+            fuse2_kernel(fk, fd, fz, ii,jj,vl, kernComment(), which);
 
             // manage a,b induction, vl change (loop exit?)
             auto& fi = loop_ab["iter"];
-            fi>>"// loop_ab/iter";
+            fi>>OSSFMT("// CFUSE2_NO_UNROLL_"<<vl<<"_"<<ii<<"_"<<jj<<" loop_ab/iter");
             if(iijj%vl0){ // last iter has reduced VL
+                if(!fd.find("have_vl")){
+                    fd  >>"int64_t vl = vl0;";
+                    fd["have_vl"].setType("TAG");
+                }
                 fi  >>"if(vl!=vl0) break;                  // easy 'done' test"
                     >>"cnt += vl0;"
                     >>"vl = (vl0<iijj-cnt? vl0: iijj-cnt); // vl = min(vl0,remain)"
                     >>"_ve_lvl(vl);";
             }else{
                 fi  >>"cnt += vl0;"
-                    >>"if((uint64_t)cnt==iijj) break;";
+                    >>"if((uint64_t)cnt>=iijj) break; /*will hit iijj exactly*/";
             }
             if(vl0%jj==0){                      // avoid div,mod -- 1 vec op
                 int64_t vlojj = vl0/jj;
                 cfuse2 .DEF(vlojj);
                 fi>>OSSFMT("a =_ve_vadds_vsv(vlojj, a);"
-                        <<" // a[i] += (vl/jj="<<vl0/jj<<"), b[] unchanged");
+                        <<" // a[i] += (vl0/jj="<<vl0/jj<<"), b[] unchanged");
             }else if(jj%vl0==0){
                 if(nloop<=jj/vl0){ // !have_jjMODvl_reset
                     fi>>OSSFMT("b = _ve_vadds_vsv("<<jitdec(vl0)<<",b); // b[i] += vl0, a[] const");
@@ -803,8 +925,11 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
                         >>"    b = sq;                     // b[i] = sq[i] (reset case)"
                         >>"}";
                 }
+#if 0
             }else if(positivePow2(jj)){
-                // induction from prev a,b is longer than full recalc
+                // code block identical to full recalc DIVMOD case (mk_divmod now recognizes jj=2^N)
+                //
+                // induction from prev a,b is longer than full recalc!
                 //  sqij = _ve_vaddul_vsv(vl0,sqij);
                 //  a = _ve_vsrl_vvs(sqij, jj_shift);              // a[i]=sq[i]/jj
                 //  b = _ve_vand_vsv("<<jithex(jj_minus_1)<<",sq); // b[i]=sq[i]%jj
@@ -819,21 +944,23 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
                     mk_divmod();
                     fp>>equ_sq("__vr sqij");
                     fi  >>"sqij = _ve_vaddul_vsv(vl0,sqij);      // sqij[i] += "<<jitdec(vl0)
-                        >>OSSFMT("DIVMOD_"<<jj<<"(__vr a,__vr b,sqij); //  a[]=sq/"<<jj<<" b[]=sq%"<<jj);
+                        >>OSSFMT("DIVMOD_"<<jj<<"(a,b,sqij); //  a[]=sq/"<<jj<<" b[]=sq%"<<jj);
                 }
+#endif
             }else{
                 if(jj<vl0){ // same as INIT_BLOCK code
                     fp_sets_ab = false;
-                    fp>>equ_sq("__vr sqij");
+                    fd>>equ_sq("__vr sqij");
+                    fd["have_sqij"].setType("TAG");
                     mk_divmod();
                     ff>>OSSFMT("DIVMOD_"<<jj<<"(__vr a,__vr b,sqij); //  a[]=sq/"<<jj<<" b[]=sq%"<<jj);
                     fi>>"sqij = _ve_vaddul_vsv(vl0,sqij);      // sqij[i] += "<<jitdec(vl0);
                 }else{
                     mk_divmod();
-                    fk["last"]>>" TBD !!! XXX";
-                    fp>>equ_sq("__vr sqij");
+                    fd>>equ_sq("__vr sqij");
+                    fd["have_sqij"].setType("TAG");
                     fi  >>"sqij = _ve_vaddul_vsv(vl0,sqij);      // sqij[i] += "<<jitdec(vl0)
-                        >>OSSFMT("DIVMOD_"<<jj<<"(__vr a,__vr b,sqij); //  a[]=sq/"<<jj<<" b[]=sq%"<<jj);
+                        >>OSSFMT("DIVMOD_"<<jj<<"(a,b,sqij); //  a[]=sq/"<<jj<<" b[]=sq%"<<jj);
                 }
             }
         }
@@ -857,7 +984,8 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
     return pr.str();
 }
 // for r in [0,h){ for c in [0,w] {...}
-void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj, int const opt_t){
+void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj,
+        int const opt_t, int const which=WHICH_KERNEL){
     ostringstream oss; // reusable allocation, for CBLK and OSSFMT macros
     ExecHash tr;
     //CodeGenAsm cg;
@@ -869,7 +997,7 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj, int cons
     int vl = u.vl;
 
     auto uAlt = unroll_suggest(u);  // suggest an alternate nice vector length, sometimes.
-    if(opt_t==3){ // we FORCE the alternate strategy
+    if(opt_t==3){ // we FORCE the alternate strategy (if it exists)
         if(u.vll) // equiv uAlt.suggested != UNR_UNSET
         {
             assert( uAlt.suggested != UNR_UNSET );
@@ -1012,6 +1140,7 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj, int cons
         Cunit pr("cfuse2","C",0/*verbose*/);
         auto& inc = pr.root["includes"];
         auto& fns = pr.root["fns"];
+        fns["first"]; // reserve a node so kernels can define functions
         CBLOCK_SCOPE(cfuse2,"int main(int,char**)",pr,fns["main"]);
         auto& fd = cfuse2["../first"];  //cfuse2["defines"];
 #if STYLE==STYLE_GOTO
@@ -1023,17 +1152,21 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj, int cons
         {
             if(nloop<=1){
                 ploop_ab = &cfuse2["loop"]["first"];
+                bool const kernel_needs_cnt = which==KERNEL_CHECK;
+                if(kernel_needs_cnt){
+                    fd>>"int64_t const cnt=0; /*simulate for-loop index for kernel";
+                }
             }else{
-                cout<<"ploop_ab, nloop="<<nloop<<endl;
+                //cout<<"ploop_ab, nloop="<<nloop<<endl;
                 fd  >>"int64_t const iijj = (uint64_t)ii * (uint64_t)jj;"
                     <<OSSFMT(" // cnt to "<<ii<<"*"<<jj<<"="<<iijj<<" by "<<vl0);
-                cout<<"fd.str() = "<<fd.str()<<endl;
-                cout<<" setting loop_ab..."<<endl;
+                //cout<<"fd.str() = "<<fd.str()<<endl;
+                //cout<<" setting loop_ab..."<<endl;
                 CBLOCK_FOR(loop_ab,0,
                         "for(int64_t cnt=0; cnt<<iijj; cnt+=vl0)"
                         ,cfuse2["loop"]);
                 ploop_ab = &loop_ab;
-                cout<<"ploop_ab is "<<ploop_ab->str()<<endl;
+                //cout<<"ploop_ab is "<<ploop_ab->str()<<endl;
             }
         }
         Cblock& loop_ab = *ploop_ab;
@@ -1055,8 +1188,8 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj, int cons
         string fusename = OSSFMT("fuse2_"<<vl<<"_"<<ii<<"_"<<jj);
         cfuse2
             //.def("BASE", "L_"+fusename+"_BASE")
-            .def("INDUCE", "L_"+fusename+"_INDUCE")
-            .def("KERNEL_BLOCK", "L_"+fusename+"_KERNEL_BLOCK")
+            //.def("INDUCE", "L_"+fusename+"_INDUCE")
+            //.def("KERNEL_BLOCK", "L_"+fusename+"_KERNEL_BLOCK")
             .DEF(vl0)
             .DEF(ii)
             .DEF(jj)
@@ -1066,6 +1199,13 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj, int cons
         //+++++++++++++++++ constant registers +++++++++++++++++++
         //fd.ins("lvl vl0",                   "VL = vl0");
         fd>>OSSFMT("_ve_lvl(vl0);  // VL = "<<vl0);
+        if(which==KERNEL_PRINT){
+            if(!fd.find("have_vl")){
+                fd  >>"int64_t vl = vl0;";
+                fd["have_vl"].setType("TAG");
+            }
+        }
+
         if( have_sq ){
             FOR(i,vl) sq[i] = i;       // vseq_v
         }
@@ -1212,7 +1352,10 @@ INDUCE:
             vl = std::min( (uint64_t)vl, /*remain =*/ iijj-cnt );
 #endif
             if(onceI){
-                fd  >>"int64_t vl = vl0;";
+                if(!fd.find("have_vl")){
+                    fd  >>"int64_t vl = vl0;";
+                    fd["have_vl"].setType("TAG");
+                }
                 if(STYLE==STYLE_GOTO){
                     fi  >>"INDUCE:    // (ii*jj)%vl0 != 0 --> change VL for last iteration"
                         >>"cnt -= vl0;"
@@ -1520,7 +1663,7 @@ KERNEL_BLOCK:
 #if STYLE==STYLE_GOTO
             if(nloop > 1) fk[".."]<<"KERNEL_BLOCK:";
 #endif
-            fuse2_kernel(fk, fd, fz, ii,jj,vl, kernComment(), WHICH_KERNEL);
+            fuse2_kernel(fk, fd, fz, ii,jj,vl, kernComment(), which);
         }
 
         // KERNEL-BLOCK
@@ -1703,7 +1846,7 @@ KERNEL_BLOCK:
     if(vl0!=vlen) cout<<" (used alt vlen "<<vl0<<")"<<endl;
     cout<<tr.dump();
     cout<<" Compare with cfuse2_no_unroll:\n"
-        <<cfuse2_no_unroll(vl0,ii,jj,KERNEL_PRINT,1/*verbose*/);
+        <<cfuse2_no_unroll(vl0,ii,jj,which,1/*verbose*/);
 }
 
 /** opt0: print vector ops (and verify) */

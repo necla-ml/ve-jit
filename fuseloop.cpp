@@ -320,12 +320,16 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
     if( u.suggested != UNR_UNSET ){
         cout<<" Looking for an alt strategy..."<<endl;
     }
-    double const f=0.90;
+    double const f=(224./256.); //0.90
     int const vl = u.vl;
     int const vl_max = max(1,(u.suggested==UNR_UNSET? vl: vl-1));
     if( vl_min < 1 || vl_min > vl ){ // vl_min default (or out-of-range)?
+        //for general testing purposes (arbitrary vl)
         vl_min = max( 1, (int)(f*vl) );
+        // above could be different -- Ex. vl_min implying same # nloops
     }
+    // specifically for VE
+    
     cout<<" checking [ "<<vl_max<<" to "<<vl_min<<" ] ..."<<endl;
     //
     auto const sugg = u.suggested; // induction strategy
@@ -339,6 +343,7 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
             int const vll = vl/jj*jj;
             cout<<"   Note: vl/jj*jj = "<<vll<<" is an exact multiple of jj"
                 " (vl reduced by "<<(vl-vll)<<" or "<<int((vl-vll)*1000.0/vl)*0.1<<"%)"
+                <<"\n         with nloops' = "<<(u.ii*u.jj+vll-1)/vll
                 <<endl;
         }else if( jj > vl && jj%vl!=0){
             // can we make jj an exact mult of vll?
@@ -347,6 +352,7 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
                 int const vll = jj/nup;
                 cout<<"   Note: vl = "<<jj/nup<<" would make jj an exact mult of vl"
                     " (vl reduced by "<<(vl-vll)<<" or "<<int((vl-vll)*1000.0/vl)*0.1<<"%)"
+                    <<"\n         with nloops' = "<<(u.ii*u.jj+vll-1)/vll
                     <<endl;
             }
         }
@@ -390,8 +396,20 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
                     cout<<"  ---> JJPOW2 without precalc (4 vec ops) never beats JJMODVL"<<endl;
                     continue;
                 }
+                //
+                // If unrolling for real, with precalculated constants,
+                // UNR_NLOOP should always "equalize' the VLs using 'nice_vector_length(iijj)'.
+                //
+                // If NOT unrolling the loop, then the recalculation is quite a bit faster
+                // for UNR_VLMODJJ.
+                //
+                // Here we adopt UNR_VLMODJJ even if it adds more loops, because the loop update is trivial
+                //
                 if(us.suggested == UNR_JJPOW2_BIG
-                        || u.suggested== UNR_DIVMOD ){
+                        || u.suggested== UNR_DIVMOD
+                        || (us.suggested==UNR_VLMODJJ /*&& u.nloop == us.nloop*/) // trivial induction!
+                        || (us.suggested==UNR_JJMODVL_NORESET /*&& u.nloop == us.nloop*/) // trivial!
+                        ){
                     cout<<" ACCEPTED!"<<endl;
                     ret = us;    // return the nice alt
                     u.vll = vll; // also record existence-of-alt into u
