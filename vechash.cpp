@@ -139,7 +139,7 @@ void VecHash2::kern_asm_begin( AsmFmtCols &ro_regs, AsmFmtCols &state,
         //state.ins("vbrdl vh_x,0","vechash2 state init DONE");
     }
 }
-void VecHash2::kern_C_begin( cprog::Cblock &defines, cprog::Cblock &state,
+void VecHash2::kern_C_begin( cprog::Cblock &defines,
         char const* client_vs/*=nullptr*/, uint32_t const seed/*=0*/ )
 {
     ostringstream oss;
@@ -148,9 +148,11 @@ void VecHash2::kern_C_begin( cprog::Cblock &defines, cprog::Cblock &state,
         >>OSSFMT("uint64_t const rnd64b = "<<scramble64::r2<<"ULL;")
         >>OSSFMT("uint64_t const rnd64c = "<<scramble64::r3<<"ULL;")
         ;
-    state>>OSSFMT("uint64_t vh2_j = "<<hex<<((uint64_t)seed<<32)<<"ULL; // vh2 state");
+    auto& state = defines["last"]["vechash"];
+    cout<<"kern_C_begin("<<defines.fullpath()<<",...)"<<endl;
+    state>>OSSFMT(left<<setw(40)<<OSSFMT("uint64_t vh2_j = "<<hex<<((uint64_t)seed<<32)<<"ULL;")<<" // vh2 state");
     if(client_vs){ // client has a vseq=0..MVL ?
-        state.define("vh_vs",client_vs);
+        defines.define("vh_vs",client_vs);
     }else{
         state<<OSSFMT("_ve_lvl(256);\n"
                 "__vr const vh_vs = _ve_vseq_v()"<<client_vs<<"; // vh2 vseq");
@@ -172,13 +174,42 @@ void VecHash2::kern_C( cprog::Cblock &parent,
         >>"__vr vh2_vy = _ve_vaddul_vsv(vh2_j,vh_vs); // init state j"
         >>OSSFMT("__vr vh2_vz = _ve_vmulul_vsv(rnd64b,"<<vb<<");")
         >>"vh2_vy = _ve_vmulul_vsv(rnd64a,vh2_vy);"
-        >>"vh2_vx = _ve_vaddul_vsv(vh2_vx,vh2_vz);"
-        >>"vh2_vz = _ve_vaddul_vsv(vh2_vx,vh2_vy); // vz ~ sum of xyz scrambles"
+        >>"vh2_vx = _ve_vaddul_vvv(vh2_vx,vh2_vz);"
+        >>"vh2_vz = _ve_vaddul_vvv(vh2_vx,vh2_vy); // vz ~ sum of xyz scrambles"
         >>"__vr vh2_vx = _ve_vrxor_vv(vh2_vz); // missing instruction ?"
         >>"uint64_t vh2_r = ve_lvs_svs_u64(vh2_vx,0)"
         >>OSSFMT("vh2_j += "<<vl)
         >>OSSFMT(hash<<" = "<<hash<<" ^ vh2_r")
         ;
+}
+std::pair<std::string,std::string> VecHash2::kern_C_macro(std::string macname)
+{
+    std::string mac,def;
+    ostringstream oss;
+    mac=OSSFMT(macname<<"(VA,VB,VL,HASH)");
+    oss <<"do{ \\\n"
+        "    /* vechash2 : kernel begins */ \\\n"
+        "    /*  in: 2 u64 vectors VA, VB, common VL */ \\\n"
+        "    /*  inout: HASH (scalar reg) */ \\\n"
+        "    /*  state: vh2_j (scalar) */ \\\n"
+        "    /*  const: rnd64a, rnd64b, rnd64c, vh_vs */ \\\n"
+        "    /*  scratch vectors: vh2_vx, vh2_vy, vh2_vz */ \\\n"
+        "    /*  scratch scalars: vh2_r */ \\\n"
+        "    __vr vh2_vx = _ve_vmulul_vsv(rnd64b,VA); \\\n"
+        "    __vr vh2_vy = _ve_vaddul_vsv(vh2_j,vh_vs); /* init state j */ \\\n"
+        "    __vr vh2_vz = _ve_vmulul_vsv(rnd64b,VB); \\\n"
+        "    vh2_vy = _ve_vmulul_vsv(rnd64a,vh2_vy); \\\n"
+        "    vh2_vx = _ve_vaddul_vvv(vh2_vx,vh2_vz); \\\n"
+        "    vh2_vz = _ve_vaddul_vvv(vh2_vx,vh2_vy); /* vz ~ sum of xyz scrambles */ \\\n"
+        "    __vr vh2_vx = _ve_vrxor_vv(vh2_vz); /* missing instruction ? */ \\\n"
+        "    uint64_t vh2_r = ve_lvs_svs_u64(vh2_vx,0) \\\n"
+        "    vh2_j += VL; \\\n"
+        "    HASH = HASH ^ vh2_r; \\\n"
+        "}while(0)"
+        ;
+    def = oss.str();
+    //return make_pair(mac,def);
+    return {mac,def};
 }
 void VecHash2::kern_C_end( cprog::Cblock &cb ){
 }

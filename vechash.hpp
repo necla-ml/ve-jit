@@ -185,10 +185,12 @@ struct VecHash2 {
             std::string tmp );
     static void kern_asm_end( AsmFmtCols &a );
     // output 'C' code snippets
-    static void kern_C_begin( cprog::Cblock &defines, cprog::Cblock &state,
+    static void kern_C_begin( cprog::Cblock &defines,
             char const* client_vs=nullptr, uint32_t const seed=0 );
     static void kern_C( cprog::Cblock &parent,
             std::string va, std::string vb, std::string vl, std::string hash);
+    /** strings `{"macname(VA,VB,VL,HASH)", "do{...}while(0)"}` */
+    static std::pair<std::string,std::string> kern_C_macro(std::string macname);
     static void kern_C_end( cprog::Cblock &cb );
   private:
     void init(){
