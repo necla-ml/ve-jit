@@ -185,6 +185,7 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
             VecHash2::kern_C_begin(bDefConst, vSeq.c_str(), vl);
             bDefState>>OSSFMT(left<<setw(40)<<OSSFMT("int64_t "<<vh2<<" = 0;"))
                 <<" // vh2({a,b}) hash output";
+            bDef.getRoot()["includes"]>>"#include <stdio.h>";
             bOut>>"printf(\"jit "<<vh2<<" = %llu\\n\",(long long unsigned)"<<vh2<<");";
         }
 #if 0 // original: inline, many statements
@@ -202,17 +203,18 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
         // XXX Does clang have any option to pass __vr efficiently ?
         bool const nice_vector_register_args = true;
         if( !nice_vector_register_args ){ // inlined...
+            bDef.getRoot()["includes"]>>"#include <stdio.h>";
             bKrn["beg"]>>OSSFMT("// KERNEL("<<vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"])");
             if(!extraComment.empty()) bKrn["beg"]<<" "<<extraComment;
             bKrn["prt"]>>"printf(\"a={\");"
-                >>"for(int i=0;i<"<<sVL<<";++i){ printf(\"%llu%c\","
+                >>"for(int i=0;i<"<<sVL<<";++i){ printf(\"%llu%s\","
                 >>"    (long long unsigned)_ve_lvs_svs_u64("<<vA<<",i),"
                 >>"    (i%8==0? \"\\n   \":\" \")); }"
                 >>"printf(\"}\\n\");"
                 >>"printf(\"b={\");"
-                >>"for(int i=0;i<"<<sVL<<";++i){ printf(\"%llu%c\","
+                >>"for(int i=0;i<"<<sVL<<";++i){ printf(\"%llu%s\","
                 >>"    (long long unsigned)_ve_lvs_svs_u64("<<vB<<",i),"
-                >>"    (i%8==0? \"\n   \":\" \")); }"
+                >>"    (i%8==0? \"i\\n   \":\" \")); }"
                 >>"printf(\"}\\n\");"
                 ;
         }else{ // as function call (KERNEL_PRINT does not need speed)
@@ -223,15 +225,24 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
                         "void cfuse2_kernel_print(__vr const a, __vr const b,"
                         "\n        uint64_t const vl)",bDefKernelFn.getRoot(),bDefKernelFn);
                 cfuse2_kernel_print
-                    >>"printf(\"a={\");"
-                    >>"for(int i=0;i<vl;++i){ printf(\"%llu%c\","
-                    >>"    (long long unsigned)_ve_lvs_svs_u64("<<vA<<",i),"
-                    >>"    (i%8==0? \"\\n   \":\" \")); }"
+                    >>"int const terse=1;"
+                    >>"char const* linesep=\"\\n      \";"
+                    >>"printf(\""<<vA<<"[%3llu]={\",(long long unsigned)vl);"
+                    >>"for(int i=0;i<vl;++i){"
+                    >>"    if(terse && vl>=16) linesep=(vl>16 && i==7? \" ...\": \"\");"
+                    >>"    if(terse && vl>16 && i>=8 && i<vl-8) continue;"
+                    >>"    printf(\"%3llu%s\",\n"
+                    >>"      (long long unsigned)_ve_lvs_svs_u64("<<vA<<",i),"
+                    >>"      (i%8==7? linesep: \" \")); }"
                     >>"printf(\"}\\n\");"
-                    >>"printf(\"b={\");"
-                    >>"for(int i=0;i<vl;++i){ printf(\"%llu%c\","
-                    >>"    (long long unsigned)_ve_lvs_svs_u64("<<vB<<",i),"
-                    >>"    (i%8==0? \"\n   \":\" \")); }"
+                    >>"linesep=\"\\n   \";"
+                    >>"printf(\""<<vB<<"[%3llu]={\",(long long unsigned)vl);"
+                    >>"for(int i=0;i<vl;++i){"
+                    >>"    if(terse && vl>=16) linesep=(vl>16 && i==7? \" ...\": \"\");"
+                    >>"    if(terse && vl>16 && i>=8 && i<vl-8) continue;"
+                    >>"    printf(\"%3llu%s\",\n"
+                    >>"      (long long unsigned)_ve_lvs_svs_u64("<<vB<<",i),"
+                    >>"      (i%8==7? linesep: \" \")); }"
                     >>"printf(\"}\\n\");"
                     ;
             }
@@ -374,7 +385,7 @@ int mk_FASTDIV(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi=0){
                 mul = OSSFMT("fastdiv_"<<jj<<"_MUL");
                 cb["..*/first"]>>OSSFMT("uint64_t const "<<mul<<" = "<<jithex(jj_M)<<";");
             }
-            mac = OSSFMT("_ve_vmulul_vsv("<<mul<<",V);");
+            mac = OSSFMT("_ve_vmulul_vsv("<<mul<<",V)");
 
             string shr;
             if(1){
@@ -507,7 +518,7 @@ int mk_DIVMOD(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi=0){
         if(nops==1){
             assert(positivePow2(jj));
             cout<<("MASK WITH jj-1 for modulus");
-            mac = OSSFMT(mac<<"          VMOD = _ve_vand_vsv(V,"<<jithex(jj-1)<<",V)");
+            mac = OSSFMT(mac<<"          VMOD = _ve_vand_vsv("<<jithex(jj-1)<<",V)");
             ++nops;
         }else{
             // VE does not have FMA ops for any integer type.
@@ -908,6 +919,14 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
             return v+(have_sq() ? " = sq;          "
                     : have_sqij() ? " = sqij;        " // only OK pre-loop !
                     : " = _ve_vseq_v();"); };
+        auto use_iijj = [&fd,&iijj,&ii,&jj,&oss](){
+            if(!fd.find("have_iijj")){
+                fd["first"]["iijj"]>>OSSFMT(left<<setw(40)
+                        <<"uint64_t iijj=(uint64_t)ii*(uint64_t)jj;")
+                    <<OSSFMT(" // iijj="<<ii<<"*"<<jj<<"="<<iijj);
+                fd["have_iijj"].setType("TAG");
+            }
+        };
         auto kernComment = [have_sq,ii,jj](){
             return have_sq()? "sq[]=0.."+jitdec(ii*jj-1): "";
         };
@@ -960,6 +979,7 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
 
             // manage a,b induction, vl change (loop exit?)
             auto& fi = loop_ab["iter"];
+            use_iijj();
             //fi>>OSSFMT("// CFUSE2_NO_UNROLL_"<<vl<<"_"<<ii<<"_"<<jj);
             if(iijj%vl0){ // last iter has reduced VL
                 use_vl();
@@ -974,28 +994,30 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
             if(vl0%jj==0){                      // avoid div,mod -- 1 vec op
                 int64_t vlojj = vl0/jj;
                 cfuse2 .DEF(vlojj);
-                fi  >>"a =_ve_vadds_vsv(vlojj, a);              // a[i]+="<<jitdec(vl0/jj)<<", b[] same";
+                fi  >>"a =_ve_vadduw_vsv(vlojj, a);              // a[i]+="<<jitdec(vl0/jj)<<", b[] same";
             }else if(jj%vl0==0){
                 if(nloop<=jj/vl0){ // !have_jjMODvl_reset
-                    fi>>OSSFMT(left<<setw(40)<<OSSFMT("b = _ve_vadds_vsv("<<vl0<<",b);")
+                    fi>>OSSFMT(left<<setw(40)<<OSSFMT("b = _ve_vadduw_vsv("<<vl0<<",b);")
                                <<" // b[] += vl0, a[] const");
                 }else{ // various nice ways to do periodic reset... [potentially better with unroll!]
                     fp["tmod"]>>"uint32_t tmod=0U; // loop induction periodic";
                     if(jj/vl0==2){
-                        fi>>"tmod = ~tmod";
+                        fi>>OSSFMT(left<<setw(40)<<"tmod = ~tmod;"<<" // toggle");
                     }else if(positivePow2(jj/vl0)){
                         uint64_t const shift = positivePow2Shift((uint32_t)(jj/vl0));
                         uint64_t const mask  = (1ULL<<shift) - 1U;
-                        fi>>"tmod = (tmod+1) & "<<jithex(mask)<<"; // cyclic power-of-2 counter";
+                        fi>>OSSFMT(left<<setw(40)<<"tmod = (tmod+1) & "<<jithex(mask)<<";"
+                                <<" // cyclic power-of-2 counter");
                     }else{
                         fi  >>OSSFMT(left<<setw(40)<<"++tmod;"<<" // tmod period jj/vl0 = "<<jj/vl0)
                             >>OSSFMT(left<<setw(40)<<OSSFMT("if(tmod=="<<jj/vl0<<") tmod=0;")
                                     <<" // cmov reset tmod=0?");
                     }
+                    use_sq();
                     fi  >>"if(tmod){" // using mk_scope or CBLOCK_SCOPE is entirely optional...
-                        >>"    b = _ve_vaddul_vsv(vl0,b);           // b[] += vl0 (easy, a[] unchanged)"
+                        >>"    b = _ve_vadduw_vsv(vl0,b);           // b[] += vl0 (easy, a[] unchanged)"
                         >>"}else{"
-                        >>"    a = _ve_vaddul_vsv(1,a);             // a[] += 1"
+                        >>"    a = _ve_vadduw_vsv(1,a);             // a[] += 1"
                         >>"    b = sq;                              // b[] = sq[] (reset case)"
                         >>"}";
                 }
@@ -1030,15 +1052,16 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
                 if(jj<vl0){ // same as INIT_BLOCK code
                     fp_sets_ab = false;
                     mk_divmod();
-                    ff>>OSSFMT("DIVMOD_"<<jj<<"(__vr a,__vr b,sqij); //  a[]=sq/"<<jj<<" b[]=sq%"<<jj);
-                    fi>>OSSFMT(left<<setw(40)<<"sqij = _ve_vaddul_vsv(vl0,sqij);")
-                        <<" // sqij[i] += "<<jitdec(vl0);
+                    ff>>OSSFMT(left<<setw(40)<<OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);")
+                            <<" //  a[]=sq/"<<jj<<" b[]=sq%"<<jj);
+                    fi>>OSSFMT(left<<setw(40)<<OSSFMT("sqij = _ve_vaddul_vsv(vl0,sqij);")
+                            <<" // sqij[i] += "<<vl0);
                 }else{
                     mk_divmod();
-                    fi  >>OSSFMT(left<<setw(40)<<"sqij = _ve_vaddul_vsv(vl0,sqij);")
-                        <<OSSFMT(" // sqij[] += "<<vl0)
-                        >>OSSFMT(left<<setw(40)<<"DIVMOD_"<<jj<<"(a,b,sqij);")
-                        <<OSSFMT(" //  a[]=sq/"<<jj<<" b[]=sq%"<<jj);
+                    fi  >>OSSFMT(left<<setw(40)<<"sqij = _ve_vaddul_vsv(vl0,sqij);"
+                            <<" // sqij[] += "<<vl0)
+                        >>OSSFMT(left<<setw(40)<<OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);")
+                                <<" //  a[]=sq/"<<jj<<" b[]=sq%"<<jj);
                 }
             }
         }
@@ -1054,9 +1077,12 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
             }else{ // note: mk_divmod also optimizes positivePow2(jj) case
                 mk_divmod();
                 use_sq();
-                fp>>OSSFMT(left<<setw(40)<<OSSFMT("DIVMOD_"<<jj<<"("<<vREG<<"a, "<<vREG<<"b, sq);"))
+                fp>>"__vr a,b;";
+                fp>>OSSFMT(left<<setw(40)<<OSSFMT("DIVMOD_"<<jj<<"(sq, a, b);"))
                     <<OSSFMT(" // a[]=sq/"<<jj<<" b[]=sq%"<<jj);
             }
+        }else{
+            fp>>"__vr a,b;";
         }
     }
     return pr.str();
@@ -1463,7 +1489,7 @@ INDUCE:
                 }else{
                     fd.define("vlojj",OSSFMT(vl0/jj<<"/*vl/jj*/"));
                 }
-                fi>>OSSFMT("a =_ve_vadds_vsv(vlojj, a);"
+                fi>>OSSFMT("a =_ve_vadduw_vsv(vlojj, a);"
                         <<" // a[i] += (vl/jj="<<vl0/jj<<"), b[] unchanged");
             }
         }else if(jj%vl0 == 0 ){  // -------------1 or 2 vec op (conditional)
@@ -1478,7 +1504,7 @@ INDUCE:
                 ++cnt_jjMODvl; assert( have_jjMODvl );
                 if(onceI && STYLE==STYLE_GOTO && fi[".."].code_str().empty() ) fi[".."]>>"INDUCE:    // jj%vl0 == 0";
                 if(onceI) //fi.ins("add b, "+jitdec(vl0)+",b",    "b[i] += vl0, a[] const");
-                /**/ CBLK(fi,"b = _ve_vadds_vsv("<<jitdec(vl0)<<",b); // b[i] += vl0, a[] const");
+                /**/ CBLK(fi,"b = _ve_vadduw_vsv("<<jitdec(vl0)<<",b); // b[i] += vl0, a[] const");
             }else{
                 // This case is potentially faster with a partial precalc unroll
                 // The division should be done with compute_uB
