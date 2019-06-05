@@ -177,7 +177,7 @@ void VecHash2::kern_C( cprog::Cblock &parent,
         >>"vh2_vx = _ve_vaddul_vvv(vh2_vx,vh2_vz);"
         >>"vh2_vz = _ve_vaddul_vvv(vh2_vx,vh2_vy);    // vz ~ sum of xyz scrambles"
         >>"vh2_vx = _ve_vsuml_vv(vh2_vz);             // vrxor missing"
-        >>"uint64_t vh2_r = ve_lvs_svs_u64(vh2_vx,0)"
+        >>"uint64_t vh2_r = _ve_lvs_svs_u64(vh2_vx,0);"
         >>OSSFMT("vh2_j += "<<vl)
         >>OSSFMT(hash<<" = "<<hash<<" ^ vh2_r")
         ;
@@ -203,7 +203,7 @@ std::pair<std::string,std::string> VecHash2::kern_C_macro(std::string macname)
         "    vh2_vz = _ve_vaddul_vvv(vh2_vx,vh2_vy);    /* vz ~ sum of xyz scrambles */ \\\n"
         "    /*vh2_vx = _ve_vrxor_vv(vh2_vz);*/         /* missing instruction ? */ \\\n"
         "    vh2_vx = _ve_vsuml_vv(vh2_vz);             /* wanted vrxor */ \\\n"
-        "    uint64_t vh2_r = ve_lvs_svs_u64(vh2_vx,0) \\\n"
+        "    uint64_t vh2_r = _ve_lvs_svs_u64(vh2_vx,0); \\\n"
         "    vh2_j += VL; \\\n"
         "    HASH = HASH ^ vh2_r; \\\n"
         "}while(0)"
