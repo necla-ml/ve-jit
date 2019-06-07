@@ -258,7 +258,8 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
         if(bDefKernelFn.find("cfuse2_kernel_print")==nullptr){
             CBLOCK_SCOPE(cfuse2_kernel_check,
                     "void cfuse2_kernel_check(__vr const a, __vr const b,"
-                    "\n        uint64_t const cnt, uint64_t const vl, uint64_t const jj)",
+                    "\n        uint64_t const cnt, uint64_t const vl, uint64_t const jj)"
+                    "\n__attribute__((noinline))",
                     bDefKernelFn.getRoot(),bDefKernelFn);
             cfuse2_kernel_check
                 >>"for(uint64_t i=0;i<vl;++i){"
@@ -267,7 +268,7 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
                 >>"}"
                 ;
         }
-        bKrn["prt"]<<"cfuse2_kernel_check("<<vA<<", "<<vB<<", cnt, "<<sVL<<", "<<jitdec(jj)<<");";
+        bKrn["prt"]<<"cfuse2_kernel_check("<<vA<<", "<<vB<<", cnt, "<<sVL<<", jj);";
         if(!extraComment.empty()) bKrn["prt"]<<" // "<<extraComment;
         bOut>>"printf(\"cfuse KERNEL_CHECK done! no errors\\n\");";
     }else if( which==KERNEL_SQIJ ){
@@ -964,13 +965,28 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
             fp_sets_ab = true;
         }
         if(nloop>1){
-            fp_sets_ab = true;
-            fd["have_cnt"].setType("TAG");
+#define SIMPLE_LOOP 1
+            if(which==KERNEL_CHECK){
+                fd["have_cnt"].setType("TAG");
+                // otherwise 'cnt=0,vl0,2*vl0,... <iijj is optional.
+            }
             // && !fd.find("have_sqij")){
             //    fd>>equ_sq("__vr sqij");
             //    fd["have_sqij"].setType("TAG");
             //}
+#if SIMPLE_LOOP==1
+            //CBLOCK_FOR(loop_ab,0,"for(int64_t cnt=0 ; cnt<iijj; cnt+=vl0)",cfuse2);
+            string forloop;
+            if( fd.find("have_cnt") ){ // we require fwd-cnt loop:
+                forloop="for(int64_t cnt=0 ; cnt<iijj; cnt+=vl0)";
+            }else{
+                forloop="for(int64_t cnt=iijj ; cnt>0; cnt-=vl0)";
+            }
+            CBLOCK_FOR(loop_ab,0,forloop,cfuse2);
+#else
             CBLOCK_FOR(loop_ab,0,"for(int64_t cnt=0 ; /*cnt<iijj*/; /*cnt+=vl0*/)",cfuse2);
+#endif
+            fp_sets_ab = true;
             auto& ff = loop_ab["../first"];
             auto& fk = loop_ab["krn"];
             auto& fz = cfuse2["last"]["krn"];
@@ -981,6 +997,16 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
             auto& fi = loop_ab["iter"];
             use_iijj();
             //fi>>OSSFMT("// CFUSE2_NO_UNROLL_"<<vl<<"_"<<ii<<"_"<<jj);
+#if SIMPLE_LOOP==1
+            if(iijj%vl0){ // last iter has reduced VL
+                use_vl();
+                loop_ab
+                    >>(fd.find("have_cnt")
+                        ?"vl = (vl0<iijj-cnt? vl0: iijj-cnt);      // vl = min(vl0,remain)"
+                        :"vl = (cnt<vl0? cnt: vl0);                // vl = min(vl0,remain)")
+                    >>"_ve_lvl(vl);";
+            }
+#else
             if(iijj%vl0){ // last iter has reduced VL
                 use_vl();
                 fi  >>"if(vl!=vl0) break;                       // easy 'done' test"
@@ -991,14 +1017,16 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
                 fi  >>"cnt += vl0;                              // loop_ab/iter"
                     >>"if((uint64_t)cnt>=iijj) break;           // hits iijj exactly";
             }
+#endif
             if(vl0%jj==0){                      // avoid div,mod -- 1 vec op
                 int64_t vlojj = vl0/jj;
                 cfuse2 .DEF(vlojj);
-                fi  >>"a =_ve_vadduw_vsv(vlojj, a);              // a[i]+="<<jitdec(vl0/jj)<<", b[] same";
+                fi  >>OSSFMT(left<<setw(40)<<"a =_ve_vadduw_vsv(vlojj, a);"
+                        <<" // a[i]+="<<vl0/jj<<", b[] same");
             }else if(jj%vl0==0){
                 if(nloop<=jj/vl0){ // !have_jjMODvl_reset
                     fi>>OSSFMT(left<<setw(40)<<OSSFMT("b = _ve_vadduw_vsv("<<vl0<<",b);")
-                               <<" // b[] += vl0, a[] const");
+                            <<" // b[] += vl0, a[] const");
                 }else{ // various nice ways to do periodic reset... [potentially better with unroll!]
                     fp["tmod"]>>"uint32_t tmod=0U; // loop induction periodic";
                     if(jj/vl0==2){
@@ -1021,9 +1049,9 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
                         >>"    b = sq;                              // b[] = sq[] (reset case)"
                         >>"}";
                 }
-#if 0
+#if 0 // code block identical to full recalc DIVMOD case
+                // (mk_divmod now recognizes jj=2^N)
             }else if(positivePow2(jj)){
-                // code block identical to full recalc DIVMOD case (mk_divmod now recognizes jj=2^N)
                 //
                 // induction from prev a,b is longer than full recalc!
                 //  sqij = _ve_vaddul_vsv(vl0,sqij);
@@ -1045,10 +1073,6 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
 #endif
             }else{
                 use_sqij();
-                //if(!fd.find("have_sqij")){
-                //    fd>>equ_sq("__vr sqij");
-                //    fd["have_sqij"].setType("TAG");
-                //}
                 if(jj<vl0){ // same as INIT_BLOCK code
                     fp_sets_ab = false;
                     mk_divmod();

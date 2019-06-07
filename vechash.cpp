@@ -150,7 +150,7 @@ void VecHash2::kern_C_begin( cprog::Cblock &defines,
         ;
     auto& state = defines["last"]["vechash"];
     cout<<"kern_C_begin("<<defines.fullpath()<<",...)"<<endl;
-    state>>OSSFMT(left<<setw(40)<<OSSFMT("uint64_t vh2_j = "<<hex<<((uint64_t)seed<<32)<<"ULL;")<<" // vh2 state");
+    state>>OSSFMT(left<<setw(40)<<OSSFMT("uint64_t vh2_j = "<<jithex((uint64_t)seed<<32)<<"ULL;")<<" // vh2 state");
     if(client_vs){ // client has a vseq=0..MVL ?
         defines.define("vh_vs",client_vs);
     }else{
@@ -188,6 +188,7 @@ std::pair<std::string,std::string> VecHash2::kern_C_macro(std::string macname)
     ostringstream oss;
     mac=OSSFMT(macname<<"(VA,VB,VL,HASH)");
     oss <<"do{ \\\n"
+        //"    asm(\"# vechash2 BEGIN\"); \\\n"
         "    /* vechash2 : kernel begins */ \\\n"
         "    /*  in: 2 u64 vectors VA, VB, common VL */ \\\n"
         "    /*  inout: HASH (scalar reg) */ \\\n"
@@ -206,6 +207,7 @@ std::pair<std::string,std::string> VecHash2::kern_C_macro(std::string macname)
         "    uint64_t vh2_r = _ve_lvs_svs_u64(vh2_vx,0); \\\n"
         "    vh2_j += VL; \\\n"
         "    HASH = HASH ^ vh2_r; \\\n"
+        //"    asm(\"# vechash2 END\"); \\\n"
         "}while(0)"
         ;
     def = oss.str();
