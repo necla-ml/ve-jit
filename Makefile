@@ -99,14 +99,14 @@ SHELL:=LC_ALL=C /bin/bash
 liblist:
 	@ls -l lib*.a lib*.so
 force: # force libs to be recompiled
-	rm -f libjit1*.a asmfmt*.o jitpage*.o intutil*.o
+	rm -f libjit1*.a asmfmt*.o jitpage*.o intutil*.o ve_divmod*.o
 	rm -f libveli*.a prgiFoo.o wrpiFoo.o
 	rm -f $(patsubst %.cpp,%*.o,$(LIBVELI_SRC)) $(LIBVELI_TARGETS)
 	$(MAKE) $(LIBJIT1_TARGETS)
 	$(MAKE) $(LIBVELI_TARGETS)
 
 # for tarball...
-VEJIT_SHARE:=cblock.cpp ve-msk.cpp ve-asm/veli_loadreg.cpp dllbuild.cpp COPYING
+VEJIT_SHARE:=cblock.cpp ve-msk.cpp ve-asm/veli_loadreg.cpp dllbuild.cpp ve_divmod.cpp COPYING
 VEJIT_LIBS:=libjit1-x86.a libveli-x86.a libjit1-x86.so bin.mk-x86.lo
 VEJIT_LIBS+=libjit1-justc-x86.a libjit1-cxx-x86.lo # possible ld.so workaround
 ifeq ($(CC:ncc%=ncc),ncc)
@@ -120,9 +120,9 @@ all-vejit-libs:
 	./mklibs.sh 2>&1 | tee mklibs.log	# writes libs into vejit/lib/
 vejit.tar.gz: jitpage.h intutil.h vfor.h \
 		intutil.hpp stringutil.hpp throw.hpp \
-		asmfmt_fwd.hpp asmfmt.hpp codegenasm.hpp velogic.hpp fuseloop.hpp \
+		asmfmt_fwd.hpp asmfmt.hpp codegenasm.hpp velogic.hpp fuseloop.hpp ve_divmod.hpp \
 		cblock.hpp dllbuild.hpp \
-		asmfmt.cpp cblock.cpp dllbuild.cpp jitpage.c intutil.c fuseloop.cpp \
+		asmfmt.cpp cblock.cpp dllbuild.cpp jitpage.c intutil.c fuseloop.cpp  ve_divmod.cpp \
 		ve-msk.hpp ve-msk.cpp \
 		jitpage.hpp jitpipe_fwd.hpp jitpipe.hpp cblock.hpp pstreams-1.0.1 bin_mk.c \
 		vechash.hpp vechash.cpp asmblock.hpp \
@@ -184,7 +184,8 @@ tools/%:
 #%-omp.o: %.c: $(CC) ${CFLAGS} -O2 -c $< -o $@
 #%-omp-ftrace1.o: %.c: $(CC) ${CFLAGS} -O2 -c $< -o $@
 libjit1.a: asmfmt-ve.o jitpage-ve.o intutil-ve.o \
-	vechash-ve.o cblock-ve.o asmblock-ve.o dllbuild-ve.o bin.mk-ve.lo ve-msk-ve.o fuseloop-ve.o
+	vechash-ve.o cblock-ve.o asmblock-ve.o dllbuild-ve.o bin.mk-ve.lo ve-msk-ve.o \
+	fuseloop-ve.o ve_divmod-ve.o
 	rm -f $@
 	$(AR) rcs $@ $^
 	readelf -h $@
@@ -201,8 +202,8 @@ libjit1-justc-x86.a: jitpage-x86.o intutil-x86.o bin.mk-x86.lo
 # The other part of the VE bug workaround is to distribute the C++ part
 # of libjit1 as a .lo object file, or as a monolithic C++ source file.
 # I'll also include libveli .cpp codes into the monolithic version
-libjit1-cxx.cpp: asmfmt.cpp vechash.cpp cblock.cpp asmblock.cpp dllbuild.cpp ve-msk.cpp fuseloop.cpp \
-	veliFoo.cpp wrpiFoo.cpp
+libjit1-cxx.cpp: asmfmt.cpp vechash.cpp cblock.cpp asmblock.cpp dllbuild.cpp ve-msk.cpp \
+	veliFoo.cpp wrpiFoo.cpp fuseloop.cpp ve_divmod.cpp
 	sed -e '/^\#ifdef _MAIN/,/^\#endif/d' asmfmt.cpp > $@
 	#   cblock is header-only -- the .cpp file is self-test/demo
 	# asmblock is header-only -- the .cpp file is self-test/demo
@@ -214,6 +215,7 @@ libjit1-cxx.cpp: asmfmt.cpp vechash.cpp cblock.cpp asmblock.cpp dllbuild.cpp ve-
 	cat wrpiFoo.cpp >> $@
 	cat ve-msk.cpp >> $@
 	cat fuseloop.cpp >> $@
+	cat ve_divmod.cpp >> $@
 libjit1-cxx-ve.lo: libjit1-cxx.cpp
 	# gnu++11 allows extended asm...
 	$(CXX) ${CXXFLAGS} -fPIC -c $< -o $@
@@ -244,8 +246,10 @@ dllbuild-ve.o: dllbuild.cpp
 	$(CXX) $(CXXFLAGS) -Wall -Werror -c $< -o $@
 fuseloop-ve.o: fuseloop.cpp
 	$(CXX) $(CXXFLAGS) -Wall -Werror -c $< -o $@
+ve_divmod-ve.o: ve_divmod.cpp
+	$(CXX) $(CXXFLAGS) -Wall -Werror -c $< -o $@
 libjit1.so: jitpage.lo intutil.lo bin.mk-ve.lo \
-	asmfmt.lo asmblock-ve.lo cblock-ve.lo dllbuild-ve.lo fuseloop-ve.lo # C++ things
+	asmfmt.lo asmblock-ve.lo cblock-ve.lo dllbuild-ve.lo fuseloop-ve.lo ve_divmod-ve.lo # C++ things
 	$(CXX) -o $@ -shared -Wl,-trace -wL,-verbose $^ #-ldl #-lnc++
 	readelf -h $@
 	readelf -d $@
@@ -267,16 +271,18 @@ dllbuild-ve.lo: dllbuild.cpp
 	$(CXX) $(CXXFLAGS) -fPIC -Wall -Werror -c $< -o $@
 fuseloop-ve.lo: fuseloop.cpp
 	$(CXX) $(CXXFLAGS) -fPIC -Wall -Werror -c $< -o $@
+ve_divmod-ve.lo: ve_divmod.cpp
+	$(CXX) $(CXXFLAGS) -fPIC -Wall -Werror -c $< -o $@
 
 libjit1-x86.a: asmfmt-x86.o jitpage-x86.o intutil-x86.o \
-		cblock-x86.o dllbuild-x86.o bin.mk-x86.lo fuseloop-x86.o \
+		cblock-x86.o dllbuild-x86.o bin.mk-x86.lo fuseloop-x86.o  ve_divmod-x86.o \
 		vechash-x86.o asmblock-x86.o ve-msk-x86.o
 	rm -f $@
 	ar rcs $@ $^
 	readelf -h $@
 	readelf -d $@
 libjit1-x86.so: asmfmt-x86.lo jitpage-x86.lo intutil-x86.lo \
-		cblock-x86.lo dllbuild-x86.lo bin.mk-x86.lo fuseloop-x86.lo \
+		cblock-x86.lo dllbuild-x86.lo bin.mk-x86.lo fuseloop-x86.lo ve_divmod-x86.lo \
 		vechash-x86.lo asmblock-x86.lo ve-msk-x86.lo
 	gcc -o $@ -shared $^ # -ldl
 	readelf -h $@
@@ -316,6 +322,10 @@ dllbuild-x86.lo: dllbuild.cpp dllbuild.hpp
 fuseloop-x86.o: fuseloop.cpp fuseloop.hpp
 	g++ -o $@ $(CXXFLAGS) -Wall -Werror -c $<
 fuseloop-x86.lo: fuseloop.cpp fuseloop.hpp
+	g++ -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -c $<
+ve_divmod-x86.o: ve_divmod.cpp ve_divmod.hpp cblock.hpp
+	g++ -o $@ $(CXXFLAGS) -Wall -Werror -c $<
+ve_divmod-x86.lo: ve_divmod.cpp ve_divmod.hpp cblock.hpp
 	g++ -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -c $<
 
 cblock-x86: cblock.cpp cblock.hpp

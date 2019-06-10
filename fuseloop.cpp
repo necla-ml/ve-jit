@@ -62,7 +62,7 @@ std::string str(UnrollSuggest const& u, std::string const& pfx /*=""*/){
         int const lcm_vljj = lcm(vl,u.jj);
         int const b_period = lcm_vljj / vl;
         int const bcyc_regs = (nloop<b_period? nloop: b_period);
-        if(0){ // debug
+        if(1){ // debug
             cout<<" vl,ii,jj="<<u.vl<<"["<<u.vll<<"],"<<u.ii<<","<<u.jj;
             cout<<" iijj="<<iijj;
             cout<<" nloop="<<u.nloop;
@@ -73,6 +73,7 @@ std::string str(UnrollSuggest const& u, std::string const& pfx /*=""*/){
         }
         oss<<" nloop="<<u.nloop;
         if(nloop>1) oss<<" b_period="<<b_period;
+        if(u.unroll>0) oss<<" unroll="<<u.unroll;
         int const unroll_any = min(nloop,u.b_period_max);
         int unroll_cyc = bcyc_regs; // or some small multiple
         if(bcyc_regs>0) unroll_cyc = unroll_any/bcyc_regs*bcyc_regs;
@@ -91,11 +92,15 @@ std::string str(UnrollSuggest const& u, std::string const& pfx /*=""*/){
           case(UNR_JJPOW2_CYC): oss<<" unroll("<<unroll_cyc<<")"
                                 <<" bcyc_regs="<<bcyc_regs
                                 <<" u.unroll="<<u.unroll;
-                                assert(u.unroll==bcyc_regs);
+                                assert(u.unroll%bcyc_regs==0);
           break;
           case(UNR_JJPOW2_BIG): oss<<" unroll("<<unroll_any<<")"; break;
-          case(UNR_NLOOP): oss<<" unroll by "<<nloop; assert(u.unroll==nloop); break;
-          case(UNR_CYC): oss<<" unroll("<<unroll_cyc<<")"; assert(u.unroll==bcyc_regs); break;
+          case(UNR_NLOOP): oss<<" unroll by "<<nloop;
+                           assert(u.unroll==nloop);
+          break;
+          case(UNR_CYC): oss<<" unroll("<<unroll_cyc<<")";
+                         assert(u.unroll%bcyc_regs==0);
+          break;
                          // generic div-mod
           case(UNR_DIVMOD): oss<<" unroll("<<unroll_any<<")"; break;
         }
@@ -185,21 +190,25 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int cons
             <<endl;
         //assert( !have_b_period );
     }else if( jj%vl == 0 ){
+        uint32_t const period = jj/vl;
         // fuse2.cpp shows 4 different update impls, one being trivial
         // debug -- NORESET is definitely attainable
         //bool const have_jjMODvl_reset = (vl0%jj!=0 && jj%vl0==0 && nloop >jj/vl0); // case 'g'
         //bool const have_jjMODvl       = (vl0%jj!=0 && jj%vl0==0 && nloop>=jj/vl0);
         //assert( have_jjMODvl );
-        if(nloop > jj/vl){ // have_jjMODvl_reset
+        if((uint32_t)nloop > period){ // have_jjMODvl_reset
             //assert(have_jjMODvl_reset);
             ret.suggested = strategy = UNR_JJMODVL_RESET;
-            // depending on jj/vl==2, other power-of-two, or anything else,
+            // depending on period==2, other power-of-two, or anything else,
             // have 3 different simple updates.
             if(v)cout<<" C.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
                 <<strategy<<"\n\t"
                     <<", b_period="<<b_period<<b_period_pow2
                     <<" has a simple jj%vl==0 update [no precalc, any small unroll]"
                     <<endl;
+            ret.unroll = (period <= (uint32_t)b_period_max
+                    ? (uint32_t)b_period_max/period*period
+                    : (uint32_t)b_period_max);
         }else{
             // update is trivial FOR(i,vl) b[i] = b[i] + vl;
             ret.suggested = strategy = UNR_JJMODVL_NORESET;
@@ -228,7 +237,8 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int cons
                 <<" has jj=2^"<<jj_shift<<" with precalc unroll(bcyc_regs="<<bcyc_regs<<")"
                 <<endl;
             //assert( have_b_period );
-            ret.unroll = bcyc_regs;
+            ret.unroll = b_period_max/bcyc_regs*bcyc_regs;
+            //ret.cycle = bcyc_regs;
         }else{
             ret.suggested = strategy = UNR_JJPOW2_BIG;
             if(v)cout<<" F.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
@@ -258,7 +268,8 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int cons
             <<endl;
         // no...assert( have_b_period );
         //assert(" never get to H"==nullptr);
-        ret.unroll = b_period; // XXX or maybe b_period * N < b_period_max ??? XXX
+        //ret.unroll = b_period; // XXX or maybe b_period * N < b_period_max ??? XXX
+        ret.unroll = b_period_max/b_period*b_period;
     }else{ // nloop and b_period both high OR this is a simpler case
         ret.suggested = strategy = UNR_DIVMOD;
         if(v)cout<<" I.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "

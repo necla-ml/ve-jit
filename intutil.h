@@ -13,11 +13,45 @@ extern "C" { //}
 #define FASTDIV_INLINE inline
 #endif
 #else
-#define FASTDIV_INLINE
+#define FASTDIV_INLINE inline
 #endif
 
 extern int const bitcount[256];
 extern int const multiplyDeBruijnBitPosition2[32];
+
+/// \group integer arithmetic
+//@{
+/** divide-by-\c _odiv via mul-add-shift */
+struct fastdiv {
+    uint32_t mul;
+    uint32_t add;
+    int32_t shift;
+    uint32_t _odiv;  /* save original divisor for modulo calc */
+};
+
+/** \b if positivePow2(v) && v=2**N for N>0, \b then we return N. */
+inline int /*constexpr*/ positivePow2Shift(uint32_t v) {
+    //assert( positivePow2(v)
+    return multiplyDeBruijnBitPosition2[(uint32_t)(v * 0x077CB531U) >> 27];
+}
+/** unsigned 32-bit log2, required for magic constant generation */
+inline uint32_t ulog2(uint32_t v) {
+    uint32_t r, shift;
+    r =     (v > 0xFFFF) << 4; v >>= r;
+    shift = (v > 0xFF  ) << 3; v >>= shift; r |= shift;
+    shift = (v > 0xF   ) << 2; v >>= shift; r |= shift;
+    shift = (v > 0x3   ) << 1; v >>= shift; r |= shift;
+    r |= (v >> 1);
+    return r;
+}
+/** generate constants for implementing a division with multiply-add-shift.
+ * \b MODIFIED for VE JIT, so shift is 0 to 64.
+ *
+ * - x86 shift was 32+N, nice for x86 ops.
+ * - VE does better with a single shift
+ */
+void fastdiv_make(struct fastdiv *d, uint32_t divisor);
+//@}
 
 /// \group fastdiv64
 /// fast division for 'small enough' numbers,
@@ -78,11 +112,12 @@ FASTDIV_INLINE uint32_t fastmod_uB(uint32_t const a, uint64_t const M, uint32_t 
     // so fewer ops, still 2 multiplies
 }
 
-/** I don't need it, but for completeness, there is a fast divisibility check.
- * This is pretty nice for VE because it avoids rotation is fairly expensive
- * on VE (no single-instruction rotate op).
+/** Is \c a%d==0 ?
+ * \p a numerator
+ * \p M is \c compute_M(d)
  * \pre \c a and \c d < (1<<21).
- * For power-of-two, you should use (a&(a-1)==0)
+ * If \c a is known to be a power-of-two, use \c (a&(a-1)==0).
+ * Especially nice for VE because it avoids rotation (no rotate op).
  */
 FASTDIV_INLINE int fastdivisible_uB(uint32_t const a, uint64_t const M) {
     return ((M*a) & FASTDIV_CMASK) <= M-1;
@@ -91,7 +126,7 @@ FASTDIV_INLINE int fastdivisible_uB(uint32_t const a, uint64_t const M) {
     //         ----fastmod_uB----
 }
 
-#undef FASTDIV_CMAKE
+//#undef FASTDIV_CMASK
 //#undef FASTDIV_C
 //#undef FASTDIV_SAFEMAX
 //#undef FASTDIV_B

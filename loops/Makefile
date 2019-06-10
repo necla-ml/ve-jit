@@ -864,7 +864,7 @@ cfuse3: cfuse3.cpp ../libjit1-x86.a
 	g++ -Wall -std=c++11 -I.. -O3 $< -o $@
 clean:
 	rm -f *.i *.o *.gch a.out fuse2 fuse2lin fuse2-ve fuse3 fuse3-ve repro \
-		cfuse2 tdivmod tdivmod-ve
+		cfuse2 tdivmod tdivmod-ve cf3
 	rm -f a.s  cblock cfuse libgcc_lucky.so
 	rm -f *.exe *.exe.stackdump
 realclean: clean	
