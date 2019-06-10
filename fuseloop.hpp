@@ -63,14 +63,14 @@ struct UnrollSuggest {
     /** explicit unrolling factor may be given, possibly < nloop. */
     int unroll;
     /* if cycle, then unroll can use a cycle of precalculated quantities. */
-    //int cycle;
+    int cycle;
     UnrollSuggest()
         : vl(0),ii(0),jj(0),b_period_max(0),suggested(UNR_UNSET),
-        vll(0),nloop(0),unroll(0)//,cycle(0)
+        vll(0),nloop(0),unroll(0),cycle(0)
     {}
     UnrollSuggest(int const vl, int const ii, int const jj, int const b_period_max=8)
         : vl(vl), ii(ii), jj(jj), b_period_max(b_period_max),suggested(UNR_UNSET),
-        vll(0), nloop((int)( ((int64_t)ii*jj+vl -1) / vl )), unroll(0)//, cycle(0)
+        vll(0), nloop((int)( ((int64_t)ii*jj+vl -1) / vl )), unroll(0), cycle(0)
     {}
 };
 

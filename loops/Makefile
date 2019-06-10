@@ -77,6 +77,30 @@ mega1: Makefile fuse2
 	sort -r -n -k5 -k7 --stable $@-uniq.log > $@-uniqs.log
 mega1.log mega1-hash.log mega1-uniq.log mega1-uniqs.log:
 	if [ ! -f "$@" ]; then $(MAKE) mega1; fi
+mega1-cf3: Makefile cf3
+	# for VE, concentrate on example codes at VL=256 or 255.
+	rm -f $@.log; \
+	( \
+	for vlen in 256 255 254 16 8 9 15 13 12 11 10 7 6 5 4 3 24 48 127 128 253 2 1; do \
+	for jj in 3 4 5 6 7 8 9 10 11 12 13 14 16 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 36 40 41 42 43 48 60 63 64 72 84 85 86 128 160 192 224 255 256 257 384 511 512 513 640 768 896 992 1023 1024 1025 1152 1280 2 1; do \
+	for ii in `seq 1 16`; do \
+	echo "vl,ii,jj= $$vlen $$ii $$jj"; \
+	./cf3.sh $$vlen $$ii $$jj CHECK; \
+	rm -f cf/CHECK-$${vl}_$${ii}_$${jj}-vi{,.i,.s}
+	done; done; done; \
+	) >& $@.log;
+mega1-cf3u: Makefile cf3
+	# for VE, concentrate on example codes at VL=256 or 255.
+	rm -f $@.log; \
+	( \
+	for vlen in 256 255 254 16 8 9 15 13 12 11 10 7 6 5 4 3 24 48 127 128 253 2 1; do \
+	for jj in 3 4 5 6 7 8 9 10 11 12 13 14 16 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 36 40 41 42 43 48 60 63 64 72 84 85 86 128 160 192 224 255 256 257 384 511 512 513 640 768 896 992 1023 1024 1025 1152 1280 2 1; do \
+	for ii in `seq 1 16`; do \
+	echo "vl,ii,jj= $$vlen $$ii $$jj"; \
+	./cf3.sh $$vlen $$ii $$jj CHECK; \
+	rm -f cf/CHECK-$${vl}_$${ii}_$${jj}-vi{,.i,.s}
+	done; done; done; \
+	) >& $@.log;
 mega2: Makefile fuse2
 	rm -f $@.log; \
 	( \
@@ -97,79 +121,80 @@ mega1-sample.log: Makefile fuse2
 	#    stressing VL=256 and Vl=255
 	#    some code paths still have smaller VL examples
 	( echo "$@" \
-		&& ./fuse2 -t 256 4 1024 \
-		&& ./fuse2 -t 256 2 1024 \
-		&& ./fuse2 -t 256 3 1024 \
-		&& ./fuse2 -t 256 1 1024 \
-		&& ./fuse2 -t 256 8 992 \
-		&& ./fuse2 -t 256 1 768 \
-		&& ./fuse2 -t 256 3 768 \
-		&& ./fuse2 -t 256 4 768 \
-		&& ./fuse2 -t 256 2 768 \
-		&& ./fuse2 -t 256 3 512 \
-		&& ./fuse2 -t 256 2 512 \
-		&& ./fuse2 -t 256 1 512 \
-		&& ./fuse2 -t 256 4 512 \
-		&& ./fuse2 -t 256 6 384 \
-		&& ./fuse2 -t 256 2 384 \
-		&& ./fuse2 -t 256 4 384 \
-		&& ./fuse2 -t 256 5 384 \
-		&& ./fuse2 -t 256 3 257 \
-		&& ./fuse2 -t 256 1 257 \
-		&& ./fuse2 -t 256 7 257 \
-		&& ./fuse2 -t 256 2 257 \
-		&& ./fuse2 -t 256 2 256 \
-		&& ./fuse2 -t 256 4 256 \
-		&& ./fuse2 -t 256 3 256 \
-		&& ./fuse2 -t 256 8 255 \
-		&& ./fuse2 -t 256 16 160 \
-		&& ./fuse2 -t 256 12 160 \
-		&& ./fuse2 -t 256 8 160 \
-		&& ./fuse2 -t 256 9 64 \
-		&& ./fuse2 -t 256 12 64 \
-		&& ./fuse2 -t 256 13 64 \
-		&& ./fuse2 -t 256 16 64 \
-		&& ./fuse2 -t 256 13 60 \
-		&& ./fuse2 -t 256 16 48 \
-		&& ./fuse2 -t 256 16 33 \
-		&& ./fuse2 -t 256 9 32 \
-		&& ./fuse2 -t 256 16 32 \
-		&& ./fuse2 -t 256 13 20 \
-		&& ./fuse2 -t 256 2 4 \
-		&& ./fuse2 -t 256 1 3 \
-		&& ./fuse2 -t 256 2 3 \
-		&& ./fuse2 -t 256 1 1 \
-		&& ./fuse2 -t 255 3 256 \
-		&& ./fuse2 -t 255 1 256 \
-		&& ./fuse2 -t 255 7 256 \
-		&& ./fuse2 -t 255 2 256 \
-		&& ./fuse2 -t 255 14 128 \
-		&& ./fuse2 -t 255 12 85 \
-		&& ./fuse2 -t 255 6 85 \
-		&& ./fuse2 -t 255 4 85 \
-		&& ./fuse2 -t 255 7 85 \
-		&& ./fuse2 -t 255 9 85 \
-		&& ./fuse2 -t 255 10 85 \
-		&& ./fuse2 -t 255 12 64 \
-		&& ./fuse2 -t 255 15 34 \
-		&& ./fuse2 -t 255 16 32 \
-		&& ./fuse2 -t 255 16 16 \
-		&& ./fuse2 -t 16 16 9 \
-		&& ./fuse2 -t 12 7 16 \
-		&& ./fuse2 -t 12 6 16 \
-		&& ./fuse2 -t 12 3 16 \
-		&& ./fuse2 -t 12 12 8 \
-		&& ./fuse2 -t 9 9 16 \
-		&& ./fuse2 -t 9 9 8 \
-		&& ./fuse2 -t 9 9 4 \
-		&& ./fuse2 -t 9 16 4 \
-		&& ./fuse2 -t 9 9 2 \
-		&& ./fuse2 -t 8 16 1 \
-		&& ./fuse2 -t 8 9 1 \
-		&& ./fuse2 -t 7 15 1 \
-		&& ./fuse2 -t 5 16 1 \
-		&& ./fuse2 -t 5 15 1 \
-		&& ./fuse2 -t 4 16 1 \
+		&& export cmd="./cf3.sh" \
+		&& ${cmd} 256 4 1024 \
+		&& ${cmd} 256 2 1024 \
+		&& ${cmd} 256 3 1024 \
+		&& ${cmd} 256 1 1024 \
+		&& ${cmd} 256 8 992 \
+		&& ${cmd} 256 1 768 \
+		&& ${cmd} 256 3 768 \
+		&& ${cmd} 256 4 768 \
+		&& ${cmd} 256 2 768 \
+		&& ${cmd} 256 3 512 \
+		&& ${cmd} 256 2 512 \
+		&& ${cmd} 256 1 512 \
+		&& ${cmd} 256 4 512 \
+		&& ${cmd} 256 6 384 \
+		&& ${cmd} 256 2 384 \
+		&& ${cmd} 256 4 384 \
+		&& ${cmd} 256 5 384 \
+		&& ${cmd} 256 3 257 \
+		&& ${cmd} 256 1 257 \
+		&& ${cmd} 256 7 257 \
+		&& ${cmd} 256 2 257 \
+		&& ${cmd} 256 2 256 \
+		&& ${cmd} 256 4 256 \
+		&& ${cmd} 256 3 256 \
+		&& ${cmd} 256 8 255 \
+		&& ${cmd} 256 16 160 \
+		&& ${cmd} 256 12 160 \
+		&& ${cmd} 256 8 160 \
+		&& ${cmd} 256 9 64 \
+		&& ${cmd} 256 12 64 \
+		&& ${cmd} 256 13 64 \
+		&& ${cmd} 256 16 64 \
+		&& ${cmd} 256 13 60 \
+		&& ${cmd} 256 16 48 \
+		&& ${cmd} 256 16 33 \
+		&& ${cmd} 256 9 32 \
+		&& ${cmd} 256 16 32 \
+		&& ${cmd} 256 13 20 \
+		&& ${cmd} 256 2 4 \
+		&& ${cmd} 256 1 3 \
+		&& ${cmd} 256 2 3 \
+		&& ${cmd} 256 1 1 \
+		&& ${cmd} 255 3 256 \
+		&& ${cmd} 255 1 256 \
+		&& ${cmd} 255 7 256 \
+		&& ${cmd} 255 2 256 \
+		&& ${cmd} 255 14 128 \
+		&& ${cmd} 255 12 85 \
+		&& ${cmd} 255 6 85 \
+		&& ${cmd} 255 4 85 \
+		&& ${cmd} 255 7 85 \
+		&& ${cmd} 255 9 85 \
+		&& ${cmd} 255 10 85 \
+		&& ${cmd} 255 12 64 \
+		&& ${cmd} 255 15 34 \
+		&& ${cmd} 255 16 32 \
+		&& ${cmd} 255 16 16 \
+		&& ${cmd} 16 16 9 \
+		&& ${cmd} 12 7 16 \
+		&& ${cmd} 12 6 16 \
+		&& ${cmd} 12 3 16 \
+		&& ${cmd} 12 12 8 \
+		&& ${cmd} 9 9 16 \
+		&& ${cmd} 9 9 8 \
+		&& ${cmd} 9 9 4 \
+		&& ${cmd} 9 16 4 \
+		&& ${cmd} 9 9 2 \
+		&& ${cmd} 8 16 1 \
+		&& ${cmd} 8 9 1 \
+		&& ${cmd} 7 15 1 \
+		&& ${cmd} 5 16 1 \
+		&& ${cmd} 5 15 1 \
+		&& ${cmd} 4 16 1 \
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
 mega1-cfuse.log: Makefile cfuse2

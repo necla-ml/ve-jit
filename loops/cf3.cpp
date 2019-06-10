@@ -3,6 +3,11 @@
 /** \file
  * VE clang code for loop fusion (with given or alternative VL)
  * (from cfuse2 without unroll/asm development code)
+ *
+ * quick test:
+ * ```
+ * { (cd .. && make) && make cf3 && ./cf3 -u4 -kCHECK -toa-vi.c && make a-ve -f ../bin.mk && ./a-ve; } >& x.log
+ * ```
  */
 #include "../fuseloop.hpp"
 #include "../ve_divmod.hpp"
@@ -66,7 +71,7 @@ struct KernelNeeds kernel_needs(int const which){
       case(KERNEL_NONE): break;
       case(KERNEL_HASH): ret.vl=1; ret.sq=1; ret.sqij=1; break;
       case(KERNEL_PRINT): ret.vl=1; break;
-      case(KERNEL_CHECK): ret.cnt=1; ret.vl=1; break;
+      case(KERNEL_CHECK): ret.cnt=1; ret.vl=1; ret.iijj=1; break;
       case(KERNEL_SQIJ): ret.sqij=1; break;
       default: cout<<" Warning: unhandled KERNEL type, which="<<which<<endl;
     }
@@ -151,6 +156,8 @@ void other_fastdiv_methods(int const jj){
  *
  * \p bKrn   code block for kernel
  * \p bDef   code block for defines (within an enclosing-scope)
+ *           We may output to bDef.getRoot()["<STAR><STAR>/includes"]
+ *           function calls may go to bDef["..<STAR>/fns/first"]
  * \p bOut   code block for kernel output (post-fused-loop)
  *
  * Notes:
@@ -191,7 +198,8 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
             VecHash2::kern_C_begin(bDefConst, vSeq.c_str(), vl);
             bDefState>>OSSFMT(left<<setw(40)<<OSSFMT("int64_t "<<vh2<<" = 0;"))
                 <<" // vh2({a,b}) hash output";
-            bDef.getRoot()["includes"]>>"#include <stdio.h>";
+            auto& bInc = bDef.getRoot()["**/includes"];
+            if(!bInc.find("stdio.h")) bInc["stdio.h"]>>"#include <stdio.h>";
             if(!bOut.find("out_once")){
                 bOut>>"printf(\"jit "<<vh2<<" = %llu\\n\",(long long unsigned)"<<vh2<<");";
                 bOut["out_once"].setType("TAG");
@@ -205,17 +213,18 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
         if(!bDefConst.find("have_vechash2_kernel")){
             auto m = VecHash2::kern_C_macro("VECHASH2_KERNEL");
             bDefConst.define(m.first,m.second);
-            bKrn[OSSFMT(pfx<<"_VecHash2")]
-                >>OSSFMT(left<<setw(40)<<OSSFMT("VECHASH2_KERNEL("<<vA<<","<<vB<<","<<sVL<<","<<vh2<<");")
-                        <<" // "<<vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"] "<<extraComment);
             bDefConst["have_vechash2_kernel"].setType("TAG");
         }
+        bKrn[OSSFMT(pfx<<"_VecHash2")]
+            >>OSSFMT(left<<setw(40)<<OSSFMT("VECHASH2_KERNEL("<<vA<<","<<vB<<","<<sVL<<","<<vh2<<");")
+                    <<" // "<<vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"] "<<extraComment);
 #endif
     }else if( which==KERNEL_PRINT ){
         // XXX Does clang have any option to pass __vr efficiently ?
         bool const nice_vector_register_args = true;
         if( !nice_vector_register_args ){ // inlined...
-            bDef.getRoot()["includes"]>>"#include <stdio.h>";
+            auto& bInc = bDef.getRoot()["**/includes"];
+            if(!bInc.find("stdio.h")) bInc["stdio.h"]>>"#include <stdio.h>";
             bKrn["beg"]>>OSSFMT("// KERNEL("<<vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"])");
             if(!extraComment.empty()) bKrn["beg"]<<" "<<extraComment;
             bKrn["prt"]>>"printf(\"a={\");"
@@ -230,7 +239,8 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
                 >>"printf(\"}\\n\");"
                 ;
         }else{ // as function call (KERNEL_PRINT does not need speed)
-            bDef["..*/includes"]>>"#include <stdio.h>";
+            auto& bInc = bDef.getRoot()["**/includes"];
+            if(!bInc.find("stdio.h")) bInc["stdio.h"]>>"#include <stdio.h>";
             auto& bDefKernelFn = bDef["..*/fns/first"];
             if(bDefKernelFn.find("cfuse2_kernel_print")==nullptr){
                 CBLOCK_SCOPE(cfuse2_kernel_print,
@@ -266,15 +276,18 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
             bOut["out_once"].setType("TAG");
         }
     }else if( which==KERNEL_CHECK ){
-        // as function call (KERNEL_CHECK does not need speed)
-        bDef["..*/includes"]>>"#include <stdio.h>";
-        bDef["..*/includes"]>>"#include <assert.h>";
+        // as function call (KERNEL_PRINT does not need speed)
+        auto& bInc = bDef.getRoot()["**/includes"];
+        if(!bInc.find("stdio.h")) bInc["stdio.h"]>>"#include <stdio.h>";
+        if(!bInc.find("assert.h")) bInc["assert.h"]>>"#include <assert.h>";
         auto& bDefKernelFn = bDef["..*/fns/first"];
         if(bDefKernelFn.find("cfuse2_kernel_check")==nullptr){
             CBLOCK_SCOPE(cfuse2_kernel_check,
-                    "void cfuse2_kernel_check(__vr const a, __vr const b,"
+                    "void "
+                    "\n__attribute__((noinline))"
+                    "\ncfuse2_kernel_check(__vr const a, __vr const b,"
                     "\n        uint64_t const cnt, uint64_t const vl, uint64_t const jj)"
-                    "\n__attribute__((noinline))",
+                    ,
                     bDefKernelFn.getRoot(),bDefKernelFn);
             cfuse2_kernel_check
                 >>"for(uint64_t i=0;i<vl;++i){"
@@ -286,7 +299,8 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
         bKrn["prt"]<<"cfuse2_kernel_check("<<vA<<", "<<vB<<", cnt, "<<sVL<<", jj);";
         if(!extraComment.empty()) bKrn["prt"]<<" // "<<extraComment;
         if(!bOut.find("out_once")){
-            bOut>>"printf(\"cfuse KERNEL_CHECK done! no errors\\n\");";
+            bOut>>"assert((uint64_t)cnt>=iijj);"
+                >>"printf(\"cfuse KERNEL_CHECK done! no errors\\n\");";
             bOut["out_once"].setType("TAG");
         }
     }else if( which==KERNEL_SQIJ ){
@@ -411,14 +425,17 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
     if(krn_needs.vl) use_vl();
     if(krn_needs.sq) use_sq();
     if(krn_needs.sqij) use_sqij();
+    if(krn_needs.iijj) use_iijj();
     // krn_needs.cnt handled separately
     if(nloop==1){
         auto& fk = fp["krn"];
         auto& fz = cfuse2["last"]["krn"];
         if(krn_needs.cnt && !fd.find("have_cnt")){
             //fd>>"int64_t const cnt=0; /*simulate for-loop index for kernel";
-            fd.define("cnt","0");
+            //fd.define("cnt","0");
+            fd>>"int64_t cnt=0; //simulate for-loop index for kernel";
             fd["have_cnt"].setType("TAG");
+            fk["last"]>>"cnt=vl0;";
         }
         fz>>"// [krn output]";
         fuse2_kernel(fk, fd, fz, ii,jj,vl, kernComment(), which);
@@ -428,7 +445,8 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
         //CBLOCK_FOR(loop_ab,0,"for(int64_t cnt=0 ; cnt<iijj; cnt+=vl0)",cfuse2);
         string loop_ab_string;
         if(krn_needs.cnt){ // we require fwd-cnt scalar: 0, vl0, 2*vl0, ...
-            loop_ab_string="for(int64_t cnt=0 ; cnt<iijj; cnt+=vl0)";
+            loop_ab_string="for(int64_t cnt=0; cnt<iijj; cnt+=vl0)";
+            loop_ab_string="for(int64_t cnt=0; cnt<iijj; cnt+=vl0)";
             fd["have_cnt"].setType("TAG");
         }else{ // downward count gives easier final-vl calc
             loop_ab_string="for(int64_t cnt=iijj ; cnt>0; cnt-=vl0)";
@@ -462,7 +480,8 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
                 fi>>OSSFMT(left<<setw(40)<<OSSFMT("b = _ve_vadduw_vsv("<<vl0<<",b);")
                         <<" // b[] += vl0, a[] const");
             }else{ // various nice ways to do periodic reset... [potentially better with unroll!]
-                fp["tmod"]>>"uint32_t tmod=0U; // loop induction periodic";
+                if(!fp.find("tmod"))
+                    fp["tmod"]>>"uint32_t tmod=0U; // loop induction periodic";
                 if(jj/vl0==2){
                     fi>>OSSFMT(left<<setw(40)<<"tmod = ~tmod;"<<" // toggle");
                 }else if(positivePow2(jj/vl0)){
@@ -532,7 +551,7 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
 }
 /** helper routine, after using unroll_suggest for a good VL \c vl0. */
 std::string cfuse2_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
-        int unroll, int const which=WHICH_KERNEL, int const verbose=1)
+        int unroll, int cyc=0, int const which=WHICH_KERNEL, int const verbose=1)
 {
     ostringstream oss;
     uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
@@ -554,10 +573,46 @@ std::string cfuse2_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
     cfuse2 .DEF(pfx) .DEF(vl0) .DEF(ii) .DEF(jj) ;
 
     auto& fd = cfuse2["../first"]; // definitions
-    string alg_descr=OSSFMT("// cfuse2_no_unroll: vl,ii,jj="<<vl<<","<<ii
+
+    string alg_descr=OSSFMT("// cfuse2_unroll: vl,ii,jj="<<vl<<","<<ii
             <<","<<jj<<" nloop="<<nloop
             <<(jj==1? " jj==1": vl0%jj==0? " vl%jj==0":
-                jj%vl==0? " jj%vl==0": positivePow2(jj)? " jj=2^N" : ""));
+                jj%vl==0? " jj%vl==0": positivePow2(jj)? " jj=2^N" : "")
+            <<", unroll="<<unroll);
+    if(unroll==0) { // 'any' small unroll...
+        uint32_t un=0U;
+        if((uint32_t)nloop<4U) un = nloop;
+        if(un!=0){
+            cout<<"unroll = nloop = "<<nloop<<endl;
+        }else{
+            //for(uint32_t uu=8U; uu>=4U; --uu){ // is there an nPart==0 unroll?
+            //    if(nloop%uu == 0) {un=uu; break;}
+            //}
+        }
+        if(un!=0U){
+            cout<<" No-remainder division of nloop="<<nloop<<" with 'any' unroll="<<un<<endl;
+        }else{ // no really nice unroll, divide work roughly evenly (uu ~ nPart)
+            // I have a standard "work-splitting calc", but where is it? what did I call it? XXX
+            un = 8U;
+            uint32_t nFull = nloop/un;
+            //uint32_t nPart = nloop - nFull*un;
+            for(uint32_t uu=un ;uu>=1U; --uu){
+                uint32_t nf = nloop/uu;
+                if( nf != nFull ) break;
+                un = uu;
+            }
+            cout<<"Work-splitting 'any' unroll="<<un<<endl;
+        }
+        unroll = un;
+        if(unroll > 8) unroll=8;
+    }
+    assert(unroll>0);
+    if(unroll > nloop) unroll = nloop;
+    uint32_t nFull = nloop/unroll;
+    uint32_t nPart = nloop - nFull*unroll;
+    assert(unroll <= nloop);
+    assert(nFull > 0);
+    alg_descr.append(OSSFMT("-->"<<unroll<<", cyc="<<cyc<<", nFull:nPart="<<nFull<<":"<<nPart));
     fd>>alg_descr;
     fd>>OSSFMT("_ve_lvl(vl0);  // VL = "<<vl0);
 
@@ -622,13 +677,17 @@ std::string cfuse2_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
     if(krn_needs.vl) use_vl();
     if(krn_needs.sq) use_sq();
     if(krn_needs.sqij) use_sqij();
+    if(krn_needs.iijj) use_iijj();
     // krn_needs.cnt handled separately
     if(nloop==1){
         auto& fk = fp["krn"];
         auto& fz = cfuse2["last"]["krn"];
         if(krn_needs.cnt && !fd.find("have_cnt")){
-            //fd>>"int64_t const cnt=0; /*simulate for-loop index for kernel";
-            fd.define("cnt","0");
+            //fd>>"int64_t const cnt=0; //simulate for-loop index for kernel";
+            //fd.define("cnt","0");
+            fd>>"int64_t cnt=0; //simulate for-loop index for kernel";
+            fd["have_cnt"].setType("TAG");
+            fk["last"]>>"cnt=vl0;";
             fd["have_cnt"].setType("TAG");
         }
         fz>>"// [krn output]";
@@ -640,60 +699,45 @@ std::string cfuse2_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
         string cnt_update;
         string cnt_test;
         string loop_ab_string;
+        int pragma_unr=0; // no_unroll
         if(krn_needs.cnt){ // we require fwd-cnt scalar: 0, vl0, 2*vl0, ...
+            fp>>"int64_t cnt=0;";
             cnt_test="cnt < iijj";
             cnt_update="cnt+=vl0;";
-            loop_ab_string=OSSFMT("for(int64_t cnt=0 ; "<<cnt_test<<"; /*"<<cnt_update<<"*/)");
+            if(unroll==nloop){ // nFull==1 && nPart==0
+                pragma_unr=-1; // absent
+                loop_ab_string="";
+            }else if(nPart==0 && cyc>0 && unroll%cyc==0){
+                loop_ab_string=OSSFMT("for(/*int64_t cnt=0*/; "<<cnt_test<<"; /*"<<cnt_update<<"*/)");
+            }else{
+                loop_ab_string=OSSFMT("for(/*int64_t cnt=0*/; /*"<<cnt_test<<"*/; /*"<<cnt_update<<"*/)");
+            }
             fd["have_cnt"].setType("TAG");
         }else{ // downward count gives easier final-vl calc
             cnt_test="cnt > 0";
             cnt_update="cnt-=vl0;";
-            loop_ab_string=OSSFMT("for(int64_t cnt=0 ; "<<cnt_test<<"; /*"<<cnt_update<<"*/)");
+            if(unroll==nloop){ // nFull==1 && nPart==0
+                pragma_unr=-1; // absent
+                loop_ab_string="";
+                cnt_update="";
+            }else{
+                loop_ab_string=OSSFMT("for(int64_t cnt=0 ; "<<cnt_test<<"; /*"<<cnt_update<<"*/)");
+            }
         }
         use_iijj();
-        CBLOCK_FOR(loop_ab,0/*no_unroll*/, loop_ab_string, cfuse2);
+        CBLOCK_FOR(loop_ab,pragma_unr, loop_ab_string, cfuse2);
         fp_sets_ab = true;
         if(vl0%jj!=0 && jj%vl0!=0 && jj<vl0) fp_sets_ab=false; // optimization
         auto& fz = cfuse2["last"]["krn"];
         fz>>"// [krn output]";
 
-        if(unroll==0) { // 'any' small unroll...
-            uint32_t un=0U;
-            if((uint32_t)nloop<4U) un = nloop;
-            if(un!=0){
-                cout<<"unroll = nloop = "<<nloop<<endl;
-            }else{
-                //for(uint32_t uu=8U; uu>=4U; --uu){ // is there an nPart==0 unroll?
-                //    if(nloop%uu == 0) {un=uu; break;}
-                //}
-            }
-            if(un!=0U){
-                cout<<" No-remainder division of nloop="<<nloop<<" with 'any' unroll="<<un<<endl;
-            }else{ // no really nice unroll, divide work roughly evenly (uu ~ nPart)
-                // I have a standard "work-splitting calc", but where is it? what did I call it? XXX
-                un = 8U;
-                uint32_t nFull = nloop/un;
-                //uint32_t nPart = nloop - nFull*un;
-                for(uint32_t uu=un ;uu>=1U; --uu){
-                    uint32_t nf = nloop/uu;
-                    if( nf != nFull ) break;
-                    un = uu;
-                }
-                cout<<"Work-splitting 'any' unroll="<<un<<endl;
-            }
-            unroll = un;
-            if(unroll > 8) unroll=8;
-        }
-        uint32_t nFull = nloop/unroll;
-        uint32_t nPart = nloop - nFull*unroll;
         auto comment=OSSFMT("// nloop="<<nloop<<" unroll by "<<unroll<<" --> "<<nFull<<" times + "<<nPart<<" remainder");
         cout<<comment;
         loop_ab<<comment;
-        assert(nFull > 0);
         auto maybe_exit = [&loop_ab,&cnt_test,&oss](Cblock& cb, bool const doit){
             if(doit){
                 cb>>OSSFMT(left<<setw(40)<<OSSFMT("if(!("<<cnt_test<<")) break;")
-                        <<" // EXTRA EXIT TEST");
+                        <<" // EXIT TEST");
             }
         };
 
@@ -712,77 +756,90 @@ std::string cfuse2_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
             fuse2_kernel(fk, fd, fz, ii,jj,vl, kernComment(), which);
 
             auto& fc = loop_ab[OSSFMT("unr"<<u)]["cnt"];
-            fc>>cnt_update; // cnt = cnt +/- vl0;
+            if(!cnt_update.empty()) fc>>cnt_update; // cnt = cnt +/- vl0;
             maybe_exit(fc,extra_exit_test);
-            auto& fi = loop_ab[OSSFMT("unr"<<u)]["iter"];
+            if(unroll<nloop || (unroll==nloop && u<(uint32_t)unroll-1U)){
+                auto& fi = loop_ab[OSSFMT("unr"<<u)]["iter"];
 
-            //fi>>OSSFMT("// CFUSE2_NO_UNROLL_"<<vl<<"_"<<ii<<"_"<<jj);
-            if(iijj%vl0){ // last iter has reduced VL
-                if(last_iter_check){
-                    use_vl();
-                    ff  >>(fd.find("have_cnt")
-                            ?"vl = (vl0<iijj-cnt? vl0: iijj-cnt);      // vl = min(vl0,remain)"
-                            :"vl = (cnt<vl0? cnt: vl0);                // vl = min(vl0,remain)")
-                        >>"_ve_lvl(vl);";
-                }else{
-                    //ff>>"// VL ok";
-                }
-            }
-            if(vl0%jj==0){                      // avoid div,mod -- 1 vec op
-                int64_t vlojj = vl0/jj;
-                cfuse2 .DEF(vlojj);
-                fi  >>OSSFMT(left<<setw(40)<<"a =_ve_vadduw_vsv(vlojj, a);"
-                        <<" // a[i]+="<<vl0/jj<<", b[] same");
-            }else if(jj%vl0==0){
-                if(nloop<=jj/vl0){ // !have_jjMODvl_reset
-                    fi>>OSSFMT(left<<setw(40)<<OSSFMT("b = _ve_vadduw_vsv("<<vl0<<",b);")
-                            <<" // b[] += vl0, a[] const");
-                }else{ // various nice ways to do periodic reset... [potentially better with unroll!]
-                    // Every (jj/vl0) we do a special reset...
-                    fp["tmod"]>>"uint32_t tmod=0U; // loop induction periodic";
-                    if(jj/vl0==2){
-                        fi>>OSSFMT(left<<setw(40)<<"tmod = ~tmod;"<<" // toggle");
-                    }else if(positivePow2(jj/vl0)){
-                        uint64_t const shift = positivePow2Shift((uint32_t)(jj/vl0));
-                        uint64_t const mask  = (1ULL<<shift) - 1U;
-                        fi>>OSSFMT(left<<setw(40)<<"tmod = (tmod+1) & "<<jithex(mask)<<";"
-                                <<" // cyclic power-of-2 counter");
+                //fi>>OSSFMT("// CFUSE2_NO_UNROLL_"<<vl<<"_"<<ii<<"_"<<jj);
+                if(iijj%vl0){ // last iter has reduced VL
+                    if(last_iter_check){
+                        use_vl();
+                        ff  >>(fd.find("have_cnt")
+                                ?"vl = (vl0<iijj-cnt? vl0: iijj-cnt);      // vl = min(vl0,remain)"
+                                :"vl = (cnt<vl0? cnt: vl0);                // vl = min(vl0,remain)")
+                            >>"_ve_lvl(vl);";
                     }else{
-                        fi  >>OSSFMT(left<<setw(40)<<"++tmod;"<<" // tmod period jj/vl0 = "<<jj/vl0)
-                            >>OSSFMT(left<<setw(40)<<OSSFMT("if(tmod=="<<jj/vl0<<") tmod=0;")
-                                    <<" // cmov reset tmod=0?");
+                        //ff>>"// VL ok";
                     }
-                    use_sq();
-                    fi  >>"if(tmod){" // using mk_scope or CBLOCK_SCOPE is entirely optional...
-                        >>"    b = _ve_vadduw_vsv(vl0,b);           // b[] += vl0 (easy, a[] unchanged)"
-                        >>"}else{"
-                        >>"    a = _ve_vadduw_vsv(1,a);             // a[] += 1"
-                        >>"    b = sq;                              // b[] = sq[] (reset case)"
-                        >>"}";
                 }
-            }else if(0 && positivePow2(jj)){
-                // code block identical to full recalc DIVMOD case
-                // (mk_divmod now recognizes jj=2^N)
-                //
-                // induction from prev a,b is longer than full recalc!
-                //  sqij = _ve_vaddul_vsv(vl0,sqij);
-                //  a = _ve_vsrl_vvs(sqij, jj_shift);              // a[i]=sq[i]/jj
-                //  b = _ve_vand_vsv("<<jithex(jj_minus_1)<<",sq); // b[i]=sq[i]%jj
-            }else{
-                use_sqij();
-                if(jj<vl0){ // same as INIT_BLOCK code
-                    //fp_sets_ab = false;
-                    mk_divmod();
-                    ff>>OSSFMT(left<<setw(40)<<OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);")
-                            <<" //  a[]=sq/"<<jj<<" b[]=sq%"<<jj);
-                    fi>>OSSFMT(left<<setw(40)<<OSSFMT("sqij = _ve_vaddul_vsv(vl0,sqij);")
-                            <<" // sqij[i] += "<<vl0);
+                if(vl0%jj==0){                      // avoid div,mod -- 1 vec op
+                    int64_t vlojj = vl0/jj;
+                    cfuse2 .DEF(vlojj);
+                    fi  >>OSSFMT(left<<setw(40)<<"a =_ve_vadduw_vsv(vlojj, a);"
+                            <<" // a[i]+="<<vl0/jj<<", b[] same");
+                }else if(jj%vl0==0){
+                    if(nloop<=jj/vl0){ // !have_jjMODvl_reset
+                        fi>>OSSFMT(left<<setw(40)<<OSSFMT("b = _ve_vadduw_vsv("<<vl0<<",b);")
+                                <<" // b[] += vl0, a[] const");
+                    }else{ // various nice ways to do periodic reset... [potentially better with unroll!]
+                        // Every (jj/vl0) we do a special reset...
+                        use_sq();
+                        // cyclic unroll can inline the "tmod" periodic reset
+                        if(cyc && (unroll%cyc==0 || (nFull==1 && nPart==0))){ // other corner cases XXX ???
+                            if((u+1)%cyc){
+                                fi  >>"b = _ve_vadduw_vsv(vl0,b);           // b[] += vl0 (cyc="<<jitdec((u+1)%cyc)<<", a[] unchanged)";
+                            }else{
+                                fi  >>"a = _ve_vadduw_vsv(1,a);             // a[] += 1"
+                                    >>"b = sq;                              // b[] = sq[] (cyc reset)";
+                            }
+                        }else{ //generic update explicitly tracks a separate 'tmod' cyclic counter
+                            if(!fp.find("tmod"))
+                                fp["tmod"]>>"uint32_t tmod=0U; // loop induction periodic";
+                            if(jj/vl0==2){
+                                fi>>OSSFMT(left<<setw(40)<<"tmod = ~tmod;"<<" // toggle");
+                            }else if(positivePow2(jj/vl0)){
+                                uint64_t const shift = positivePow2Shift((uint32_t)(jj/vl0));
+                                uint64_t const mask  = (1ULL<<shift) - 1U;
+                                fi>>OSSFMT(left<<setw(40)<<OSSFMT("tmod = (tmod+1) & "<<jithex(mask)<<";")
+                                        <<" // cyclic power-of-2 counter");
+                            }else{
+                                fi  >>OSSFMT(left<<setw(40)<<"++tmod;"<<" // tmod period jj/vl0 = "<<jj/vl0)
+                                    >>OSSFMT(left<<setw(40)<<OSSFMT("if(tmod=="<<jj/vl0<<") tmod=0;")
+                                            <<" // cmov reset tmod=0?");
+                            }
+                            fi  >>"if(tmod){" // using mk_scope or CBLOCK_SCOPE is entirely optional...
+                                >>"    b = _ve_vadduw_vsv(vl0,b);           // b[] += vl0 (easy, a[] unchanged)"
+                                >>"}else{"
+                                >>"    a = _ve_vadduw_vsv(1,a);             // a[] += 1"
+                                >>"    b = sq;                              // b[] = sq[] (reset case)"
+                                >>"}";
+                        }
+                    }
+                }else if(0 && positivePow2(jj)){
+                    // code block identical to full recalc DIVMOD case
+                    // (mk_divmod now recognizes jj=2^N)
+                    //
+                    // induction from prev a,b is longer than full recalc!
+                    //  sqij = _ve_vaddul_vsv(vl0,sqij);
+                    //  a = _ve_vsrl_vvs(sqij, jj_shift);              // a[i]=sq[i]/jj
+                    //  b = _ve_vand_vsv("<<jithex(jj_minus_1)<<",sq); // b[i]=sq[i]%jj
                 }else{
-                    mk_divmod();
-                    fi  >>OSSFMT(left<<setw(40)<<"sqij = _ve_vaddul_vsv(vl0,sqij);"
-                            <<" // sqij[] += "<<vl0)
-                        >>OSSFMT(left<<setw(40)<<OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);")
+                    use_sqij();
+                    if(jj<vl0){ // same as INIT_BLOCK code
+                        //fp_sets_ab = false;
+                        mk_divmod();
+                        ff>>OSSFMT(left<<setw(40)<<OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);")
                                 <<" //  a[]=sq/"<<jj<<" b[]=sq%"<<jj);
+                        fi>>OSSFMT(left<<setw(40)<<OSSFMT("sqij = _ve_vaddul_vsv(vl0,sqij);")
+                                <<" // sqij[i] += "<<vl0);
+                    }else{
+                        mk_divmod();
+                        fi  >>OSSFMT(left<<setw(40)<<"sqij = _ve_vaddul_vsv(vl0,sqij);"
+                                <<" // sqij[] += "<<vl0)
+                            >>OSSFMT(left<<setw(40)<<OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);")
+                                    <<" //  a[]=sq/"<<jj<<" b[]=sq%"<<jj);
+                    }
                 }
             }
         }
@@ -840,12 +897,13 @@ std::string cfuse2_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj,
     }
 
     cout<<" cfuse2_unrollX ... u.unroll="<<u.unroll<<endl;
+    //if(u.unroll==0) u.unroll=maxun;
 
-    string program = cfuse2_unroll(vl,ii,jj,u.unroll,which,1/*verbose*/);
+    string program = cfuse2_unroll(vl,ii,jj,u.unroll,u.cycle,which,1/*verbose*/);
     // wrap 'program' up with some boilerplate...
     ostringstream oss;
     oss<<"// Autogenerated by "<<__FILE__<<" cfuse2_unrollX("<<vl<<"[/"<<vlen<<"]"
-        <<","<<ii<<","<<jj<<",unroll="<<u.unroll<<"[/"<<maxun<<"],...)\n";
+        <<","<<ii<<","<<jj<<",unroll="<<u.unroll<<"[/"<<maxun<<"],cyc="<<u.cycle<<",...)\n";
     oss<<"// Possible compile:\n";
     oss<<"//   clang -target linux-ve -O3 -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics tmp-vi.c"<<endl;
     oss<<program;

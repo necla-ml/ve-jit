@@ -61,6 +61,8 @@ TARGETS=libjit1.a libjit1-x86.a asmfmt-ve\
 #CXX:=nc++-1.5.2
 #CC:=ncc-1.6.0
 #CXX:=nc++-1.6.0
+CC:=ncc-2.1.28
+CXX:=nc++-2.1.28
 
 #CC:=ncc
 #CXX:=nc++
@@ -496,10 +498,12 @@ $(patsubst $(LIBVELI_SRC),%.cpp,%.o) %.o: %.cpp
 asmfmt-x86: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp intutil.c intutil.h jitpage.c jitpage.h
 	g++ $(CXXFLAGS) -O2 -E -dD $< >& $(patsubst %,%.i,$@)
 	g++ ${CXXFLAGS} -Wall -D_MAIN asmfmt.cpp jitpage.c intutil.c -o $@ -ldl
-asmfmt-ve: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp jitpage-ve.o
-	$(CXX) $(CXXFLAGS) -O2 -E -dD $< >& $(patsubst %,%.i,$@)
+asmfmt-main-ve.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
+	$(CXX) $(CXXFLAGS) -D_MAIN -E -dD $< >& $(patsubst %,%.i,$@)
 	#$(CXX) $(CXXFLAGS) -O2 -D_MAIN $(filter-out %.hpp,$^) -o $@
-	$(CXX) ${CXXFLAGS} -D_MAIN -Wall asmfmt.cpp jitpage.c intutil.c -o $@ -ldl
+	$(CXX) ${CXXFLAGS} -O2 -D_MAIN -Wall -c asmfmt.cpp -o $@
+asmfmt-ve: asmfmt-main-ve.o jitpage-ve.o intutil-ve.o
+	$(CXX) ${CXXFLAGS} -D_MAIN -Wall $^ -o $@ -ldl
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
 %.asm: %.c
 	$(CC) $(CFLAGS) -g2 -Wa,-adhln -S $< >& $*.s

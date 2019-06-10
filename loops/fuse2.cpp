@@ -138,66 +138,6 @@ std::string rehash_Vab_asm(std::string va, std::string vb, std::string hash ){
 
 #include "divide_by_constants_codegen_reference.c"
 
-typedef uint32_t u32;
-typedef int32_t s32;
-typedef uint64_t u64;
-/* required for magic constant generation */
-u32 ulog2(u32 v) {
-    u32 r, shift;
-    r =     (v > 0xFFFF) << 4; v >>= r;
-    shift = (v > 0xFF  ) << 3; v >>= shift; r |= shift;
-    shift = (v > 0xF   ) << 2; v >>= shift; r |= shift;
-    shift = (v > 0x3   ) << 1; v >>= shift; r |= shift;
-    r |= (v >> 1);
-    return r;
-}
-
-struct fastdiv {
-    u32 mul;
-    u32 add;
-    s32 shift;
-    u32 _odiv;  /* save original divisor for modulo calc */
-};
-/* generate constants for implementing a division with multiply-add-shift */
-void fastdiv_make(struct fastdiv *d, u32 divisor) {
-    u32 l, r, e;
-    u64 m;
-
-    d->_odiv = divisor;
-    // Modifed [ejk]
-    if( positivePow2(divisor) ){
-        d->mul = 1U;
-        d->add = 0U;
-        d->shift = positivePow2Shift(divisor);
-        assert( ulog2(divisor) == (u32)d->shift );
-        return;
-    }
-    l = ulog2(divisor);
-    if (divisor & (divisor - 1)) {
-        m = 1ULL << (l + 32);
-        d->mul = (u32)(m / divisor);
-        r = (u32)m - d->mul * divisor;
-        e = divisor - r;
-        if (e < (1UL << l)) {
-            ++d->mul;
-            d->add = 0;
-        } else {
-            d->add = d->mul;
-        }
-        d->shift = l;
-    } else {
-        if (divisor == 1) {
-            d->mul = 0xffffffff;
-            d->add = 0xffffffff;
-            d->shift = 0;
-        } else {
-            d->mul = 0x80000000;
-            d->add = 0;
-            d->shift = l-1;
-        }
-    }
-}
-
 void other_fastdiv_methods(int const jj);
 
 // NOTE: we do a ">>FASTDIV_C", which we can't just elide on Aurora, even if FASTDIV_C==16
