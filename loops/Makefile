@@ -121,160 +121,22 @@ mega1-sample.log: Makefile fuse2
 	#    stressing VL=256 and Vl=255
 	#    some code paths still have smaller VL examples
 	( echo "$@" \
-		&& export cmd="./cf3.sh" \
-		&& ${cmd} 256 4 1024 \
-		&& ${cmd} 256 2 1024 \
-		&& ${cmd} 256 3 1024 \
-		&& ${cmd} 256 1 1024 \
-		&& ${cmd} 256 8 992 \
-		&& ${cmd} 256 1 768 \
-		&& ${cmd} 256 3 768 \
-		&& ${cmd} 256 4 768 \
-		&& ${cmd} 256 2 768 \
-		&& ${cmd} 256 3 512 \
-		&& ${cmd} 256 2 512 \
-		&& ${cmd} 256 1 512 \
-		&& ${cmd} 256 4 512 \
-		&& ${cmd} 256 6 384 \
-		&& ${cmd} 256 2 384 \
-		&& ${cmd} 256 4 384 \
-		&& ${cmd} 256 5 384 \
-		&& ${cmd} 256 3 257 \
-		&& ${cmd} 256 1 257 \
-		&& ${cmd} 256 7 257 \
-		&& ${cmd} 256 2 257 \
-		&& ${cmd} 256 2 256 \
-		&& ${cmd} 256 4 256 \
-		&& ${cmd} 256 3 256 \
-		&& ${cmd} 256 8 255 \
-		&& ${cmd} 256 16 160 \
-		&& ${cmd} 256 12 160 \
-		&& ${cmd} 256 8 160 \
-		&& ${cmd} 256 9 64 \
-		&& ${cmd} 256 12 64 \
-		&& ${cmd} 256 13 64 \
-		&& ${cmd} 256 16 64 \
-		&& ${cmd} 256 13 60 \
-		&& ${cmd} 256 16 48 \
-		&& ${cmd} 256 16 33 \
-		&& ${cmd} 256 9 32 \
-		&& ${cmd} 256 16 32 \
-		&& ${cmd} 256 13 20 \
-		&& ${cmd} 256 2 4 \
-		&& ${cmd} 256 1 3 \
-		&& ${cmd} 256 2 3 \
-		&& ${cmd} 256 1 1 \
-		&& ${cmd} 255 3 256 \
-		&& ${cmd} 255 1 256 \
-		&& ${cmd} 255 7 256 \
-		&& ${cmd} 255 2 256 \
-		&& ${cmd} 255 14 128 \
-		&& ${cmd} 255 12 85 \
-		&& ${cmd} 255 6 85 \
-		&& ${cmd} 255 4 85 \
-		&& ${cmd} 255 7 85 \
-		&& ${cmd} 255 9 85 \
-		&& ${cmd} 255 10 85 \
-		&& ${cmd} 255 12 64 \
-		&& ${cmd} 255 15 34 \
-		&& ${cmd} 255 16 32 \
-		&& ${cmd} 255 16 16 \
-		&& ${cmd} 16 16 9 \
-		&& ${cmd} 12 7 16 \
-		&& ${cmd} 12 6 16 \
-		&& ${cmd} 12 3 16 \
-		&& ${cmd} 12 12 8 \
-		&& ${cmd} 9 9 16 \
-		&& ${cmd} 9 9 8 \
-		&& ${cmd} 9 9 4 \
-		&& ${cmd} 9 16 4 \
-		&& ${cmd} 9 9 2 \
-		&& ${cmd} 8 16 1 \
-		&& ${cmd} 8 9 1 \
-		&& ${cmd} 7 15 1 \
-		&& ${cmd} 5 16 1 \
-		&& ${cmd} 5 15 1 \
-		&& ${cmd} 4 16 1 \
+		&& ./mega1-sample.sh ./fuse2 -t \
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
-mega1-cfuse.log: Makefile cfuse2
-	# all code paths from mega1-uniqs.log,
-	#    stressing VL=256 and Vl=255
-	#    some code paths still have smaller VL examples
+cf2-sample.log: Makefile cfuse2
 	( echo "$@" \
-		&& ./cf2.sh 256 4 1024 \
-		&& ./cf2.sh 256 2 1024 \
-		&& ./cf2.sh 256 3 1024 \
-		&& ./cf2.sh 256 1 1024 \
-		&& ./cf2.sh 256 8 992 \
-		&& ./cf2.sh 256 1 768 \
-		&& ./cf2.sh 256 3 768 \
-		&& ./cf2.sh 256 4 768 \
-		&& ./cf2.sh 256 2 768 \
-		&& ./cf2.sh 256 3 512 \
-		&& ./cf2.sh 256 2 512 \
-		&& ./cf2.sh 256 1 512 \
-		&& ./cf2.sh 256 4 512 \
-		&& ./cf2.sh 256 6 384 \
-		&& ./cf2.sh 256 2 384 \
-		&& ./cf2.sh 256 4 384 \
-		&& ./cf2.sh 256 5 384 \
-		&& ./cf2.sh 256 3 257 \
-		&& ./cf2.sh 256 1 257 \
-		&& ./cf2.sh 256 7 257 \
-		&& ./cf2.sh 256 2 257 \
-		&& ./cf2.sh 256 2 256 \
-		&& ./cf2.sh 256 4 256 \
-		&& ./cf2.sh 256 3 256 \
-		&& ./cf2.sh 256 8 255 \
-		&& ./cf2.sh 256 16 160 \
-		&& ./cf2.sh 256 12 160 \
-		&& ./cf2.sh 256 8 160 \
-		&& ./cf2.sh 256 9 64 \
-		&& ./cf2.sh 256 12 64 \
-		&& ./cf2.sh 256 13 64 \
-		&& ./cf2.sh 256 16 64 \
-		&& ./cf2.sh 256 13 60 \
-		&& ./cf2.sh 256 16 48 \
-		&& ./cf2.sh 256 16 33 \
-		&& ./cf2.sh 256 9 32 \
-		&& ./cf2.sh 256 16 32 \
-		&& ./cf2.sh 256 13 20 \
-		&& ./cf2.sh 256 2 4 \
-		&& ./cf2.sh 256 1 3 \
-		&& ./cf2.sh 256 2 3 \
-		&& ./cf2.sh 256 1 1 \
-		&& ./cf2.sh 255 3 256 \
-		&& ./cf2.sh 255 1 256 \
-		&& ./cf2.sh 255 7 256 \
-		&& ./cf2.sh 255 2 256 \
-		&& ./cf2.sh 255 14 128 \
-		&& ./cf2.sh 255 12 85 \
-		&& ./cf2.sh 255 6 85 \
-		&& ./cf2.sh 255 4 85 \
-		&& ./cf2.sh 255 7 85 \
-		&& ./cf2.sh 255 9 85 \
-		&& ./cf2.sh 255 10 85 \
-		&& ./cf2.sh 255 12 64 \
-		&& ./cf2.sh 255 15 34 \
-		&& ./cf2.sh 255 16 32 \
-		&& ./cf2.sh 255 16 16 \
-		&& ./cf2.sh 16 16 9 \
-		&& ./cf2.sh 12 7 16 \
-		&& ./cf2.sh 12 6 16 \
-		&& ./cf2.sh 12 3 16 \
-		&& ./cf2.sh 12 12 8 \
-		&& ./cf2.sh 9 9 16 \
-		&& ./cf2.sh 9 9 8 \
-		&& ./cf2.sh 9 9 4 \
-		&& ./cf2.sh 9 16 4 \
-		&& ./cf2.sh 9 9 2 \
-		&& ./cf2.sh 8 16 1 \
-		&& ./cf2.sh 8 9 1 \
-		&& ./cf2.sh 7 15 1 \
-		&& ./cf2.sh 5 16 1 \
-		&& ./cf2.sh 5 15 1 \
-		&& ./cf2.sh 4 16 1 \
+		&& ./mega1-sample.sh ./cf2.sh \
+		&& echo "EVERYTHING LOOKS GOOD" \
+		) 2>&1 | tee $@
+cf3-sample.log: Makefile cf3
+	( echo "$@" \
+		&& ./mega1-sample.sh ./cf3.sh \
+		&& echo "EVERYTHING LOOKS GOOD" \
+		) 2>&1 | tee $@
+cf3u-sample.log: Makefile cf3
+	( echo "$@" \
+		&& ./mega1-sample.sh ./cf3u.sh \
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
 sample1.log: fuse2 Makefile
