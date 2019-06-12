@@ -20,3 +20,12 @@ tdivmod-ve.s
 tdivmod.s
 cfuse2*.log
 cf3
+cf
+cfu
+cf2
+cf*.log
+tmp*-vi
+tmp*-vi.c
+tmp*-vi.s
+cf*-vi.c
+cf3-ve

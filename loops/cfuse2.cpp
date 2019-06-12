@@ -34,6 +34,9 @@
 #include <cstddef>
 #include <cassert>
 
+// deprecated in C++17 (clang++ warning)
+#define REGISTER
+
 #ifndef FOR
 #define FOR(I,VL) for(int I=0;I<VL;++I)
 #endif
@@ -282,10 +285,10 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     VecHash2 vhash(vlen);
     int const verbose=1;
     assert( vlen > 0 );
-    register uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
+    REGISTER uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
     cout<<"test_vloop2( vlen="<<vlen<<" loops 0.."<<ii<<" 0.."<<jj<<" iijj="<<iijj;
 
-    register int vl = vlen;
+    REGISTER int vl = vlen;
     //if (cnt+vl > iijj) vl = iijj - cnt;  // we assume ii and jj loops begin at 0
     if ((uint64_t)vl > iijj) vl = iijj;
     int const vl0 = vl; // debug
@@ -381,7 +384,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj){ // for r in [0,h){
     cout<<" Using "<<u.suggested<<"("<<(int)u.suggested<<") for vl,ii,jj="
         <<vl<<","<<ii<<","<<jj<<endl;
 
-    register uint64_t cnt = 0UL;
+    REGISTER uint64_t cnt = 0UL;
     for( ; cnt < iijj; cnt += vl )
     {
 #define VL_UP0 0
@@ -879,7 +882,7 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj,
         VecHash2 vhash(vl);
         int verbose=1;
         assert( vl > 0 );
-        register uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
+        REGISTER uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
         cout<<"fuse2 -t "<<setw(4)<<vl<<" "<<setw(4)<<ii<<" "<<setw(4)<<jj
             <<"   # for(0.."<<ii<<") for(0.."<<jj<<") --> a[VL],b[VL] for VL<="<<vl<<endl;
 
@@ -987,9 +990,9 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj,
         //assert( !(have_jj_M && have_vl_over_jj) ); // HAPPENS ex: vl,ii,jj=9,4,3
 
 #if STYLE==STYLE_GOTO
-        register uint64_t cnt = iijj; // goto counts iijj to one {i.e. cnt = remainder}
+        REGISTER uint64_t cnt = iijj; // goto counts iijj to one {i.e. cnt = remainder}
 #else
-        register uint64_t cnt = 0; // for loop counts 0 .. iijj-1
+        REGISTER uint64_t cnt = 0; // for loop counts 0 .. iijj-1
 #endif
 
         auto kernComment = [&](){
@@ -1728,7 +1731,7 @@ void test_vloop2_unroll(Lpi const vlen, Lpi const ii, Lpi const jj)
 {
     // for r in [0,h){ for c in [0,w] {...}}
     assert( vlen > 0 );
-    register uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
+    REGISTER uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
     cout<<"test_vloop2_unroll( vlen="<<vlen<<" loops 0.."<<ii<<" 0.."<<jj<<" iijj="<<iijj<<endl;
 
     // pretty-printing via vecprt
@@ -1739,9 +1742,9 @@ void test_vloop2_unroll(Lpi const vlen, Lpi const ii, Lpi const jj)
     // generate reference index outputs
     std::vector<Vab> vabs = ref_vloop2(vlen, ii, jj, 1/*verbose*/);
 
-    register int vl = vlen;
-    register uint64_t cnt=0;
-    register uint64_t nxt;
+    REGISTER int vl = vlen;
+    REGISTER uint64_t cnt=0;
+    REGISTER uint64_t nxt;
     cout<<"=== // unrolled regs:"<<endl;
     cout<<"=== //        %iijj    : scalar : outer * inner fused-loop count"<<endl;
     cout<<"=== //        %cnt     : scalar : count 0..iijj-1"<<endl;
@@ -1827,9 +1830,9 @@ void test_vloop2_no_unroll(Lpi const vlen, Lpi const ii, Lpi const jj)
     cout<<"=== //        %a, %b   : vector : outer, inner loop indices"<<endl;
     cout<<"=== //        %bA, %bD : vector : tmp regs"<<endl;
     cout<<"=== // scalar init:"<<endl;
-    register uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
-    register int vl = vlen;
-    register uint64_t cnt = 0UL;
+    REGISTER uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
+    REGISTER int vl = vlen;
+    REGISTER uint64_t cnt = 0UL;
     if ((uint64_t)vl > iijj) vl = iijj; //in general: if (cnt+vl > iijj) vl=iijj-cnt;
     cout<<"===   lea %iijj, 0,"<<ii<<"(,0)"<<endl;
     cout<<"===   lea %vl,   0,"<<jj<<"(,0) // vl used as tmp reg"<<endl;
@@ -1837,7 +1840,7 @@ void test_vloop2_no_unroll(Lpi const vlen, Lpi const ii, Lpi const jj)
     cout<<"===   or %cnt, 0, 0(,0)"<<endl;
     cout<<"===   lea %vl, "<<vlen<<"(,0) // initial vector len"<<endl;
 
-    register uint64_t nxt; // loop variable (convenience) XXX
+    REGISTER uint64_t nxt; // loop variable (convenience) XXX
 #define FOR(I,VL) for(int I=0;I<VL;++I)
     cout<<"=== // vector init:"<<endl;
     VVlpi a(vl), b(vl);   // vectorized loop indices

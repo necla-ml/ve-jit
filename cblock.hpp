@@ -65,7 +65,7 @@
 namespace cprog {
 
 struct Cunit;
-struct Cblock;
+class Cblock;
 struct CbmanipBase;
 
 struct IndentSpec;
@@ -107,7 +107,8 @@ inline std::ostream& operator<<(std::ostream& os, CbmanipBase & cbmanip){
 //@}
 
 //template<class T> struct endl {;}; // Nope. confusion with std::endl
-struct Cblock {
+class Cblock {
+  public:
     /// Empty Cblock constructor (placeholder)
     Cblock(Cunit *root, std::string name="root")
         : _root(root), _parent(this), _name(name), _type(""),
@@ -348,9 +349,9 @@ struct Cblock {
      */
     Cblock& unlink();
   private:
-    friend class CbmanipBase;
+    friend struct CbmanipBase;
     struct Cunit * const _root;
-    struct Cblock * _parent;
+    class Cblock * _parent;
   private:
     std::string _name;              ///< terminal \e path component (from root)
     std::string _type;              ///< unused?

@@ -1,3 +1,7 @@
+#ifndef FUSELOOP_HPP
+#define FUSELOOP_HPP
+/* Copyright (c) 2019 by NEC Corporation
+ * This file is part of ve-jit */
 #include <sstream>
 #include <vector>
 #include <type_traits>
@@ -150,3 +154,4 @@ std::vector<Vab> ref_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
 }//loop::
 
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
+#endif // FUSELOOP_HPP

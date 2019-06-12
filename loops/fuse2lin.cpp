@@ -22,6 +22,8 @@
 #include <cassert>
 
 using namespace std;
+// deprecated in c++17 (clang warning)
+#define REGISTER
 
 typedef int Lpi; // Loop-index type
 /** string up-to-n first, dots, up-to-n last of vector \c v[0..vl-1] w/ \c setw(wide) */
@@ -37,8 +39,8 @@ std::string vecprt(int const n, int const wide, std::vector<T> v, int const vl){
     return oss.str();
 }
 // Note other optimization might *pack* 2-loop indices differently!
-// (e.g. u32 a[0]b[0] a[1]b[1] in a packed register)
-// (e.g. single register with a[] concat b[] (for short double-loops)
+// (e.g. u32 a[0]b[0] a[1]b[1] in a packed REGISTER)
+// (e.g. single REGISTER with a[] concat b[] (for short double-loops)
 // Here we just store a[], b[] indices in two separate registers
 typedef uint64_t Vlpi; // vector-loop-index type
 typedef std::vector<Vlpi> VVlpi;
@@ -64,7 +66,7 @@ struct Vab{
 std::vector<Vab> ref_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
                             int const verbose=1)
 {
-    std::vector<Vab> vabs; // fully unrolled set of reference pairs of a,b vector register
+    std::vector<Vab> vabs; // fully unrolled set of reference pairs of a,b vector REGISTER
 
     VVlpi a(vlen), b(vlen);
     int v=0; // 0..vlen counter
@@ -152,9 +154,9 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
     //   - 2-loop induction uses 3 scalar registers:
     //     - \c cnt 0.. \c iijj, and \c vl (for jit, iijj is CCC (compile-time-const))
     //     - get final \c vl from cnt, vl and iij)
-    register uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
-    register int vl = vlen;
-    register uint64_t cnt = 0UL;
+    REGISTER uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
+    REGISTER int vl = vlen;
+    REGISTER uint64_t cnt = 0UL;
     //if (cnt+vl > iijj) vl = iijj - cnt;  // simplifies for cnt=0
     if ((uint64_t)vl > iijj) vl = iijj;
 
@@ -218,7 +220,7 @@ void test_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
             //        + cc
             //     = o[i] + aa*bD[i] + bb*(bM[i] - b[i]) 5 ops
             // Does not seem to be any big op count savings, and
-            // saving having cc in register (for non-jit) is not
+            // saving having cc in REGISTER (for non-jit) is not
             // worth the added complexity.
         }
         // Required linear function: o[i] = aa*a[i] + bb*b[i] + cc;
@@ -451,14 +453,14 @@ void test_vloop2_unroll(Lpi const vlen, Lpi const ii, Lpi const jj)
     // generate reference index outputs
     std::vector<Vab> vabs = ref_vloop2(vlen, ii, jj, 1/*verbose*/);
 
-    register uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
-    register int vl = vlen;
-    register uint64_t cnt=0;
-    register uint64_t nxt;
+    REGISTER uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
+    REGISTER int vl = vlen;
+    REGISTER uint64_t cnt=0;
+    REGISTER uint64_t nxt;
     cout<<"=== // unrolled regs:"<<endl;
     cout<<"=== //        %iijj    : scalar : outer * inner fused-loop count"<<endl;
     cout<<"=== //        %cnt     : scalar : count 0..iijj-1"<<endl;
-    cout<<"=== //        %vl      : scalar : vector length register"<<endl;
+    cout<<"=== //        %vl      : scalar : vector length REGISTER"<<endl;
     cout<<"=== //        %a, %b   : vector : outer, inner loop indices"<<endl;
     cout<<"=== //        %bA, %bD : vector : tmp regs"<<endl;
     //if (vl > iijj) vl = iijj; //in general: if (cnt+vl > iijj) vl=iijj-cnt;
@@ -534,15 +536,15 @@ void test_vloop2_no_unroll(Lpi const vlen, Lpi const ii, Lpi const jj)
     cout<<"=== // no-unroll regs (generic loop):"<<endl;
     cout<<"=== //        %iijj    : scalar : outer * inner fused-loop count"<<endl;
     cout<<"=== //        %cnt     : scalar : count 0..iijj-1"<<endl;
-    cout<<"=== //        %vl      : scalar : vector length register"<<endl;
+    cout<<"=== //        %vl      : scalar : vector length REGISTER"<<endl;
     cout<<"=== // Oh. Fully generic would need ii and jj in scalar regs too"<<endl;
     cout<<"=== //                 (ii could be re-used for iijj)"<<endl;
     cout<<"=== //        %a, %b   : vector : outer, inner loop indices"<<endl;
     cout<<"=== //        %bA, %bD : vector : tmp regs"<<endl;
     cout<<"=== // scalar init:"<<endl;
-    register uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
-    register int vl = vlen;
-    register uint64_t cnt = 0UL;
+    REGISTER uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
+    REGISTER int vl = vlen;
+    REGISTER uint64_t cnt = 0UL;
     if ((uint64_t)vl > iijj) vl = iijj; //in general: if (cnt+vl > iijj) vl=iijj-cnt;
     cout<<"===   lea %iijj, 0,"<<ii<<"(,0)"<<endl;
     cout<<"===   lea %vl,   0,"<<jj<<"(,0) // vl used as tmp reg"<<endl;
@@ -550,7 +552,7 @@ void test_vloop2_no_unroll(Lpi const vlen, Lpi const ii, Lpi const jj)
     cout<<"===   or %cnt, 0, 0(,0)"<<endl;
     cout<<"===   lea %vl, "<<vlen<<"(,0) // initial vector len"<<endl;
 
-    register uint64_t nxt; // loop variable (convenience) XXX
+    REGISTER uint64_t nxt; // loop variable (convenience) XXX
 #define FOR(I,VL) for(int I=0;I<VL;++I)
     cout<<"=== // vector init:"<<endl;
     VVlpi a(vl), b(vl);   // vectorized loop indices

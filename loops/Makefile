@@ -1,15 +1,20 @@
 SHELL=/bin/bash	
-NCXX:=nc++	
+NCXX:=nc++-2.1.28
+# on Aurora hosts, gcc is extremely old version, with incomplete <regex> impl
+GCXX:=clang++
+GCC:=clang
 CLANG_VI_FLAGS?=-show-spill-message-vec -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics
 CXXLANG_FLAGS:=-target linux-ve -O3 -mllvm $(CLANG_VI_FLAGS)
 
-.PHONY: all more force force-lib mega1-sample.log mega1
-all: fuse2 fuse2lin fuse3 mega1-sample.log
+.PHONY: all more ve force force-lib mega1-sample.log mega1
+all: fuse2 fuse2lin fuse3 mega1-sample.log cfuse2 cf3
 	@echo 'ALL DONE with make all'
 	@echo ' extra targets:'
 	@echo '    more  force-lib ../libjit1[-x86].a'
 	@echo '    mega1 mega1.log mega2 mega2.log mega1-sample.log'
 more: all tf2-1.log tf2-2.log tf2-3.log tf2-4.log tf2-0.log tf2-5.log tf2-m.log mega1-sample.log
+# These targets need access to ncc and VE hardware
+ve: cf3-sample.log cf3u-sample.log	
 
 # This may be somewhat lengthy
 force: force-lib
@@ -38,12 +43,12 @@ fuse2 fuse3 fuse2-ve fuse3-ve: $(COMMON_HDRS)
 fuse2: fuse2.cpp ../libjit1-x86.a ../libveli-x86.a
 	echo "CC=${CC}"
 	echo "LDLIBS=${LDLIBS}"
-	#g++ -Wall -Wno-unknown-pragmas -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
-	g++ -Wall -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
+	#$(GCXX) -Wall -Wno-unknown-pragmas -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
 fuse3: fuse3.cpp ../libjit1-x86.a ../libveli-x86.a
 	echo "CC=${CC}"
 	echo "LDLIBS=${LDLIBS}"
-	g++ -Wall -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
 fuse2-ve: fuse2.cpp ../libjit1.a ../libveli.a
 	echo "CC=${CC}"
 	echo "LDLIBS=${LDLIBS}"
@@ -86,7 +91,7 @@ mega1-cf3: Makefile cf3
 	for ii in `seq 1 16`; do \
 	echo "vl,ii,jj= $$vlen $$ii $$jj"; \
 	./cf3.sh $$vlen $$ii $$jj CHECK; \
-	rm -f cf/CHECK-$${vl}_$${ii}_$${jj}-vi{,.i,.s}
+	rm -f cf/CHECK-$${vl}_$${ii}_$${jj}-vi{,.i,.s} \
 	done; done; done; \
 	) >& $@.log;
 mega1-cf3u: Makefile cf3
@@ -98,7 +103,7 @@ mega1-cf3u: Makefile cf3
 	for ii in `seq 1 16`; do \
 	echo "vl,ii,jj= $$vlen $$ii $$jj"; \
 	./cf3.sh $$vlen $$ii $$jj CHECK; \
-	rm -f cf/CHECK-$${vl}_$${ii}_$${jj}-vi{,.i,.s}
+	rm -f cf/CHECK-$${vl}_$${ii}_$${jj}-vi{,.i,.s} \
 	done; done; done; \
 	) >& $@.log;
 mega2: Makefile fuse2
@@ -730,28 +735,34 @@ tf2-0.log: fuse2 Makefile tf2-3.log
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
 mul_add_shr_div: mul_add_shr_div.cpp ../timer.h ../intutil.h
-	g++ -Wall -std=c++11 -I.. -O3 $< -o $@
+	$(GCXX) -Wall -std=c++11 -I.. -O3 $< -o $@
 tdivmod: tdivmod.cpp ../timer.h ../intutil.h
-	clang++ -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
-	clang++ -Wall -std=c++11 -I.. -O3 -S $< -o $@.s
-	clang++ -Wall -std=c++11 -I.. -O3 $< -o $@
+	$(GCXX) -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
+	$(GCXX) -Wall -std=c++11 -I.. -O3 -S $< -o $@.s
+	$(GCXX) -Wall -std=c++11 -I.. -O3 $< -o $@
 tdivmod-ve: tdivmod.cpp ../timer.h ../intutil.h
 	clang++ ${CXXLANG_FLAGS} -Wall -std=c++11 -I.. -O3 -S $< -o $@.s
 	$(NCXX) $(CFLAGS) $@.s -o $@
 cfuse: cfuse.cpp ../libjit1-x86.a
-	g++ -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 cfuse2: cfuse2.cpp ../libjit1-x86.a ../fuseloop.hpp ../cblock.hpp ../vechash.hpp ./exechash.hpp
-	g++ -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
-cf3: cf3.cpp ../libjit1-x86.a ../fuseloop.hpp ../cblock.hpp ../vechash.hpp ./exechash.hpp
-	g++ -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+cf3-unroll.o: cf3-unroll.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} -c $< -o $@
+cf3: cf3.cpp cf3-unroll.o ../libjit1-x86.a ../vechash.hpp ./exechash.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+cf3-unroll-ve.o: cf3-unroll.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
+	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} -c $< -o $@
+cf3-ve: cf3.cpp cf3-unroll-ve.o ../libjit1-ve.a ../vechash.hpp ./exechash.hpp
+	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 cfuse3: cfuse3.cpp ../libjit1-x86.a
-	g++ -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 %: %.cpp
-	g++ -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
-	g++ -Wall -std=c++11 -I.. -O3 $< -o $@
+	$(GCXX) -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
+	$(GCXX) -Wall -std=c++11 -I.. -O3 $< -o $@
 clean:
 	rm -f *.i *.o *.gch a.out fuse2 fuse2lin fuse2-ve fuse3 fuse3-ve repro \
-		cfuse2 tdivmod tdivmod-ve cf3
+		cfuse2 tdivmod tdivmod-ve cf3 cf3u cf3*.o
 	rm -f a.s  cblock cfuse libgcc_lucky.so
 	rm -f *.exe *.exe.stackdump
 realclean: clean	
