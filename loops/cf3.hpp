@@ -35,6 +35,8 @@ struct KernelNeeds{
 };
 
 struct KernelNeeds kernel_needs(int const which);
+
+char const* kernel_name(int const which);
 }//extern "C"
 
 /** helper routine, after using unroll_suggest for a good VL \c vl0. */

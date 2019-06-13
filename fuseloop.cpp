@@ -3,6 +3,10 @@
 #include "stringutil.hpp" // vecprt, lcm[from intutil.hpp]
 #include <iomanip>
 
+#ifndef MVL
+#define MVL 256
+#endif
+
 namespace loop {
 
 using namespace std;
@@ -45,6 +49,121 @@ char const* desc( enum Unroll const unr ){
 std::ostream& operator<<(std::ostream& os, enum Unroll unr){
     return os<<name(unr)<<"("<<(int)unr<<"){"<<desc(unr)<<"}";
 }
+int64_t ve_vlen_suggest_equ(int64_t const nitems){
+    int const v=0; // verbose
+    int64_t ret=MVL;
+    //bool x0_check_vl = true;
+    if( nitems <= MVL ){
+        ret = nitems; // trivial: only once through the loop
+    }else{
+        int64_t const nFull = nitems/MVL;
+        int64_t const nLoops = (nitems+MVL-1)/MVL;
+        int64_t const rem   = nitems%MVL;
+        if(v)cout<<" nFull="<<nFull<<" rem="<<rem<<" nLoops="<<nLoops<<endl;
+        //if(rem+32 >= MVL){ // rem also large, latency already roughly equal.
+        //    ret = MVL; } else
+        if( nitems%nLoops == 0 ){
+            // this is "good enough" for vector latency, but more importantly
+            // avoids some special handling for last-time-through-loop.
+            ret = nitems/nLoops;
+            if(v)cout<<"loop 0.."<<nitems<<" vlen perfect division as "<<ret<<"*"<<nitems/ret<<endl;
+            //x0_check_vl = false;
+        }else{ // redistribute...
+            // we need some remainder, set up a "nice" main vector length
+            // DO NOT use rem as loop entry value, only as last-time-through value.
+            // [ vector inductions REQUIRE last-loop vlen <= main vlen ]
+            int64_t vleq = (nitems+nLoops-1) / nLoops;
+            //
+            // Note: above ensures that remainder (vector length for last pass)
+            // is always less than vleq.
+            // For example, N=257, MVL=256 should not use 128+129.
+            // Instead, we propose 160+97
+            //
+            // Why? you will usually set up vector loop induction for the initial
+            // vector length, which may then be inalid if vector length ever
+            // increases (but stays OK if you shorten vector length).
+            //
+            // I.e. you can choose between
+            // A. ignoring correct unused values, and
+            // B. using incorrect [uncalculated?] extra values
+            // during the last loop pass.  (A.) is much better.
+            //
+            if(v)cout<<" vleq="<<vleq<<" = "<<nitems<<"/"<<nLoops<<" = nitems/nLoops"<<endl;
+            assert( vleq <= MVL );
+            if( nitems%vleq != 0 ){
+                //vleq = (vleq+31)/32*32;
+                //if(v)cout<<"vleq rounded up to "<<vleq<<endl;
+
+                ret = vleq;
+                if(v)cout<<"loop 0.."<<nitems<<" vlen redistributed from "<<MVL<<"*"<<nFull<<"+"<<rem
+                    <<" to "<<vleq<<"*"<<nitems/vleq<<"+"<<nitems%vleq<<endl;
+                // Paranoia: if we somehow increased loop count, this logic has a bug
+                assert( (nitems+vleq-1)/vleq == nLoops );
+            }
+        }
+    }
+    return ret;
+}
+
+int64_t ve_vlen_suggest(int64_t const nitems){
+    int const v=0; // verbose
+    int64_t ret=MVL;
+    //bool x0_check_vl = true;
+    if( nitems <= MVL ){
+        ret = nitems; // trivial: only once through the loop
+    }else{
+        int64_t const nFull = nitems/MVL;
+        int64_t const nLoops = (nitems+MVL-1)/MVL;
+        int64_t const rem   = nitems%MVL;
+        if(v)cout<<" nFull="<<nFull<<" rem="<<rem<<" nLoops="<<nLoops<<endl;
+        if(rem+32 >= MVL){ // rem also large, latency already roughly equal.
+            ret = MVL;
+        }else if( nitems%nLoops == 0 ){
+            // this is "good enough" for vector latency, but more importantly
+            // avoids some special handling for last-time-through-loop.
+            ret = nitems/nLoops;
+            if(v)cout<<"loop 0.."<<nitems<<" vlen perfect division as "<<ret<<"*"<<nitems/ret<<endl;
+            //x0_check_vl = false;
+        }else{ // redistribute...
+            // we need some remainder, set up a "nice" main vector length
+            // DO NOT use rem as loop entry value, only as last-time-through value.
+            // [ vector inductions REQUIRE last-loop vlen <= main vlen ]
+            int64_t vleq = (nitems+nLoops-1) / nLoops;
+            //
+            // Note: above ensures that remainder (vector length for last pass)
+            // is always less than vleq.
+            // For example, N=257, MVL=256 should not use 128+129.
+            // Instead, we propose 160+97
+            //
+            // Why? you will usually set up vector loop induction for the initial
+            // vector length, which may then be inalid if vector length ever
+            // increases (but stays OK if you shorten vector length).
+            //
+            // I.e. you can choose between
+            // A. ignoring correct unused values, and
+            // B. using incorrect [uncalculated?] extra values
+            // during the last loop pass.  (A.) is much better.
+            //
+            if(v)cout<<" vleq="<<vleq<<" = "<<nitems<<"/"<<nLoops<<" = nitems/nLoops"<<endl;
+            assert( vleq <= MVL );
+            if( nitems%vleq == 0 ){
+            }else{
+                // guess latency increments for VE as vector length passes multiples of 32
+                // so round "main" vector up to a multiple of 32 (take whatever remains as remainder)
+                vleq = (vleq+31)/32*32;
+                if(v)cout<<"vleq rounded up to "<<vleq<<endl;
+
+                ret = vleq;
+                if(v)cout<<"loop 0.."<<nitems<<" vlen redistributed from "<<MVL<<"*"<<nFull<<"+"<<rem
+                    <<" to "<<vleq<<"*"<<nitems/vleq<<"+"<<nitems%vleq<<endl;
+                // Paranoia: if we somehow increased loop count, this logic has a bug
+                assert( (nitems+vleq-1)/vleq == nLoops );
+            }
+        }
+    }
+    return ret;
+}
+
 std::string str(UnrollSuggest const& u, std::string const& pfx /*=""*/){
     std::ostringstream oss;
     if(!pfx.empty()) oss<<" "<<pfx<<" ";
@@ -56,6 +175,8 @@ std::string str(UnrollSuggest const& u, std::string const& pfx /*=""*/){
         // vl = u.vll; NO -- this makes later assertions fail.
     }
 
+    //uint64_t vlen_equ = ve_vlen_suggest(iijj);
+    //oss<<" // ve_vlen_suggest(iijj)="<<vlen_equ<<" (no jj effect, just equitable loop load)"<<endl;
     oss<<"vl,ii,jj="<<u.vl<<","<<u.ii<<","<<u.jj<<" "<<u.suggested;
     if(u.vl>0 && u.ii>0 && u.jj>0 && u.suggested!=UNR_UNSET && u.b_period_max>0){
         if(u.unroll>0) oss<<" unroll="<<u.unroll;
@@ -109,6 +230,9 @@ std::string str(UnrollSuggest const& u, std::string const& pfx /*=""*/){
         }
     }
     if(u.vll) oss<<" [Alt vll="<<u.vll<<"]";
+    uint64_t vlen_equ = ve_vlen_suggest(iijj);
+    uint64_t vlen_equ_min = ve_vlen_suggest_equ(iijj);
+    oss<<"[Equ "<<vlen_equ<<" "<<vlen_equ_min<<"]";
     //oss<<"\n";
     return oss.str();
 }
@@ -346,13 +470,25 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
     }
     double const f=(224./256.); //0.90
     int const vl = u.vl;
+    int const vl_equ_min = ve_vlen_suggest_equ(u.ii*u.jj); // same nloops, balanced vlen
     int const vl_max = max(1,(u.suggested==UNR_UNSET? vl: vl-1));
     if( vl_min < 1 || vl_min > vl ){ // vl_min default (or out-of-range)?
-        //for general testing purposes (arbitrary vl)
-        vl_min = max( 1, (int)(f*vl) );
-        // above could be different -- Ex. vl_min implying same # nloops
+        if(vl==MVL){ // NEW, equitable work limit, tailored for VE
+            //vl_min = vl_equ_min;
+            // if ii*jj is large, this range is too small, if we consider that
+            // unroll Alt saving is accrued each time through loop.
+            uint64_t const iijj = u.ii * u.jj;
+            uint64_t const nloop0 = (iijj+u.vl-1) / u.vl;    // div_round_up(iijj,vl)
+            uint64_t const nloop = (105*nloop0+99)/100;
+            uint64_t const vleq = (iijj+nloop-1) / nloop;
+            vl_min = vleq; // with only "just a little more" loops allowed
+
+        }else{ // original "fraction" behaviour
+            //for general testing purposes (arbitrary vl)
+            vl_min = max( 1, (int)(f*vl) );
+            // above could be different -- Ex. vl_min implying same # nloops
+        }
     }
-    // specifically for VE
     
     cout<<" checking [ "<<vl_max<<" to "<<vl_min<<" ] ..."<<endl;
     //
@@ -439,6 +575,18 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
                     u.vll = vll; // also record existence-of-alt into u
                     break;
                 }
+            }
+        }
+        if(vl==MVL && u.vll==0 && vl_equ_min<=vl_max){
+            int const vl_equ = ve_vlen_suggest(u.ii*u.jj);
+            if(vl_equ<=vl_max)          u.vll = vl_equ;      // VE latency-adjusted work balance
+            else if(vl_equ_min<=vl_max) u.vll = vl_equ_min;  // else work balance only (not mult of 32)
+            if(u.vll != 0){
+                cout<<" vl="<<u.vll<<" ACCEPTED! (for load balance, not unroll)"<<endl;
+                // This is something like vl_equ round up to mult of 32
+                UnrollSuggest us = unroll_suggest(u.vll, u.ii, u.jj, u.b_period_max, 0/*verbose*/);
+                ret = us;      // similar alg, but slightly better load balance (~vector latencies)
+                // this might actually be bad, if you want very low latency last time through!
             }
         }
     }

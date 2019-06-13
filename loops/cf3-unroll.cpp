@@ -10,6 +10,8 @@ using namespace std;
 using namespace loop;
 using namespace cprog;
 
+//#define DBG(WHAT) cout<<" DBG:"<<WHAT<<endl
+#define DBG(WHAT)
 /** helper routine, after using unroll_suggest for a good VL \c vl0. */
 std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
         int unroll, int cyc/*=0*/, int const which/*=WHICH_KERNEL*/,
@@ -20,7 +22,10 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
     uint64_t const vl = min(iijj,(uint64_t)vl0);
     int const nloop = (iijj+vl-1U) / vl;        // div_round_up(iijj,vl)
 
-    Cunit pr(OSSFMT("cfuse2_unroll("<<unroll<<")"),"C",0/*verbose*/);
+    auto call=OSSFMT("cfuse2_unroll("<<vl0<<","<<ii<<","<<jj<<",unr="<<unroll
+            <<",cyc="<<cyc<<","<<kernel_name(which)<<")");
+    DBG(call);
+    Cunit pr(call,"C",0/*verbose*/);
     auto& inc = pr.root["includes"];
     inc >>"#include \"veintrin.h\""
         >>"#include <stdint.h>";
@@ -44,24 +49,28 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
     if(unroll==0) { // 'any' small unroll...
         uint32_t un=0U;
         if((uint32_t)nloop<4U) un = nloop;
+#if 0 // For extra loop count, try for nPart==0 might remove an embedded exit test
         if(un!=0){
             cout<<"unroll = nloop = "<<nloop<<endl;
         }else{
-            //for(uint32_t uu=8U; uu>=4U; --uu){ // is there an nPart==0 unroll?
-            //    if(nloop%uu == 0) {un=uu; break;}
-            //}
+            for(uint32_t uu=8U; uu>=4U; --uu){ // is there an nPart==0 unroll?
+                if(nloop%uu == 0) {un=uu; break;}
+            }
         }
+#endif
         if(un!=0U){
             cout<<" No-remainder division of nloop="<<nloop<<" with 'any' unroll="<<un<<endl;
         }else{ // no really nice unroll, divide work roughly evenly (uu ~ nPart)
             // I have a standard "work-splitting calc", but where is it? what did I call it? XXX
             un = 8U;
             uint32_t nFull = nloop/un;
-            //uint32_t nPart = nloop - nFull*un;
-            for(uint32_t uu=un ;uu>=1U; --uu){
-                uint32_t nf = nloop/uu;
-                if( nf != nFull ) break;
-                un = uu;
+            uint32_t nPart = nloop - nFull*un;
+            if(nPart){ // loop load-balance: can we increase nPart while keeping nFull the same?
+                for(uint32_t uu=un ;uu>=1U; --uu){
+                    uint32_t nf = nloop/uu;
+                    if( nf != nFull ) break;
+                    un = uu;
+                }
             }
             cout<<"Work-splitting 'any' unroll="<<un<<endl;
         }
@@ -75,8 +84,9 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
     assert(unroll <= nloop);
     assert(nFull > 0);
     alg_descr.append(OSSFMT("-->"<<unroll<<", cyc="<<cyc<<", nFull:nPart="<<nFull<<":"<<nPart));
+    DBG(alg_descr);
     fd>>alg_descr;
-    fd>>OSSFMT("_ve_lvl(vl0);  // VL = "<<vl0);
+    fd>>OSSFMT("_ve_lvl(vl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0<<" iijj%vl0="<<iijj%vl0);
 
     //
     // ------------- helper lambdas ------------
@@ -87,19 +97,18 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
     auto use_sq = [&fd,have_sq,have_sqij,&oss](){
         // if nec, define const sequence register "sq"
         if(!have_sq()){
-            if(have_sqij())
-                fd["first"]["sq"]>>OSSFMT(left<<setw(40)<<"__vr const sq = sqij;")<<" // sq[i]=i";
-            else
-                fd["first"]["sq"]>>OSSFMT(left<<setw(40)<<"__vr const sq = _ve_vseq_v();")<<" // sq[i]=i";
+            fd["first"]["sq"]>>OSSFMT(left<<setw(40)<<"__vr const sq = _ve_vseq_v();")<<" // sq[i]=i";
             fd["have_sq"].setType("TAG");
+            if(have_sqij()){ // just in case it was _ve_vseq_v()...
+                fd["last"]["sqij"].set(OSSFMT(left<<setw(40)<<"__vr sqij = sq;"<<" // sqij[i]=i"));
+            }
         }
     };
     auto use_sqij = [&fd,have_sq,have_sqij,&oss](){
         // if nec, define non-const sequence register "sq"
         if(!have_sqij()){
             if(have_sq())
-                fd["last"]["sqij"]>>OSSFMT(left<<setw(40)<<"__vr sqij = sq;")
-                    <<" // sqij[i]=i";
+                fd["last"]["sqij"]>>OSSFMT(left<<setw(40)<<"__vr sqij = sq;"<<" // sqij[i]=i");
             else
                 fd["last"]["sqij"]>>OSSFMT(left<<setw(40)<<"__vr sqij = _ve_vseq_v();")
                     <<" // sqij[i]=i";
@@ -118,9 +127,7 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
             fd["have_iijj"].setType("TAG");
         }
     };
-    auto kernComment = [have_sq,ii,jj](){
-        return have_sq()? "sq[]=0.."+jitdec(ii*jj-1): "";
-    };
+    auto kernComment = [](){ return std::string(); };
     auto mk_divmod = [&](){ mk_DIVMOD(cfuse2,jj,iijj+vl0); };
     auto use_vl = [&fd](){
         if(! fd.find("have_vl")){
@@ -132,9 +139,100 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
     // --------- END helper lambdas ------------
     //
 
+    // "cyclic" precalc (vectors)
+    auto& fc = cfuse2["cyclic_pre"];
+
     // fp, pre-loop setup: declare or calc a[],b[]?
     //     - sometimes init calculation is easier than generic calc/induce
     auto& fp = cfuse2["preloop"];
+
+    //int cycpre_update_ops = 3+(krn_needs.sqij? 1: 0); (or 1 more if jj is a tough divisor)
+    //int pow2_update_ops = 3;
+    //  actually in case of other ties, perhaps update add(sqij),add(acyc),move,move has excellent op overlap
+    //bool const cycpre = (cyc && unroll%cyc == 0 && nFull > 1 && !positivePow2(jj));
+    //OH, OH, OH. 
+    //  if kernel accepts a string register for a[] b[], then we DO NOT NEED the move,move
+    //  and cycpre_update should ALWAYS be done whenever possible
+    //OH, OH, OH.
+    //  Sometimes we'll have precalc in OUTER loop too, so even nFull:nPart==1:0 can
+    //  benefit from register re-use
+    bool const cycpre = (cyc>0 && unroll%cyc == 0 && jj<=vl0);
+    uint64_t cyc_aincr = cyc*vl0/jj;
+    //assert( cyc_aincr*jj == cyc*vl0 || !cycpre ); // if(cycpre)assert(...)
+    if( cyc_aincr*jj != cyc*vl0 )
+        cout<<" cycpre="<<cycpre<<" cyc_aincr*jj != cyc*vl0 XXX !!! cyc_aincr = "<<cyc_aincr<<endl;
+    // - cycpre indicates sufficient loops for precalc
+    // - In this case, b[] repeats cyclically,
+    //   - while a[] repeats a cycle with increment of cyc*vl0.
+    // - fc precalc code calculates the first "cycle" exactly EVENTUALLY
+    //   - but for now presubtracts cyc*vl0 from a[] values
+    //     in order to avoid a special "first-time-through" loop
+    // - precalc update:
+    //   - acyc_U += acyc_incr
+    //   - copy bcyc_U into b[]
+    //   - copy acyc_U into a[]
+    //     - 3 ops --> 1 op if can elide the moves (use regs directly in kernel)
+    // - divmod is typically add(sqij)-mul-shr-mul[-add]-sub, 5 ops (or 6)
+    // - but divmod for power of two jj is {add(sqij)-shr-and} which 3 ops
+    //   AND the 'add' gives you sqij "for free" which is good for many kernels.
+    // - so DO NOT do cycpre for power of two jj
+    if(cycpre){
+        fc>>"// Cyclic precalc, cyc="<<jitdec(cyc);
+        fc>>"__vr";
+        for(uint32_t c=0U; c<cyc; ++c){ fc<<(c==0U?" acyc_":", acyc_")<<jitdec(c); }
+        fc<<";";
+        //fc>>"__vr const";
+        //for(uint32_t c=0U; c<cyc; ++c){ fc<<(c==0U?" bcyc_":", bcyc_")<<jitdec(c); }
+        //fc<<";";   ... oh these are const so ....
+
+        for(uint32_t c=0U; c<cyc; ++c){
+            string ac = OSSFMT("acyc_"<<c);
+            string bc = OSSFMT("bcyc_"<<c);
+            if(c==0){
+                if( jj==1 ){
+                    assert(false); // XXX TODO
+                    fc>>equ_sq("__vr "+ac)<<"         // a[i] = i";
+                    fc>>"__vr "<<bc<<" = _ve_vbrd_vs_i64(0LL); // b[i] = 0"; // libvednn way
+                    //fc>>"__vr "<<bc<<"; "<<bc<<" = _ve_vxor_vvv("<<bc<<","<<bc<<");"; // typically "best way"
+                }else if(jj>=vl0){
+                    assert(false);
+                    assert(jj%vl0==0);
+                    use_sq();
+                    fc>>"__vr "<<ac<<" = _ve_vbrd_vs_i64(0LL); // a[i]=0,b[i]=sq";
+                    fc>>"// update as 'if(++tmod==cyc)++a,b=sq; else b+=vl0;'";
+                    //fc>>equ_sq("__vr "+bc)<<"         // b[i] = i";
+                }else{ // note: mk_divmod also optimizes positivePow2(jj) case
+                    mk_divmod();
+                    use_sq();
+                    fc  >>equ_sq("__vr cycsqij");
+                    auto divmod = OSSFMT("DIVMOD_"<<jj<<"(cycsqij, "<<ac<<", __vr const "<<bc<<");");
+                    fc>>OSSFMT(left<<setw(40)<<divmod
+                            <<" // a[]=sq/"<<jj<<" b[]=sq%"<<jj);
+                }
+            }else{
+                if( jj==1 ){
+                    assert(false); // XXX TODO
+                }else if(jj>=vl0){
+                    fc>>"cycsqij = _ve_vaddul_vsv(vl0,cycsqij);";
+                    auto divmod = OSSFMT("DIVMOD_"<<jj<<"(cycsqij, "<<ac<<", __vr const "<<bc<<");");
+                    fc>>OSSFMT(left<<setw(40)<<divmod
+                            <<" // "<<ac<<"=sq/"<<jj<<" "<<bc<<"=sq%"<<jj);
+                }else{ // note: mk_divmod also optimizes positivePow2(jj) case
+                    fc>>"cycsqij = _ve_vaddul_vsv(vl0,cycsqij);";
+                    auto divmod = OSSFMT("DIVMOD_"<<jj<<"(cycsqij, "<<ac<<", __vr const "<<bc<<");");
+                    fc>>OSSFMT(left<<setw(40)<<divmod
+                            <<" // "<<ac<<"=sq/"<<jj<<" "<<bc<<"=sq%"<<jj);
+                }
+            }
+        }
+        // pre-subtract the a-increment, every time through loop looks same
+        for(uint32_t c=0U; c<cyc; ++c){
+            string ac = OSSFMT("acyc_"<<c);
+            //string bc = OSSFMT("bcyc_"<<c);
+            fc>>OSSFMT(ac<<" =_ve_vaddul_vsv(-"<<cyc_aincr<<", "<<ac<<");");
+        }
+        fc>>"// Cyclic precalc END";
+    }
     bool fp_sets_ab = (nloop==1
             || (nloop>1 && (vl0%jj==0 || jj>=vl0)));
     if(fp_sets_ab){
@@ -155,7 +253,7 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
                 <<" // a[]=sq/"<<jj<<" b[]=sq%"<<jj);
         }
     }else{
-        fp>>"__vr a,b;";
+        if(!cycpre) fp>>"__vr a,b;"; // else we invoke kernels directly with acyc_U, bcyc_U registers
     }
 
     auto& fz = cfuse2["last"]["krn"];
@@ -167,6 +265,7 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
     if(krn_needs.sqij) use_sqij();
     if(krn_needs.iijj) use_iijj();
     // krn_needs.cnt handled separately
+    DBG("nloop "<<nloop<<" cycpre "<<cycpre);
     if(nloop==1){
         auto& fk = fp["krn"];
         if(krn_needs.cnt && !fd.find("have_cnt")){
@@ -182,6 +281,7 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
         string cnt_test;
         string loop_ab_string;
         int pragma_unr=0; // no_unroll
+        use_iijj();
         if(krn_needs.cnt){ // we require fwd-cnt scalar: 0, vl0, 2*vl0, ...
             fp>>"int64_t cnt=0; // 0..iijj-1";
             cnt_test="cnt < iijj";
@@ -203,15 +303,14 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
                 loop_ab_string="";
                 cnt_update="";
             }else{
-                loop_ab_string=OSSFMT("for(int64_t cnt=0 ; "<<cnt_test<<"; /*"<<cnt_update<<"*/)");
+                loop_ab_string=OSSFMT("for(int64_t cnt=iijj ; "<<cnt_test<<"; /*"<<cnt_update<<"*/)");
             }
         }
-        use_iijj();
         CBLOCK_FOR(loop_ab,pragma_unr, loop_ab_string, cfuse2);
 
         auto comment=OSSFMT("// nloop="<<nloop<<" unroll by "<<unroll
                 <<" --> "<<nFull<<" times + "<<nPart<<" remainder");
-        cout<<comment;
+        cout<<comment<<endl;;
         loop_ab<<comment;
         auto maybe_exit = [&cnt_test,&oss](Cblock& cb, bool const doit){
             if(doit){
@@ -223,8 +322,14 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
         // if nPart, then FULL loops do not need to check VL
         // In general, need to check VL when u==nloop%unroll
         for(uint32_t u=0U; u<(uint32_t)unroll; ++u){
+            DBG("\nUN"<<u<<" of "<<unroll);
             bool const last_iter_check = (u == (nPart+(uint32_t)unroll-1U)%(uint32_t)unroll);
             bool const extra_exit_test = (last_iter_check && u!=(uint32_t)unroll-1U);
+            string ac("aOOPS_OOPS"), bc("bOOPS_OOPS");
+            if(cycpre){
+                ac = OSSFMT("acyc_"<<u%cyc);
+                bc = OSSFMT("bcyc_"<<u%cyc);
+            }
             auto& fu = loop_ab[OSSFMT("unr"<<u)];
             fu<<OSSFMT("                /*UN"<<u
                     <<(last_iter_check && loop_ab_string.empty()?", last iter"
@@ -236,27 +341,41 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
             auto& fk = fu["krn"];
 
             // ff
-            if(iijj%vl0){ // last iter has reduced VL
-                if(last_iter_check){
+            if(last_iter_check && iijj%vl0 ){ // last iter has reduced VL
+                if(nloop == unroll){
+                    auto final_vl = iijj % vl0;
+                    auto instr=OSSFMT("_ve_lvl("<<(fd.find("have_vl")?"vl=":"")<<final_vl<<");");
+                    ff>>OSSFMT(left<<setw(40)<<instr<<" // iijj="<<iijj/vl0<<"*vl0+"<<final_vl);
+                }else{ // must check whether, this time through, vl changes
                     use_vl();
-                    ff  >>(fd.find("have_cnt")
-                            ?"vl = (vl0<iijj-cnt? vl0: iijj-cnt);      // vl = min(vl0,remain)"
-                            :"vl = (cnt<vl0? cnt: vl0);                // vl = min(vl0,remain)")
-                        >>"_ve_lvl(vl);";
-                }else{
-                    //ff>>"// VL ok";
+                    ff  >>OSSFMT(left<<setw(40)<<(fd.find("have_cnt")
+                                ?"vl = (vl0<iijj-cnt? vl0: iijj-cnt);"
+                                :"vl = (cnt<vl0? cnt: vl0);")
+                            //<<"// vl = min(vl0,remain)"
+                            <<" // iijj="<<iijj/vl0<<"*vl0+"<<iijj%vl0
+                            );
+                    ff>>"_ve_lvl(vl);";
                 }
             }
-            if(!fp_sets_ab){ // if no pre-loop a,b calc, do it right before kernel call
-                use_sqij();
+            if(fp_sets_ab){
                 mk_divmod();
-                auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);");
-                ff>>OSSFMT(left<<setw(40)<<divmod
-                        <<" //  a[]=sq/"<<jj<<" b[]=sq%"<<jj);
+                use_sqij();
+            }else{ //!fp_sets_ab // if no pre-loop a,b calc, do it right before kernel call
+                mk_divmod();
+                if(cycpre){ // precalc, from cyc
+                    auto instr=OSSFMT(ac<<" = _ve_vaddul_vsv("<<cyc_aincr<<", "<<ac<<");");
+                    ff>>OSSFMT(left<<setw(40)<<instr<<" // a~"<<ac<<", b~"<<bc);
+                }else{ // precalc, full
+                    use_sqij();
+                    auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);");
+                    ff>>OSSFMT(left<<setw(40)<<divmod<<" //  a[]=sq/"<<jj<<" b[]=sq%"<<jj<<" BBB");
+                }
             }
 
             // fk
-            fuse2_kernel(fk, fd, fz, ii,jj,vl, kernComment(), which);
+            fuse2_kernel(fk, fd, fz, ii,jj,vl, kernComment(), which,
+                    OSSFMT("fuse2_unr"<<(cycpre?"cyc":""))/*pfx*/, 1/*verbose*/,
+                    (cycpre?ac:"a"), (cycpre?bc:"b"), "sq", "vl");
 
             // fi (induce)
             auto& fc = loop_ab[OSSFMT("unr"<<u)]["cnt"];
@@ -323,14 +442,19 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
                     //  a = _ve_vsrl_vvs(sqij, jj_shift);              // a[i]=sq[i]/jj
                     //  b = _ve_vand_vsv("<<jithex(jj_minus_1)<<",sq); // b[i]=sq[i]%jj
                 }else{
-                    use_sqij();
-                    mk_divmod();
-                    auto instr = "sqij = _ve_vaddul_vsv(vl0,sqij);";
-                    fi>>OSSFMT(left<<setw(40)<<instr<<" // sqij[i] += "<<vl0);
+                    if(!fp_sets_ab){
+                        //use_sqij();
+                        if(!cycpre){
+                            auto instr = "sqij = _ve_vaddul_vsv(vl0,sqij);";
+                            fi>>OSSFMT(left<<setw(40)<<instr<<" // sqij[i] += "<<vl0);
+                        }
+                    }
                     if(fp_sets_ab){ // if pre-loop sets ab, recalc goes to fi (not ff)
+                        auto instr = "sqij = _ve_vaddul_vsv(vl0,sqij);";
+                        fi>>OSSFMT(left<<setw(40)<<instr<<" // sqij[i] += "<<vl0);
                         auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);");
                         fi  >>OSSFMT(left<<setw(40)<<divmod
-                                <<" //  a[]=sq/"<<jj<<" b[]=sq%"<<jj);
+                                <<" //  a[]=sq/"<<jj<<" b[]=sq%"<<jj<<" AAA");
                     }
                 }
             }

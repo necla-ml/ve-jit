@@ -235,21 +235,21 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
                 cfuse2_kernel_print
                     >>"int const terse=1;"
                     >>"char const* linesep=\"\\n      \";"
-                    >>"printf(\""<<vA<<"[%3llu]={\",(long long unsigned)vl);"
+                    >>"printf(\"a[%3llu]={\",(long long unsigned)vl);"
                     >>"for(int i=0;i<vl;++i){"
                     >>"    if(terse && vl>=16) linesep=(vl>16 && i==7? \" ...\": \"\");"
                     >>"    if(terse && vl>16 && i>=8 && i<vl-8) continue;"
                     >>"    printf(\"%3llu%s\",\n"
-                    >>"      (long long unsigned)_ve_lvs_svs_u64("<<vA<<",i),"
+                    >>"      (long long unsigned)_ve_lvs_svs_u64(a,i),"
                     >>"      (i%16==15? linesep: \" \")); }"
                     >>"printf(\"}\\n\");"
                     >>"linesep=\"\\n   \";"
-                    >>"printf(\""<<vB<<"[%3llu]={\",(long long unsigned)vl);"
+                    >>"printf(\"b[%3llu]={\",(long long unsigned)vl);"
                     >>"for(int i=0;i<vl;++i){"
                     >>"    if(terse && vl>=16) linesep=(vl>16 && i==7? \" ...\": \"\");"
                     >>"    if(terse && vl>16 && i>=8 && i<vl-8) continue;"
                     >>"    printf(\"%3llu%s\",\n"
-                    >>"      (long long unsigned)_ve_lvs_svs_u64("<<vB<<",i),"
+                    >>"      (long long unsigned)_ve_lvs_svs_u64(b,i),"
                     >>"      (i%16==15? linesep: \" \")); }"
                     >>"printf(\"}\\n\");"
                     ;
@@ -277,15 +277,15 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
                     bDefKernelFn.getRoot(),bDefKernelFn);
             cfuse2_kernel_check
                 >>"for(uint64_t i=0;i<vl;++i){"
-                >>"    assert( _ve_lvs_svs_u64("<<vA<<",i) == (cnt+i)/jj );"
-                >>"    assert( _ve_lvs_svs_u64("<<vB<<",i) == (cnt+i)%jj );"
+                >>"    assert( _ve_lvs_svs_u64(a,i) == (cnt+i)/jj );"
+                >>"    assert( _ve_lvs_svs_u64(b,i) == (cnt+i)%jj );"
                 >>"}"
                 ;
         }
         bKrn["prt"]<<"cfuse2_kernel_check("<<vA<<", "<<vB<<", cnt, "<<sVL<<", jj);";
         if(!extraComment.empty()) bKrn["prt"]<<" // "<<extraComment;
         if(!bOut.find("out_once")){
-            bOut>>"assert((uint64_t)cnt>=iijj);"
+            bOut>>"assert((uint64_t)cnt==(iijj+vl0-1)/vl0*vl0);"
                 >>"printf(\"cfuse KERNEL_CHECK done! no errors\\n\");";
             bOut["out_once"].setType("TAG");
         }
@@ -464,10 +464,13 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
         // ff
         if(iijj%vl0){ // last iter has reduced VL
             use_vl();
-            ff  >>(fd.find("have_cnt")
-                    ?"vl = (vl0<iijj-cnt? vl0: iijj-cnt);      // vl = min(vl0,remain)"
-                    :"vl = (cnt<vl0? cnt: vl0);                // vl = min(vl0,remain)")
-                >>"_ve_lvl(vl);";
+            ff  >>OSSFMT(left<<setw(40)<<(fd.find("have_cnt")
+                        ?"vl = (vl0<iijj-cnt? vl0: iijj-cnt);"
+                        :"vl = (cnt<vl0? cnt: vl0);")
+                    //<<"// vl = min(vl0,remain)"
+                    <<" // iijj="<<iijj/vl0<<"*vl0+"<<iijj%vl0
+                    );
+            ff  >>"_ve_lvl(vl);";
         }
         if(!fp_sets_ab){
             use_sqij();
@@ -501,8 +504,8 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
                 }else if(positivePow2(jj/vl0)){
                     uint64_t const shift = positivePow2Shift((uint32_t)(jj/vl0));
                     uint64_t const mask  = (1ULL<<shift) - 1U;
-                    fi>>OSSFMT(left<<setw(40)<<"tmod = (tmod+1) & "<<jithex(mask)<<";"
-                            <<" // cyclic power-of-2 counter");
+                    auto instr = OSSFMT("tmod = (tmod+1) & "<<jithex(mask)<<";");
+                    fi>>OSSFMT(left<<setw(40)<<instr<<" // cyclic power-of-2 counter");
                 }else{
                     fi>>OSSFMT(left<<setw(40)<<"++tmod;"
                             <<" // tmod period jj/vl0 = "<<jj/vl0);
@@ -1407,13 +1410,25 @@ int main(int argc,char**argv){
     cout<<"vlen="<<vl<<", h="<<h<<", w="<<w<<endl;
     assert(opt_t==2 || opt_t==3);
 
+    uint32_t nerr=0U;
     if(opt_h == 0){
-        if(maxun==0) test_vloop2_no_unrollX(vl,h,w,opt_t,which,ofname);
-        //else cfuse2_unroll(vl,h,w,maxun,which,1/*verbose*/);
-        else cfuse2_unrollX(vl,h,w,maxun,opt_t,which,ofname);
+        try{
+            if(maxun==0) test_vloop2_no_unrollX(vl,h,w,opt_t,which,ofname);
+            //else cfuse2_unroll(vl,h,w,maxun,which,1/*verbose*/);
+            else cfuse2_unrollX(vl,h,w,maxun,opt_t,which,ofname);
+        }
+        catch(exception& e){
+            cout<<"Exception: "<<e.what()<<endl;
+            ++nerr;
+        }
+        catch(...){
+            cout<<"Unknown exception"<<endl;
+            ++nerr;
+        }
     }
     delete[] ofname;
-    cout<<"\nGoodbye"<<endl;
-    return 0;
+    if(nerr==0) cout<<"\nGoodbye"<<endl;
+    else /*  */ cout<<"\nOHOH"<<endl;
+    return nerr? -1: 0;
 }
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break

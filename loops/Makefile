@@ -129,6 +129,7 @@ mega1-sample.log: Makefile fuse2
 		&& ./mega1-sample.sh ./fuse2 -t \
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
+.PRECIOUS: cf2-sample.log cf3-sample.log cf3u-sample.log	
 cf2-sample.log: Makefile cfuse2
 	( echo "$@" \
 		&& ./mega1-sample.sh ./cf2.sh \

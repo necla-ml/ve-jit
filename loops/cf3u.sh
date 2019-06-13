@@ -4,6 +4,8 @@ ii=32
 jj=16
 kern=CHECK
 unroll=0
+vl_opt="-t"
+if [ "$1" == "-a" ]; then vl_opt="-a"; shift; fi
 if [ "$1" ]; then vl="$1"; shift; fi
 if [ "$1" ]; then ii="$1"; shift; fi
 if [ "$1" ]; then jj="$1"; shift; fi
@@ -19,8 +21,10 @@ if [ $unroll -le 0 ]; then unroll=8; fi
 if [ ! -d "cfu" ]; then mkdir cfu; else rm cfu/*-vi.i cfu/*-vi.s; fi
 log="cfu/${kern}-${vl}_${ii}_${jj}.log"
 code="cfu/${kern}-${vl}_${ii}_${jj}-vi"
-cmd="./cf3 -u${unroll} -to${code}.c -k${kern}"
-{ (cd .. && make) && make cf3 && $cmd $vl $ii $jj; \
+cmd="./cf3 -u${unroll} ${vl_opt}o${code}.c -k${kern}"
+{ (cd .. && make) && make cf3 \
+	&& echo "Command : $cmd $vl $ii $jj" \
+	&& $cmd $vl $ii $jj; \
 } >& $log && echo GOOD, was able to run $cmd $vl $ii $jj || echo OHOH
 if [ -f "${code}.c" ]; then cp "${code}.c" ./cf3-vi.c; fi
 clang -target linux-ve -O3 -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics -E ${code}.c -o ${code}.i >> $log
