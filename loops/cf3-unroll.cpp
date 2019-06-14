@@ -4,7 +4,7 @@
 #include "../stringutil.hpp"
 #include "../ve_divmod.hpp"
 #include <fstream>
-#include <regex>
+//#include <regex>
 
 using namespace std;
 using namespace loop;
@@ -507,9 +507,8 @@ std::string cfuse2_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj,
     // cino=^=l0,\\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\\:,0#,!^F,o,O,e,0=break\n"
     program = oss.str();
 
-#if 1
     auto p1 = multiReplaceWord(program, {{"a","vrx"},{"b","vry"},{"cnt","opix"}});
-#else
+#if 0
     std::string p1 = std::regex_replace(std::regex_replace(program,
                 std::regex("\\ba\\b"),string("vec_a"))
             ,std::regex("\\bb\\b"),string("vec_b"));

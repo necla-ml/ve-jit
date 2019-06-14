@@ -11,6 +11,8 @@ int mk_FASTDIV(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi/*=0*/){
     int const v=1; // verbosity
     bool const verify=true; // false after code burn-in
     bool const macro_constants = false;
+    bool const define_FASTDIV_SHR = false;  // #define?
+    bool const const_fastdiv_SHR = false;   // uint64_t const?  [else inline the shift constant]
     int ret=0;
     ostringstream oss;
     // go up to some well-defined scope position and use a named-block to
@@ -57,12 +59,14 @@ int mk_FASTDIV(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi/*=0*/){
             mac = OSSFMT("_ve_vmulul_vsv("<<mul<<",V)");
 
             string shr;
-            if(1){
+            if(define_FASTDIV_SHR){
                 shr = OSSFMT("FASTDIV_"<<jj<<"_SHR");
                 scope.define(shr,jitdec(FASTDIV_C));
-            }else{
+            }else if(const_fastdiv_SHR){
                 shr = OSSFMT("fastdiv_"<<jj<<"_SHR");
-                cb>>OSSFMT("uint64_t const "<<mul<<" = "<<jitdec(FASTDIV_C)<<";");
+                cb>>OSSFMT("uint64_t const "<<mul<<" = "<<FASTDIV_C<<";");
+            }else{
+                shr = jitdec(FASTDIV_C);
             }
             //mac = OSSFMT("_ve_vsrl_vvs("<<mac<<","<<shr<<")/*OK over [0,"<<vIn_hi<<")*/");
             mac = OSSFMT("_ve_vsrl_vvs("<<mac<<","<<shr<<")/*OK over [0,2^"<<FASTDIV_C/2<<")*/");
@@ -106,12 +110,14 @@ int mk_FASTDIV(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi/*=0*/){
             }
             if(jj_fastdiv.shift != 0){
                 string shr;
-                if(1){
+                if(define_FASTDIV_SHR){
                     shr = OSSFMT("FASTDIV_"<<jj<<"_SHR");
                     scope.define(shr,jitdec(jj_fastdiv.shift));
-                }else{
+                }else if(const_fastdiv_SHR){
                     shr = OSSFMT("fastdiv_"<<jj<<"_SHR");
-                    cb>>OSSFMT("uint64_t const "<<shr<<" = "<<jitdec(jj_fastdiv.shift)<<";");
+                    cb>>OSSFMT("uint64_t const "<<shr<<" = "<<jj_fastdiv.shift<<";");
+                }else{
+                    shr = jitdec(jj_fastdiv.shift);
                 }
                 mac=OSSFMT("_ve_vsrl_vvs("<<mac<<","<<shr<<")");
             }

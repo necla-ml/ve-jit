@@ -40,6 +40,16 @@ char const* kernel_name(int const which);
 }//extern "C"
 
 /** helper routine, after using unroll_suggest for a good VL \c vl0. */
+std::string cfuse2_no_unroll(loop::Lpi const vl0, loop::Lpi const ii, loop::Lpi const jj,
+        int const which=WHICH_KERNEL, int const verbose=1);
+
+// front-end to \c cfuse2_no_unroll -- vectorize `for[0,ii){for[0,j]{...}}`.
+//void test_vloop2_no_unrollX(loop::Lpi const vlen, loop::Lpi const ii, loop::Lpi const jj,
+//        int const opt_t, int const which=WHICH_KERNEL, char const* ofname=nullptr);
+std::string cfuse2_no_unrollX(loop::Lpi const vlen, loop::Lpi const ii, loop::Lpi const jj,
+        int const opt_t, int const which=WHICH_KERNEL, char const* ofname=nullptr);
+
+/** helper routine, after using unroll_suggest for a good VL \c vl0. */
 std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, loop::Lpi const jj,
         int unroll, int cyc=0, int const which=WHICH_KERNEL, int const verbose=1);
 
