@@ -91,7 +91,7 @@ mega1-cf3: Makefile cf3
 	for ii in `seq 1 16`; do \
 	echo "vl,ii,jj= $$vlen $$ii $$jj"; \
 	./cf3.sh $$vlen $$ii $$jj CHECK; \
-	rm -f cf/CHECK-$${vl}_$${ii}_$${jj}-vi{,.i,.s} \
+	rm -f cf/CHECK-$${vl}_$${ii}_$${jj}-vi{,.i,.s}; \
 	done; done; done; \
 	) >& $@.log;
 mega1-cf3u: Makefile cf3
@@ -102,8 +102,20 @@ mega1-cf3u: Makefile cf3
 	for jj in 3 4 5 6 7 8 9 10 11 12 13 14 16 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 36 40 41 42 43 48 60 63 64 72 84 85 86 128 160 192 224 255 256 257 384 511 512 513 640 768 896 992 1023 1024 1025 1152 1280 2 1; do \
 	for ii in `seq 1 16`; do \
 	echo "vl,ii,jj= $$vlen $$ii $$jj"; \
-	./cf3.sh $$vlen $$ii $$jj CHECK; \
-	rm -f cf/CHECK-$${vl}_$${ii}_$${jj}-vi{,.i,.s} \
+	./cf3u.sh $$vlen $$ii $$jj CHECK; \
+	rm -f cf/CHECK-$${vl}_$${ii}_$${jj}-vi{,.i,.s}; \
+	done; done; done; \
+	) >& $@.log;
+mega1-cf4: Makefile cf4
+	# for VE, concentrate on example codes at VL=256 or 255.
+	rm -f $@.log; \
+	( \
+	for vlen in 256 255 254 16 8 9 15 13 12 11 10 7 6 5 4 3 24 48 127 128 253 2 1; do \
+	for jj in 3 4 5 6 7 8 9 10 11 12 13 14 16 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 36 40 41 42 43 48 60 63 64 72 84 85 86 128 160 192 224 255 256 257 384 511 512 513 640 768 896 992 1023 1024 1025 1152 1280 2 1; do \
+	for ii in `seq 1 16`; do \
+	echo "vl,ii,jj= $$vlen $$ii $$jj"; \
+	./cf4u.sh $$vlen $$ii $$jj CHECK 8; \
+	rm -f tmpcf4u8/CHECK-$${vl}_$${ii}_$${jj}-vi{,.i,.s}; \
 	done; done; done; \
 	) >& $@.log;
 mega2: Makefile fuse2
@@ -126,7 +138,7 @@ mega1-sample.log: Makefile fuse2
 	#    stressing VL=256 and Vl=255
 	#    some code paths still have smaller VL examples
 	( echo "$@" \
-		&& ./mega1-sample.sh ./fuse2 -t \
+		&& ./mega1-sample.sh './fuse2 -t' \
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
 .PRECIOUS: cf2-sample.log cf3-sample.log cf3u-sample.log	
@@ -143,6 +155,16 @@ cf3-sample.log: Makefile cf3
 cf3u-sample.log: Makefile cf3
 	( echo "$@" \
 		&& ./mega1-sample.sh ./cf3u.sh \
+		&& echo "EVERYTHING LOOKS GOOD" \
+		) 2>&1 | tee $@
+cf4-sample.log: Makefile cf4
+	( echo "$@" \
+		&& ./mega1-sample.sh ./cf4u.sh CHECK 0 \
+		&& echo "EVERYTHING LOOKS GOOD" \
+		) 2>&1 | tee $@
+cf4u-sample.log: Makefile cf4
+	( echo "$@" \
+		&& ./mega1-sample.sh ./cf4u.sh \
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
 sample1.log: fuse2 Makefile
@@ -755,11 +777,21 @@ cf3-nounroll.o: cf3-nounroll.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../string
 cf3: cf3.cpp cf3-nounroll.o cf3-unroll.o ../libjit1-x86.a ../vechash.hpp ./exechash.hpp
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 cf3-unroll-ve.o: cf3-unroll.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
-	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} -c $< -o $@
+	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} -c $< -o $@
 cf3-nounroll-ve.o: cf3-nounroll.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
-	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} -c $< -o $@
+	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} -c $< -o $@
 cf3-ve: cf3.cpp cf3-nounroll-ve.o cf3-unroll-ve.o ../libjit1-ve.a ../vechash.hpp ./exechash.hpp
-	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+
+cf4-%.o: cf4-%.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} -c $< -o $@
+cf4-%-ve.o: cf4-%.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
+	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} -c $< -o $@
+cf4: cf4.cpp cf4-nounroll.o cf4-unroll.o ../libjit1-x86.a ../vechash.hpp ./exechash.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+cf4-ve: cf4.cpp cf4-nounroll-ve.o cf4-unroll-ve.o ../libjit1-ve.a ../vechash.hpp ./exechash.hpp
+	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+
 cfuse3: cfuse3.cpp ../libjit1-x86.a
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 %: %.cpp
