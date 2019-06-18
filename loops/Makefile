@@ -770,16 +770,13 @@ cfuse: cfuse.cpp ../libjit1-x86.a
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 cfuse2: cfuse2.cpp ../libjit1-x86.a ../fuseloop.hpp ../cblock.hpp ../vechash.hpp ./exechash.hpp
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
-cf3-unroll.o: cf3-unroll.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
+
+cf3-%.o: cf3-%.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} -c $< -o $@
-cf3-nounroll.o: cf3-nounroll.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
-	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} -c $< -o $@
+cf3-%-ve.o: cf3-%.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
+	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} -c $< -o $@
 cf3: cf3.cpp cf3-nounroll.o cf3-unroll.o ../libjit1-x86.a ../vechash.hpp ./exechash.hpp
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
-cf3-unroll-ve.o: cf3-unroll.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
-	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} -c $< -o $@
-cf3-nounroll-ve.o: cf3-nounroll.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
-	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} -c $< -o $@
 cf3-ve: cf3.cpp cf3-nounroll-ve.o cf3-unroll-ve.o ../libjit1-ve.a ../vechash.hpp ./exechash.hpp
 	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 
@@ -790,6 +787,15 @@ cf4-%-ve.o: cf4-%.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ..
 cf4: cf4.cpp cf4-nounroll.o cf4-unroll.o ../libjit1-x86.a ../vechash.hpp ./exechash.hpp
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 cf4-ve: cf4.cpp cf4-nounroll-ve.o cf4-unroll-ve.o ../libjit1-ve.a ../vechash.hpp ./exechash.hpp
+	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+
+cf5-%.o: cf5-%.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} -c $< -o $@
+cf5-%-ve.o: cf5-%.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
+	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} -c $< -o $@
+cf5: cf5.cpp cf3-common.o cf5-nounroll.o cf5-unroll.o ../libjit1-x86.a ../vechash.hpp ./exechash.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+cf5-ve: cf5.cpp cf3-common-ve.o cf5-nounroll-ve.o cf5-unroll-ve.o ../libjit1-ve.a ../vechash.hpp ./exechash.hpp
 	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 
 cfuse3: cfuse3.cpp ../libjit1-x86.a

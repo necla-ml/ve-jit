@@ -20,7 +20,7 @@
 #define KERNEL_CHECK 3
 #define KERNEL_SQIJ 4 /*just an example*/
 /** what kernel is default? */
-#define WHICH_KERNEL KERNEL_HASH
+#define WHICH_KERNEL KERNEL_CHECK
 
 extern "C" {
 /** bool flags indicating kernel requests for certain defined variables.
@@ -87,5 +87,50 @@ inline std::string multiReplaceWord(
     }
     return ret;
 }
+
+struct LoopSplit {
+    uint32_t z, lo, hi, end;
+    LoopSplit(uint32_t end) : z(0U),lo(0U),hi(end),end(end) {
+        assert( end >= z );
+    }
+    LoopSplit(uint32_t z,uint32_t end) : z(z),lo(z),hi(end),end(end) {
+        assert(end >= z );
+    }
+    LoopSplit(uint32_t z,uint32_t lo, uint32_t hi, uint32_t end) : z(z),lo(lo),hi(hi),end(end) {
+        assert( lo >= z );
+        assert( hi >= lo );
+        assert( end >= hi );
+    }
+};
+struct LoopSplit parseLoopSplit(char const* arg);
+std::ostream& operator<<(std::ostream& os, struct LoopSplit const& ls);
+
+/** vl0<0 means use |vl0| or a lower alternate VL. */
+std::string cf5_no_unroll(int const vl0, LoopSplit const& lsii, LoopSplit const& lsjj,
+        int const which=WHICH_KERNEL, int const verbose=1);
+
+std::string cf5_no_unrollX(loop::Lpi const vlen,
+        LoopSplit const& lsii, LoopSplit const& lsjj,
+        int const opt_t, int const which=WHICH_KERNEL, char const* ofname=nullptr);
+
+std::string cf5_unroll(loop::Lpi const vl0, LoopSplit const& lsii, LoopSplit const& lsjj,
+        int unroll, int cyc=0, int const which=WHICH_KERNEL, int const verbose=1);
+
+std::string cf5_unrollX(loop::Lpi const vlen, LoopSplit const& lsii, LoopSplit const& lsjj,
+        int const maxun, int const opt_t,
+        int const which=WHICH_KERNEL, char const* ofname=nullptr);
+
+/** loop splitting involves \c for(ilo..ihi)for(jlo..jhi) loops */
+void cf5_kernel(cprog::Cblock& bKrn, cprog::Cblock& bDef, cprog::Cblock& bOut,
+        int64_t const ilo, int64_t const ii,
+        int64_t const jlo, int64_t const jj,
+        int64_t const vl,
+        std::string extraComment,
+        int const which=0 /*comment,VecHash2*/,
+        std::string pfx="cf5_",
+        int const v=0 /*verbose*/,
+        std::string vA="a", std::string vB="b",
+        std::string vSEQ0="sq", std::string sVL="vl"
+        );
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
 #endif // CF3_HPP

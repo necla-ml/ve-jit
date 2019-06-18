@@ -1206,7 +1206,7 @@ int main(int argc,char**argv){
     if(argc > a+2) h  = atof(argv[a+2]);
     if(argc > a+3) w  = atof(argv[a+3]);
     cout<<"vlen="<<vl<<", h="<<h<<", w="<<w<<endl;
-    assert(opt_t==2 || opt_t==3);
+    assert(opt_t==1 || opt_t==2 || opt_t==3);
 
     uint32_t nerr=0U;
     if(opt_h == 0){
