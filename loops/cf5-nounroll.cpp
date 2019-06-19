@@ -96,6 +96,9 @@ void cf5_no_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
         auto pvl = root.find("save_vl");
         return pvl && pvl->getType() == OSSFMT(vl);
     };
+    auto vl_str = [&root](){
+        return root["save_vl"].getType();
+    };
 
     // some kernels might ask for const sq reg to always be defined
     auto use_sq = [&outer,&outer_fd,&vl_remember,&oss](){
@@ -107,27 +110,26 @@ void cf5_no_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
             outer["have_sq"].setType("TAG");
         }
     };
-    auto use_sqij = [&fd,&use_sq,&oss,&iifirst,&ilo,&jj](){
+    auto use_sqij = [&fd0,&fd,&use_sq,&oss,&ilo,&jj](){
         use_sq();
         if(!fd.find("have_sqij")){
-            auto vREG=(iifirst?"__vr ":"");
+            if(!fd0.find("sqij")) fd0["sqij"]>>"__vr sqij;";
             string instr, comment;
             if(ilo){
-                instr = OSSFMT(vREG<<"sqij = _ve_vaddul_vsv(ilo*jj,sq);");
+                instr = "sqij = _ve_vaddul_vsv(ilo*jj,sq);";
                 comment = " // sqij[i]=i";
             }else{
-                instr = OSSFMT(vREG<<"sqij = sq;");
+                instr = "sqij = sq;";
                 comment = OSSFMT(" // sqij[i]=i+"<<ilo<<"*"<<jj);
             }
             fd["last"]["sqij"]>>OSSFMT(left<<setw(40)<<instr<<comment);
             fd["have_sqij"].setType("TAG");
         }
     };
-    auto use_iijj = [&fp,&iifirst,&iijj,&ii,&jj,&oss](){
-        string decl=(iifirst? "uint64_t ":"");
+    auto use_iijj = [&fd0,&fp,&iijj,&ii,&jj,&oss](){
         if(!fp.find("iijj")){
-            auto instr=OSSFMT(decl<<"iijj=(uint64_t)ii*(uint64_t)jj;");
-            fp["iijj"]>>OSSFMT(left<<setw(40)<<instr
+            if(!fd0.find("iijj")) fd0["iijj"]>>"uint64_t iijj;";
+            fp["iijj"]>>OSSFMT(left<<setw(40)<<"iijj=(uint64_t)ii*(uint64_t)jj;"
                     <<" // iijj="<<ii<<"*"<<jj<<"="<<iijj);
         }
     };
@@ -155,8 +157,10 @@ void cf5_no_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
         }
     }else if(!vl_is(vl0)){
         fd>>OSSFMT("_ve_lvl(vl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0<<" iijj%vl0="
-                <<iijj%vl0<<" VL was "<<fd0["cf5_save_vl"].getType());
+                <<iijj%vl0<<" VL was "<<vl_str());
         vl_remember(vl0);
+    }else{
+        fd>>OSSFMT("// VL was "<<vl_str()<<", same as vl0 = "<<vl0<<" ?");
     }
 
     string alg_descr=OSSFMT("// "<<pfx<<" no_unroll: vl"<<vl<<kernComment()
@@ -226,8 +230,8 @@ void cf5_no_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
     }else if(nloop>1){
         //CBLOCK_FOR(loop_ab,0,"for(int64_t cnt=0 ; cnt<iijj; cnt+=vl0)",inner);
         string loop_ab_string;
+        use_iijj(); // iijj is ALWAYS used somewhere in loop_ab
         if(krn_needs.cnt){ // we require fwd-cnt scalar: 0, vl0, 2*vl0, ...
-            use_iijj();
             loop_ab_string="for(/*int64_t cnt=0*/; cnt<iijj; cnt+=vl0)";
         }else{ // downward count gives easier final-vl calc
             loop_ab_string="for(int64_t cnt=iijj ; cnt>0; cnt-=vl0)";
@@ -333,6 +337,8 @@ void cf5_no_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
     if(nloop>1 && iijj%vl0){
         // so that a subsequent call to this routine knows whether VL is still OK
         vl_remember(iijj%vl0);
+    }else{
+        vl_remember(vl0);
     }
     fz>>"// "<<pfx<<" done";
 }
@@ -349,6 +355,7 @@ std::string cf5_no_unroll(int const vl00, LoopSplit const& lsii, LoopSplit const
     auto& inc = pr.root["includes"];
     inc >>"#include \"veintrin.h\""
         >>"#include <stdint.h>";
+    inc["stdio.h"]>>"#include <stdio.h>";
 
     // create a somewhat generic tree
     auto& fns = pr.root["fns"];

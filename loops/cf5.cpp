@@ -53,7 +53,7 @@ struct KernelNeeds kernel_needs(int const which){
       case(KERNEL_NONE): break;
       case(KERNEL_HASH): ret.vl=1; ret.sq=1; ret.sqij=1; break;
       case(KERNEL_PRINT): ret.vl=1; break;
-      case(KERNEL_CHECK): ret.cnt=1; ret.vl=1; break;
+      case(KERNEL_CHECK): ret.cnt=1; ret.vl=1; ret.iijj=1; break;
       case(KERNEL_SQIJ): ret.sqij=1; break;
       default: cout<<" Warning: unhandled KERNEL type, which="<<which<<endl;
     }

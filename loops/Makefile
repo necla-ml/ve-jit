@@ -172,6 +172,11 @@ cf5-sample.log: Makefile cf5
 		&& ./mega1-sample.sh ./cf5.sh CHECK 0 \
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
+cf5-sample2.log: Makefile cf5
+	( echo "$@" \
+		&& ./cf5-sample2.sh ./cf5.sh CHECK 0 \
+		&& echo "EVERYTHING LOOKS GOOD" \
+		) 2>&1 | tee $@
 sample1.log: fuse2 Makefile
 	# This runs the first-encountered ExecHash paths of mega1-hash-unique.log
 	# to give a sampling of "different" code output strategies.
