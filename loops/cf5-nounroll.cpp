@@ -98,9 +98,11 @@ void cf5_no_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
     };
 
     // some kernels might ask for const sq reg to always be defined
-    auto use_sq = [&outer,&outer_fd,&oss](){
+    auto use_sq = [&outer,&outer_fd,&vl_remember,&oss](){
         // if nec, define const sequence register "sq"
         if(!outer.find("have_sq")){
+            outer_fd["sq"]>>OSSFMT("_ve_lvl(256);");
+            vl_remember(256);
             outer_fd["sq"]>>OSSFMT(left<<setw(40)<<"__vr const sq = _ve_vseq_v();"<<" // sq[i]=i");
             outer["have_sq"].setType("TAG");
         }
@@ -144,10 +146,13 @@ void cf5_no_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
     //
 
     if(iifirst){
-        fd>>OSSFMT("_ve_lvl(vl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0<<" iijj%vl0="
-                <<iijj%vl0<<" iifirst="<<iifirst);
-        vl_remember(vl0);
-        assert(vl_is(vl0));
+        // 'vl_is(vl0)' might cut a useless LVL op
+        if(!vl_is(vl0)){
+            fd>>OSSFMT("_ve_lvl(vl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0<<" iijj%vl0="
+                    <<iijj%vl0<<" iifirst="<<iifirst);
+            vl_remember(vl0);
+            assert(vl_is(vl0));
+        }
     }else if(!vl_is(vl0)){
         fd>>OSSFMT("_ve_lvl(vl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0<<" iijj%vl0="
                 <<iijj%vl0<<" VL was "<<fd0["cf5_save_vl"].getType());
