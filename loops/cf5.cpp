@@ -5,7 +5,7 @@
  *
  * quick test:
  * ```
- * { (cd .. && make) && make cf5 && ./cf5 -kCHECK -toa-vi.c && make a-ve -f ../bin.mk && ./a-ve; } >& x.log
+ * ./cf.sh cf5 15 3:6:9:12 9 CHECK 0 >& cf5.log
  * ```
  */
 #include "cf3.hpp"
@@ -53,7 +53,7 @@ struct KernelNeeds kernel_needs(int const which){
       case(KERNEL_NONE): break;
       case(KERNEL_HASH): ret.vl=1; ret.sq=1; ret.sqij=1; break;
       case(KERNEL_PRINT): ret.vl=1; break;
-      case(KERNEL_CHECK): ret.cnt=1; ret.vl=1; ret.iijj=1; break;
+      case(KERNEL_CHECK): ret.cnt=1; ret.vl=1; break;
       case(KERNEL_SQIJ): ret.sqij=1; break;
       default: cout<<" Warning: unhandled KERNEL type, which="<<which<<endl;
     }
@@ -418,9 +418,9 @@ void cf5_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
                 >>"      (i%16==15? linesep: \" \")); }"
                 >>"printf(\"}\\n\");"
                 ;
-            bKrn["prt"]<<"cf5_kernel_print("<<vA<<", "<<vB<<", "<<sVL<<");";
-            if(!extraComment.empty()) bKrn["prt"]<<" // "<<extraComment;
         }
+        bKrn["prt"]<<"cf5_kernel_print("<<vA<<", "<<vB<<", "<<sVL<<");";
+        if(!extraComment.empty()) bKrn["prt"]<<" // "<<extraComment;
         if(!bOut.find("out_once")){
             bOut>>"printf(\"cfuse KERNEL_PRINT done!\\n\");";
             bOut["out_once"].setType("TAG");
@@ -435,21 +435,24 @@ void cf5_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
             CBLOCK_SCOPE(cf5_kernel_check,
                     "void "
                     "\n__attribute__((noinline))"
-                    "\ncf5_kernel_check(__vr const a, __vr const b,"
-                    "\n        uint64_t const cnt, uint64_t const ilo, uint64_t const jlo"
-                    "\n        uint64_t const vl, uint64_t const jj)"
+                    "\ncf5_kernel_check(__vr const a, __vr const b, uint64_t const vl,"
+                    "\n        uint64_t const cnt, uint64_t const jj,"
+                    "\n        uint64_t const ilo, uint64_t const jlo)"
                     ,
                     bDefKernelFn.getRoot(),bDefKernelFn);
             cf5_kernel_check
+                //>>"printf(\"cf5_kernel_check cnt=%d vl=%d\\n\",(int)cnt,(int)vl);"
+                //>>"fflush(stdout);"
                 >>"for(uint64_t i=0;i<vl;++i){"
+                //>>"    printf(\"expect a[%lu]=%lu b[%lu]=%lu\\n\",i,ilo+(cnt+i)/jj,i,jlo+(cnt+i)%jj);"
+                //>>"    fflush(stdout);"
                 >>"    assert( _ve_lvs_svs_u64(a,i) == ilo+(cnt+i)/jj );"
                 >>"    assert( _ve_lvs_svs_u64(b,i) == jlo+(cnt+i)%jj );"
                 >>"}"
                 ;
         }
-        bKrn["chk"]<<"cf5_kernel_check("<<vA<<", "<<vB<<", cnt, ilo, jlo, "
-            <<sVL<<", jj);";
-        if(!extraComment.empty()) bKrn["prt"]<<" // "<<extraComment;
+        string call=OSSFMT("cf5_kernel_check("<<vA<<","<<vB<<","<<sVL<<",cnt,jj,ilo,jlo);");
+        bKrn["chk"]<<OSSFMT(left<<setw(40)<<call<<" // "<<extraComment);
         if(!bOut.find("out_once")){
             bOut>>"assert((uint64_t)cnt==(iijj+vl0-1)/vl0*vl0);"
                 >>"printf(\"cfuse KERNEL_CHECK done! no errors\\n\");"
@@ -457,9 +460,9 @@ void cf5_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
             bOut["out_once"].setType("TAG");
         }
     }else if( which==KERNEL_SQIJ ){
-            bKrn["beg"]>>OSSFMT("// KERNEL("<<vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"],sqij="<<vA<<"*jj+"<<vB<<")");
-            bKrn["prt"]>>"__vr const x = STORE(0, _ve_addul_vsv(ptr,_ve_vmulul_vsv(stride,sqij)));";
-            if(!extraComment.empty()) bKrn["prt"]<<" // "<<extraComment;
+        bKrn["beg"]>>OSSFMT("// KERNEL("<<vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"],sqij="<<vA<<"*jj+"<<vB<<")");
+        bKrn["prt"]>>"__vr const x = STORE(0, _ve_addul_vsv(ptr,_ve_vmulul_vsv(stride,sqij)));";
+        if(!extraComment.empty()) bKrn["prt"]<<" // "<<extraComment;
     }else{
         THROW(OSSFMT("unknown kernel type "<<which<<" in fuse2_kernel"));
     }

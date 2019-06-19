@@ -797,6 +797,27 @@ cf5: cf5.cpp cf3-common.o cf5-nounroll.o cf5-unroll.o ../libjit1-x86.a ../vechas
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 cf5-ve: cf5.cpp cf3-common-ve.o cf5-nounroll-ve.o cf5-unroll-ve.o ../libjit1-ve.a ../vechash.hpp ./exechash.hpp
 	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+.PHONY: cf5.log	
+cf5.log:	
+	{  ./cf.sh cf5 16 0:6:8 8 PRINT 0  \
+	&& ./cf.sh cf5 16 4:6:8 8 PRINT 0  \
+	&& ./cf.sh cf5 16 4:6:8 8 PRINT 0  \
+	&& ./cf.sh cf5 16 5:6:9 8 PRINT 0  \
+	&& ./cf.sh cf5 8 0:6:8 16 PRINT 0  \
+	&& ./cf.sh cf5 8 4:6:8 16 PRINT 0  \
+	&& ./cf.sh cf5 8 3:6:8 16 PRINT 0  \
+	&& echo YAY; \
+	} >& $@ && echo YAY || mv cf5.log cf5.err
+	stop here
+	{ ./cf.sh cf5 16 0:8 8 CHECK 0  \
+	&& ./cf.sh cf5 16 4:8 8 CHECK 0  \
+	&& ./cf.sh cf5 16 4:8 8 CHECK 0  \
+	&& ./cf.sh cf5 16 5:9 8 CHECK 0  \
+	&& ./cf.sh cf5 8 0:8 16 CHECK 0  \
+	&& ./cf.sh cf5 8 4:8 16 CHECK 0  \
+	&& ./cf.sh cf5 8 3:8 16 CHECK 0  \
+	&& echo YAY; \
+	} >& $@ && echo YAY || mv cf5.log cf5.err
 
 cfuse3: cfuse3.cpp ../libjit1-x86.a
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@

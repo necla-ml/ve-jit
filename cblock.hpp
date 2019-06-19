@@ -247,9 +247,10 @@ class Cblock {
     Cblock& clear();
     /** swap all `_code` for something new */
     Cblock& set(std::string s) {_code=s; return *this;}
-    Cblock& setType(std::string type) {_type=type; return *this;}
     Cblock& setName(std::string type); ///< `{this->type=type; return *this;}` and update root!
+    Cblock& setType(std::string type) {_type=type; return *this;}
     std::string const& getName() const;
+    std::string const& getType() const;
     Cunit& getRoot() const;
     //Cblock& append(std::string code) {this->code += code; return *this;} // maybe inefficient
     //Cblock* next();
@@ -444,6 +445,7 @@ struct PreIndent : IndentSpec {
 };
 
 inline std::string const& Cblock::getName() const {return _name;}
+inline std::string const& Cblock::getType() const {return _type;}
 
 inline Cblock& Cblock::after(Cblock& prev) {
     // streamlined, with 'append' that returns the argument, instead of 'prev'
