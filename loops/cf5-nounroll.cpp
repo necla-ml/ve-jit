@@ -13,7 +13,7 @@ using namespace cprog;
 //#define DBG(WHAT) cout<<" DBG:"<<WHAT<<endl
 #define DBG(WHAT)
 
-/** vl0<0 means use |vl0| or a lower alternate VL. */
+/** vl0<0 means use |vl0| or a [better] lower alternate VL. */
 static struct UnrollSuggest vl_nounroll(int const vl0, int const ii, int const jj)
 {
     int vlen = abs(vl0);
@@ -66,6 +66,7 @@ void cf5_no_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
     struct UnrollSuggest u = vl_nounroll(vlen,ii,jj);
     int const vl0 = u.vl;
     uint64_t const vl = min(iijj,(uint64_t)vl0);
+    assert(vl > 0);
     int const nloop = (iijj+vl-1U) / vl;        // div_round_up(iijj,vl)
     auto& root=outer.getRoot().root; // a codeblock where I can add "state" (vl_remember)
 
@@ -88,7 +89,7 @@ void cf5_no_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
     //
     // ------------- helper lambdas ------------
     //
-    // remember vl state between calls to this function
+    // remember vl state [inside Cblock tree] between calls to this function
     auto vl_remember = [&root,&oss](int const vl){
         root["save_vl"].setType(OSSFMT(vl));
     };
@@ -379,7 +380,7 @@ std::string cf5_no_unroll(int const vl00, LoopSplit const& lsii, LoopSplit const
     inner["first"]; // --> 'fd' inner setup code used by all splits
 
     Lpi const ii = lsii.end - lsii.z;
-    Lpi const jj = lsjj.end - lsii.z;
+    Lpi const jj = lsjj.end - lsjj.z;
     uint64_t iijj = (uint64_t)ii * (uint64_t)jj;
     if(iijj==0){ // equiv. nloop==0;
         inner>>OSSFMT("// for(0.."<<ii<<")for(0.."<<jj<<") --> NOP");

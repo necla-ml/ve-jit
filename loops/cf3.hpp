@@ -88,6 +88,8 @@ inline std::string multiReplaceWord(
     return ret;
 }
 
+/** z<=lo<=hi<=end for(z--lo)for(lo--hi)for(hi--end) loop split.
+ * Originally loops were just for(0--end). */
 struct LoopSplit {
     uint32_t z, lo, hi, end;
     LoopSplit(uint32_t end) : z(0U),lo(0U),hi(end),end(end) {

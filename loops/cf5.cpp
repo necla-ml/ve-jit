@@ -571,7 +571,7 @@ int main(int argc,char**argv){
             if(maxun==0) // no unroll...
                 cf5_no_unrollX(vl,h,w,opt_t,which,ofname);
             else{ // unroll...
-                cfuse2_unrollX(vl,h.end,w.end,maxun,opt_t,which,ofname);
+                cf5_unrollX(vl,h,w,maxun,opt_t,which,ofname);
             }
         }
         catch(exception& e){
