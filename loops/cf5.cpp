@@ -400,6 +400,7 @@ void cf5_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
             cf5_kernel_print
                 >>"int const terse=1;"
                 >>"char const* linesep=\"\\n      \";"
+                >>"printf(\"cf5_kernel_print(a,b,vl=%lu)\\n\",vl);"
                 >>"printf(\"a[%3llu]={\",(long long unsigned)vl);"
                 >>"for(int i=0;i<vl;++i){"
                 >>"    if(terse && vl>=16) linesep=(vl>16 && i==7? \" ...\": \"\");"
@@ -426,33 +427,69 @@ void cf5_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
             bOut["out_once"].setType("TAG");
         }
     }else if( which==KERNEL_CHECK ){
-        // as function call (KERNEL_PRINT does not need speed)
+        // as function call (KERNEL_CHECK does not need speed)
+        int const v=0; // verbose?
+        bool const as_function=true; // true makes asm readable, but clang can bug
         auto& bInc = bDef.getRoot()["**/includes"];
         if(!bInc.find("stdio.h")) bInc["stdio.h"]>>"#include <stdio.h>";
         if(!bInc.find("assert.h")) bInc["assert.h"]>>"#include <assert.h>";
-        auto& bDefKernelFn = bDef["..*/fns/first"];
-        if(bDefKernelFn.find("cf5_kernel_check")==nullptr){
-            CBLOCK_SCOPE(cf5_kernel_check,
-                    "void "
-                    "\n__attribute__((noinline))"
-                    "\ncf5_kernel_check(__vr const a, __vr const b, uint64_t const vl,"
-                    "\n        uint64_t const cnt, uint64_t const jj,"
-                    "\n        uint64_t const ilo, uint64_t const jlo)"
-                    ,
-                    bDefKernelFn.getRoot(),bDefKernelFn);
-            cf5_kernel_check
-                //>>"printf(\"cf5_kernel_check cnt=%d vl=%d\\n\",(int)cnt,(int)vl);"
-                //>>"fflush(stdout);"
-                >>"for(uint64_t i=0;i<vl;++i){"
-                //>>"    printf(\"expect a[%lu]=%lu b[%lu]=%lu\\n\",i,ilo+(cnt+i)/jj,i,jlo+(cnt+i)%jj);"
-                //>>"    fflush(stdout);"
-                >>"    assert( _ve_lvs_svs_u64(a,i) == ilo+(cnt+i)/jj );"
-                >>"    assert( _ve_lvs_svs_u64(b,i) == jlo+(cnt+i)%jj );"
-                >>"}"
-                ;
+        if(as_function){
+            auto& bDefKernelFn = bDef["..*/fns/first"];
+            if(bDefKernelFn.find("cf5_kernel_check")==nullptr){
+                CBLOCK_SCOPE(cf5_kernel_check,
+                        "void "
+                        "\n__attribute__((noinline))"
+                        "\ncf5_kernel_check(__vr const a, __vr const b, uint64_t const vl,"
+                        "\n        uint64_t const cnt, uint64_t const jj,"
+                        "\n        uint64_t const ilo, uint64_t const jlo)"
+                        ,
+                        bDefKernelFn.getRoot(),bDefKernelFn);
+#if 0
+                cf5_kernel_check
+                    >>"int v="<<(v?"1;":"(vl<=0?1:0); // clang bug?")
+                    >>"if(v){ printf(\"cf5_kernel_check vl=%d cnt=%d jj=%d ilo=%d jlo=%d\\n\",(int)vl,(int)cnt,(int)jj,(int)ilo,(int)jlo);">>"    fflush(stdout); }"
+                    >>"for(uint64_t i=0;i<vl;++i){"
+                    >>"    if(v){ printf(\"expect a[%lu]=%lu b[%lu]=%lu\\n\",i,ilo+(cnt+i)/jj,i,jlo+(cnt+i)%jj);">>"        fflush(stdout); }"
+                    >>"    assert( _ve_lvs_svs_u64(a,i) == ilo+(cnt+i)/jj );"
+                    >>"    assert( _ve_lvs_svs_u64(b,i) == jlo+(cnt+i)%jj );"
+                    >>"}"
+                    ;
+#else
+                if(v>=1) cf5_kernel_check
+                    >>"printf(\"cf5_kernel_check vl=%d cnt=%d jj=%d ilo=%d jlo=%d\\n\",(int)vl,(int)cnt,(int)jj,(int)ilo,(int)jlo);"
+                        >>"fflush(stdout);";
+                cf5_kernel_check
+                    >>"for(uint64_t i=0;i<vl;++i){"
+                    >>"    int64_t const a_i = _ve_lvs_svs_u64(a,i);"
+                    >>"    int64_t const b_i = _ve_lvs_svs_u64(b,i);"
+                    >>"    int const aok = (a_i == ilo+(cnt+i)/jj);"
+                    >>"    int const bok = (b_i == jlo+(cnt+i)%jj);";
+                cf5_kernel_check
+                    >>(v>=2?"    if(1){":"if( !aok || !bok ) {")
+                    >>"          printf(\"expect a[%lu]=%lu b[%lu]=%lu but got %ld %ld\\n\","
+                    >>"              i, ilo+(cnt+i)/jj, i, jlo+(cnt+i)%jj, a_i,b_i);"
+                    >>"          fflush(stdout);"
+                    >>"      }";
+                cf5_kernel_check
+                    >>"    assert( aok );"
+                    >>"    assert( bok );"
+                    >>"}";
+#endif
+            }
+            string call=OSSFMT("cf5_kernel_check("<<vA<<","<<vB<<","<<sVL<<",cnt,jj,ilo,jlo);");
+            bKrn["chk"]<<OSSFMT(left<<setw(40)<<call<<" // "<<extraComment);
+        }else{ // inline  (try to avoid clang bugs with arg-passing)
+            auto& chk=bKrn["chk"];
+            chk>>OSSFMT("for(uint64_t "<<pfx<<"_i=0; "<<pfx<<"_i<"<<sVL<<"; ++"<<pfx<<"_i){");
+            if(v){ chk>>OSSFMT(""
+                    <<"\n    int64_t a_i=_ve_lvs_svs_u64("<<vA<<","<<pfx<<"_i)"
+                    <<            ", b_i=_ve_lvs_svs_u64("<<vB<<","<<pfx<<"_i);"
+                    <<"\n    printf(\"i=%lu got %ld %ld expect %lu %lu\\n\", "<<pfx<<"_i"<<",a_i,b_i, ilo+(cnt+"<<pfx<<"_i)/jj, jlo+(cnt+"<<pfx<<"_i)/jj );");
+            }
+            chk>>OSSFMT("    assert( _ve_lvs_svs_u64("<<vA<<","<<pfx<<"_i) == ilo+(cnt+"<<pfx<<"_i)/jj );");
+            chk>>OSSFMT("    assert( _ve_lvs_svs_u64("<<vB<<","<<pfx<<"_i) == jlo+(cnt+"<<pfx<<"_i)%jj );");
+            chk>>"}";
         }
-        string call=OSSFMT("cf5_kernel_check("<<vA<<","<<vB<<","<<sVL<<",cnt,jj,ilo,jlo);");
-        bKrn["chk"]<<OSSFMT(left<<setw(40)<<call<<" // "<<extraComment);
         if(!bOut.find("out_once")){
             bOut>>"assert((uint64_t)cnt==(iijj+vl0-1)/vl0*vl0);"
                 >>"printf(\"cfuse KERNEL_CHECK done! no errors\\n\");"

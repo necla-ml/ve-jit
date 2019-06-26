@@ -1,4 +1,5 @@
 #!/bin/bash
+echo "cf.sh args: $*"
 usage() {
 	echo "$0 usage:"
 	echo "  $0 [-h] [cfXXX] [-a] [vl [ii [jj [KERN [UNROLL]]]]]"
@@ -37,6 +38,7 @@ if [ ! -d "${tmpdir}" ]; then mkdir ${tmpdir}; else rm ${tmpdir}/*-vi ${tmpdir}/
 log="${tmpdir}/${kern}-${vl}_${ii}_${jj}.log"
 code="${tmpdir}/${kern}-${vl}_${ii}_${jj}-vi"
 cmd="./${prog} -k${kern} -u${unroll} ${vl_opt}o${code}.c"
+clang_opts="-target linux-ve -O3 -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics ${CLANG_FLAGS}"
 err=0
 { (cd .. && make) && make VERBOSE=1 ${prog} \
 	&& echo "Cmd : ${cmd}" \
@@ -44,15 +46,16 @@ err=0
 } >& $log && echo GOOD, was able to run $cmd $vl $ii $jj || { err=$?; echo OHOH; }
 if [ -f "${code}.c" ]; then cp "${code}.c" ./${prog}-vi.c; fi
 if [ $err -eq 0 ]; then
-	clang -target linux-ve -O3 -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics -E ${code}.c -o ${code}.i >> $log
+	clang ${clang_opts} -E ${code}.c -o ${code}.i >> $log
 	err=$?
 fi
 if [ $err -eq 0 ]; then
-	clang -target linux-ve -O3 -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics -S ${code}.c -o ${code}.s >> $log 2>&1 \
+	clang ${clang_opts} -S ${code}.c -o ${code}.s >> $log 2>&1 \
 	&& echo "GOOD, ${code}.s" || { err=$?; echo "BAD, could not compile ${code}.c"; }
 fi
 if [ $err -eq 0 ]; then
-	{ clang -target linux-ve -O3 -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics ${code}.c -o ${code} && ./${code}; } >> $log 2>&1 \
+	echo "clang ${clang_opts} ${code}.c -o ${code} && ./${code}" >> $log 2>&1 \
+	&& { clang ${clang_opts} ${code}.c -o ${code} && ./${code}; } >> $log 2>&1 \
 	&& echo "GOOD, ${code} ran, see $log" || { err=$?; echo "BAD, could not run ${code}, see $log"; }
 fi
 cp $log ./${prog}${vl_opt}${unroll}.log

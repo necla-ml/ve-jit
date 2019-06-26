@@ -141,12 +141,13 @@ mega1-sample.log: Makefile fuse2
 		&& ./mega1-sample.sh './fuse2 -t' \
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
-.PRECIOUS: cf2-sample.log cf3-sample.log cf3u-sample.log	
+.PRECIOUS: cf2-sample.log
 cf2-sample.log: Makefile cfuse2
 	( echo "$@" \
 		&& ./mega1-sample.sh ./cf2.sh \
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
+.PRECIOUS: cf3-sample.log cf3u-sample.log
 cf3-sample.log: Makefile cf3
 	( echo "$@" \
 		&& ./mega1-sample.sh ./cf3.sh \
@@ -157,6 +158,7 @@ cf3u-sample.log: Makefile cf3
 		&& ./mega1-sample.sh ./cf3u.sh \
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
+.PRECIOUS: cf4-sample.log cf4u-sample.log
 cf4-sample.log: Makefile cf4
 	( echo "$@" \
 		&& ./mega1-sample.sh ./cf4u.sh CHECK 0 \
@@ -167,6 +169,7 @@ cf4u-sample.log: Makefile cf4
 		&& ./mega1-sample.sh ./cf4u.sh \
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
+.PRECIOUS: cf5u-sample.log cf5u-sample2.log cf5-sample.log cf5-sample2.log
 cf5-sample.log: Makefile cf5
 	( echo "$@" \
 		&& ./mega1-sample.sh ./cf5.sh CHECK 0 \
@@ -175,6 +178,16 @@ cf5-sample.log: Makefile cf5
 cf5-sample2.log: Makefile cf5
 	( echo "$@" \
 		&& ./cf5-sample2.sh ./cf5.sh CHECK 0 \
+		&& echo "EVERYTHING LOOKS GOOD" \
+		) 2>&1 | tee $@
+cf5u-sample.log: Makefile cf5
+	( echo "$@" \
+		&& CLANG_FLAGS="-Wall -Werror" ./mega1-sample.sh ./cf5.sh CHECK 8 \
+		&& echo "EVERYTHING LOOKS GOOD" \
+		) 2>&1 | tee $@
+cf5u-sample2.log: Makefile cf5
+	( echo "$@" \
+		&& CLANG_FLAGS="-Wall -Werror" ./cf5-sample2.sh ./cf5.sh CHECK 8 \
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
 sample1.log: fuse2 Makefile
