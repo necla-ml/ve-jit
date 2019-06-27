@@ -411,35 +411,38 @@ Cblock* Cblock::find(std::string p) const {
 #endif
     }
 }
+/** where '#define' for this->define would appear. */
+Cblock& Cblock::goto_defines() const {
+    Cblock *a;
+    {
+        Cblock const* body = (getName()=="body"? this: find("..*/body)"));
+        if(!body) body=this;                  // prospective "scope"
+        a = body->find("..");                 // what encloses the "scope"?
+        if(!a) a = const_cast<Cblock*>(this); // else "right here"
+    }
+    return *a;
+}
+
+/** common code */
+static void emit_define(Cblock& a, Cblock& z, std::string name, std::string subst){
+    a>>"#define "<<name<<" "<<subst; // multiline backslash support?
+    z>>"#undef "<<name.substr(0,name.find('('));
+}
 /** attach to nearest-enclosing scope in a reasonable way. */
 Cblock& Cblock::define(std::string name, std::string subst){
     // sanity checks on name?
-    Cblock *a, *z;
-    {
-        Cblock *body = (getName()=="body"? this: find("..*/body)"));
-        if(!body) body=this;
-        a = body->find(".."); // try a nearest enclosing scope
-        // ORIG: a = find("..*/body/.."); // try a nearest enclosing scope
-        //if(!a) a = find("..");   // else "parent" [ optional? ]
-        if(!a) a = this;         // else "right here"
-        z = &(*a)["last"]["undefs"]; // try extra hard for undef to be 'last'
-    }
-    assert( a!=nullptr );
-    assert( z!=nullptr );
-    (*a)>>"#define "<<name<<" "<<subst; // multiline backslash support?
-    (*z)>>"#undef "<<name.substr(0,name.find('('));
+    Cblock& a = goto_defines();
+    Cblock& z = a["last"]["undefs"]; // try extra hard for undef to be 'last'
+    emit_define(a,z,name,subst);
     return *this;
 }
 
 /** attach to nearest-enclosing scope in a reasonable way. */
 Cblock& Cblock::define_here(std::string name, std::string subst){
     // sanity checks on name?
-    Cblock *a = this;
-    Cblock *z = &(*a)["last"]["undefs"];
-    assert( a!=nullptr );
-    assert( z!=nullptr );
-    (*a)>>"#define "<<name<<" "<<subst; // multiline backslash support?
-    (*z)>>"#undef "<<name.substr(0,name.find('('));
+    Cblock& a = *this;
+    Cblock& z = a["last"]["undefs"];
+    emit_define(a,z,name,subst);
     return *this;
 }
 

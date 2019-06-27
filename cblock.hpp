@@ -283,20 +283,22 @@ class Cblock {
         if( ret == nullptr ) THROW(" Cblock["<<fullpath()<<"].at("<<path<<") not found");
         return *ret;
     }
-    //Cblock& find(std::string p) const;
-#if 1
+    /** upward block where '#define' for this->define(name,subst) would appear.
+     * - basically a careful version of find("..&ast;/body/..")
+     * - look for this (or upward) being "body" or else use \c this
+     * - from there look for "..", or else use \c this
+     * \note can return a non-const ref to \c *this (when \c this root of tree)
+     */
+    Cblock& goto_defines() const;
     /** Easy \c \#define \c \#undef attached to nearest-enclosing-scope.
      *
-     * - cb.def("M","S") -- #define M S  and #undef M
-     *   - if node is "body" put def+undef at node.at("..") and node.at("..")["last"]
-     *     - probably also have "../beg" and "../end" nodes
-     *   - this is a subcase of general method to use "nearest enclosing scope":
-     *     - node.at("..*\/body\/..") and node.at("..*\/body\/..")["last"]
+     * - cb.def("M","S") -- &num;define M S  and &num;undef M
+     *   - "&num;defines" into goto_defines()
+     *   - "&num;undef" to goto_defines["last"]["undefs"]
      * - Fancier control could be had manually, like:
-     *   - cb.at("..*\/loop_high/body").def("M","S"); to force upward scope
+     *   - cb.at("..&ast;/loop_high/body").def("M","S"); to force upward scope
      *   - consider how to change arb cblock into a scoped one.
      *     - Ex. foo--> foo_scope/{beg,body,end} where body "is" the old node "foo" ?
-     *
      * \return *this
      */
     Cblock& define(std::string name, std::string subst="");
@@ -333,7 +335,6 @@ class Cblock {
         oss<<t;
         return this->define_here(name, oss.str());
     }
-#endif
 
   private:
     /** find first \b single-component path \c p for simple search strategy.

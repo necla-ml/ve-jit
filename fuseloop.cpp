@@ -47,7 +47,9 @@ char const* desc( enum Unroll const unr ){
     return unrollSuggestDescr[unr];
 }
 std::ostream& operator<<(std::ostream& os, enum Unroll unr){
-    return os<<name(unr)<<"("<<(int)unr<<"){"<<desc(unr)<<"}";
+    return os<<name(unr)
+        //<<"("<<(int)unr<<")"
+        <<"{"<<desc(unr)<<"}";
 }
 int64_t ve_vlen_suggest_equ(int64_t const nitems){
     int const v=0; // verbose
@@ -464,21 +466,27 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int cons
     assert(ret.suggested != UNR_UNSET);
     return ret;
 }
+/** u modified to set u.vll \em and return corresponding UnrollSuggest for the alt vl. */
 UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
     if( u.suggested != UNR_UNSET ){
         cout<<" Looking for an alt strategy..."<<endl;
     }
     double const f=(224./256.); //0.90
     int const vl = u.vl;
-    int const vl_equ_min = ve_vlen_suggest_equ(u.ii*u.jj); // same nloops, balanced vlen
+    uint64_t const iijj = u.ii * u.jj;
+    uint64_t const nloop0 = (iijj+u.vl-1) / u.vl;    // div_round_up(iijj,vl)
+    int const vl_equ_min = ve_vlen_suggest_equ(u.ii*u.jj); // "same" nloops, balanced vlen
     int const vl_max = max(1,(u.suggested==UNR_UNSET? vl: vl-1));
+
+    // if vl_min is unspecified [out-of-range] set it via some HEURISTIC
     if( vl_min < 1 || vl_min > vl ){ // vl_min default (or out-of-range)?
-        if(vl==MVL){ // NEW, equitable work limit, tailored for VE
+        if(vl==MVL){
+            // equitable work limit, tailored for VE:
             //vl_min = vl_equ_min;
-            // if ii*jj is large, this range is too small, if we consider that
+            // if ii*jj is large, above range is too small, if we consider that
             // unroll Alt saving is accrued each time through loop.
-            uint64_t const iijj = u.ii * u.jj;
-            uint64_t const nloop0 = (iijj+u.vl-1) / u.vl;    // div_round_up(iijj,vl)
+            // So let's allow up to 5% more loops.
+            // Later we'll use a better model to weed out duds [OpSave estimator]
             uint64_t const nloop = (105*nloop0+99)/100;
             uint64_t const vleq = (iijj+nloop-1) / nloop;
             vl_min = vleq; // with only "just a little more" loops allowed
@@ -490,7 +498,44 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
         }
     }
     
-    cout<<" checking [ "<<vl_max<<" to "<<vl_min<<" ] ..."<<endl;
+    //
+    //  OpSave estimator
+    //
+    // Compare {N,I,K} nloops, induction-ops, kernel-ops
+    // with {N',I',K'} uAlt suggestion.
+    //
+    // OpSaving = Ops' - Ops
+    //          = N'*I'-N'*K - N*I+N*K
+    //          = N'*I' - N*I  -  (N'-N)*K
+    // Typical uAlt saving is I~4 to I'~1
+    // and suppose kernel K is 10 ops...
+    int const Kops=10;      // Suppose kernel is 10 ops XXX
+    //... hmm Iops actually depends on precalc/unroll support too
+    //    Ex. precalc outside of outer loops can have ret/nloop ~ zero. 
+    auto Iops = [](enum Unroll const sugg){
+        int ret = (sugg==UNR_DIVMOD? 4
+            :sugg==UNR_JJPOW2_NLOOP || sugg==UNR_JJPOW2_NLOOP || sugg==UNR_JJPOW2_BIG? 2
+            :sugg==UNR_JJMODVL_NORESET || sugg==UNR_JJMODVL_RESET? 1
+            :sugg==UNR_VLMODJJ? 1
+            :sugg==UNR_NLOOP1? 2
+            :sugg==UNR_UNSET? 999999 // <-- always-worst
+            :2);
+        return ret;
+    };
+    int const opsOrig = nloop0 * Iops(u.suggested) + nloop0*Kops;
+    auto OpSave = [&Kops,&Iops,&opsOrig,&iijj](enum Unroll const sugg, int const vll){
+        int const iops = Iops(sugg);
+        int const nl = (iijj+vll-1)/vll;
+        int const ops = nl*iops + nl*Kops;
+        int const ret = opsOrig - ops; // +ve is GOOD, vll saves operations
+        return ret;
+    };
+
+    cout<<" checking [ "<<vl_max<<" to "<<vl_min<<" ] ... "
+        <<" nloops orig "<<(iijj+vl-1)/vl<<", @vl_max:"<<(iijj+vl_max-1)/vl_max
+        <<", @vl_min:"<<(iijj+vl_min-1)/vl_min
+        <<" OpSave assume kernel ops="<<Kops<<endl;
+
     //
     auto const sugg = u.suggested; // induction strategy
     bool const jj_pow2 = positivePow2(u.jj);
@@ -528,32 +573,54 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
     // If u.vl is already "efficient", still try for a decent low-vl alternate
     UnrollSuggest ret = UnrollSuggest(); // If no good alt, ret is 'empty'
     u.vll = 0;                           //             and u.vll is zero
+#if 0
     if( u.suggested == UNR_JJMODVL_NORESET )
         cout<<"  ---> UNR_DIVMOD_NORESET trivial, no better alt"<<endl;
     else if( u.suggested == UNR_NLOOP1 )
         cout<<"  ---> NLOOP1 has no better alt"<<endl;
     else if( u.suggested == UNR_VLMODJJ )
         cout<<"  ---> UNR_VLMODJJ trivial, no better alt"<<endl;
-    else{
-        cout<<"Checking vll "; cout.flush();
+    else
+#else
+    if(1){
+#endif
+        cout<<"Checking vll ... orig alg "<<name(u.suggested)<<" nloops "<<(iijj+vl-1)/vl
+            <<" orig ops~"<<opsOrig<<endl;
+        int best_vll=0;
+        int best_opsave=0;
+        UnrollSuggest best_u;
         for( int vll = vl_max; vll >= vl_min; --vll){
             cout<<" "<<vll; cout.flush();
             UnrollSuggest us = unroll_suggest(vll, u.ii, u.jj, u.b_period_max, 0/*verbose*/);
+            int opsave = OpSave(us.suggested, vll);
+            cout<<" ("<<int(vll*1000./vl)*0.1<<"%) ---> alg "<<name(us.suggested)
+                <<" nloops "<<(iijj+vll-1)/vll<<" [save "<<opsave<<"] ";
             if( u.suggested != UNR_UNSET && us.suggested == UNR_DIVMOD ){
                 // this is the worst, so it cannot be an improvement (and might even have nloop higher)
-                cout<<" ---> skipped: UNR_DIVMOD is never a good alt strategy"<<endl;
+                cout<<" skipped: UNR_DIVMOD is never a good alt strategy"<<endl;
                 continue;
+            }else if( u.suggested == UNR_JJMODVL_NORESET
+                    || u.suggested == UNR_NLOOP1
+                    || u.suggested == UNR_VLMODJJ){
+                    cout<<"  ---> trivial orig "<<name(u.suggested)<<", no better alt"<<endl;
+                    continue;
             }else{
-                cout<<"\nALTERNATE strategy at vll="<<vll<<" ("
-                    <<int(vll*1000./vl)*0.1<<"% of vl)\n  "<<us<<endl;
                 // Is this alt any different?
-                if(us.suggested == u.suggested && us.unroll>=u.unroll){ // it can't be much better
-                    cout<<"  ---> skipped because it's too similar to original"<<endl;
+                //if(us.suggested == u.suggested && us.unroll>=u.unroll){ // it can't be much better
+                //    // Sometimes this can pick up iijj%vl==0 case! so NOT a good guess
+                //    cout<<"  ---> skipped because it's too similar to original"
+                //        <<" [save "<<opsave<<"]"<<endl;
+                //    continue;
+                //}
+                if(us.suggested == u.suggested && opsave>=0 && iijj%vll==0){
+                    cout<<" ACCEPTED! (alg && ops~same, but iijj%vll==0)"<<endl;
+                    if(opsave >= best_opsave){ best_opsave = opsave; best_vll = vll; best_u=us; }
                     continue;
                 }
                 if(u.suggested==UNR_JJMODVL_RESET /*other JJMODVL trivial, never here*/
                         && (us.suggested==UNR_JJPOW2_NLOOP || us.suggested==UNR_JJPOW2_BIG)){
-                    cout<<"  ---> JJPOW2 without precalc (4 vec ops) never beats JJMODVL"<<endl;
+                    cout<<"  ---> JJPOW2 without precalc (4 vec ops) never beats JJMODVL"
+                        <<" [save "<<opsave<<"]"<<endl;
                     continue;
                 }
                 //
@@ -570,24 +637,48 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
                         || (us.suggested==UNR_VLMODJJ /*&& u.nloop == us.nloop*/) // trivial induction!
                         || (us.suggested==UNR_JJMODVL_NORESET /*&& u.nloop == us.nloop*/) // trivial!
                         ){
-                    cout<<" ACCEPTED!"<<endl;
-                    ret = us;    // return the nice alt
-                    u.vll = vll; // also record existence-of-alt into u
-                    break;
+                    cout<<" might be OK based on alg "<<name(us.suggested)<<" ...";
+                    //ret = us;    // return the nice alt
+                    //u.vll = vll; // also record existence-of-alt into u
+                    //break;
+                    if(opsave<=0) {
+                        cout<<" but might not save ops"<<endl;
+                        continue;
+                    }
                 }
+
+                // NEW: base acceptance on opsave (which assumes no unrolling/precalc)
+                if(opsave>=0){
+                    cout<<" ACCEPTED! (might save ops)"<<endl;
+                    //ret = us;    // return the nice alt
+                    //u.vll = vll; // also record existence-of-alt into u
+                    //break;
+                    if(opsave >= best_opsave){ best_opsave = opsave; best_vll = vll; best_u=us; }
+                    continue;
+                }
+                cout<<endl;
             }
         }
-        if(vl==MVL && u.vll==0 && vl_equ_min<=vl_max){
-            int const vl_equ = ve_vlen_suggest(u.ii*u.jj);
-            if(vl_equ<=vl_max)          u.vll = vl_equ;      // VE latency-adjusted work balance
-            else if(vl_equ_min<=vl_max) u.vll = vl_equ_min;  // else work balance only (not mult of 32)
-            if(u.vll != 0){
-                cout<<" vl="<<u.vll<<" ACCEPTED! (for load balance, not unroll)"<<endl;
-                // This is something like vl_equ round up to mult of 32
-                UnrollSuggest us = unroll_suggest(u.vll, u.ii, u.jj, u.b_period_max, 0/*verbose*/);
-                ret = us;      // similar alg, but slightly better load balance (~vector latencies)
-                // this might actually be bad, if you want very low latency last time through!
-            }
+        if(best_vll > 0){
+            u.vll = best_vll;
+            ret = best_u;
+            cout<<"Best [/lowest equiv] vll = "<<u.vll<<" [saved "<<best_opsave<<"]";
+            //UnrollSuggest us = unroll_suggest(u.vll, u.ii, u.jj, u.b_period_max, 0/*verbose*/);
+        }
+    }
+    // if u.vll is still unset, set it to min-VL-for-same-nloops ("equitable" vl_equ)
+    if(vl==MVL && u.vll==0 && vl_equ_min<=vl_max){
+        // opsave==0 picks up many of these cases via best_vll,
+        // but we still might catch some 'auto-skipped' cases, I think.
+        int const vl_equ = ve_vlen_suggest(u.ii*u.jj);
+        if(vl_equ<=vl_max)          u.vll = vl_equ;      // VE latency-adjusted work balance
+        else if(vl_equ_min<=vl_max) u.vll = vl_equ_min;  // else work balance only (not mult of 32)
+        if(u.vll != 0){
+            cout<<" vl="<<u.vll<<" ACCEPTED! (for load balance, not unroll)";
+            // This is something like vl_equ round up to mult of 32
+            UnrollSuggest us = unroll_suggest(u.vll, u.ii, u.jj, u.b_period_max, 0/*verbose*/);
+            ret = us;      // similar alg, but slightly better load balance (~vector latencies)
+            // this might actually be bad, if you want very low latency last time through!
         }
     }
     cout<<endl;

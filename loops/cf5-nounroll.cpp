@@ -13,32 +13,43 @@ using namespace cprog;
 //#define DBG(WHAT) cout<<" DBG:"<<WHAT<<endl
 #define DBG(WHAT)
 
+#define INSCMT(BLK,INS,CMT) do{ \
+    auto ins=(INS); \
+    auto cmt=(CMT); \
+    (BLK)>>OSSFMT(left<<setw(40)<<ins<<" // "<<cmt); \
+} while(0)
+
 /** vl0<0 means use |vl0| or a [better] lower alternate VL. */
 static struct UnrollSuggest vl_nounroll(int const vl0, int const ii, int const jj)
 {
     int vlen = abs(vl0);
     if(vlen==0) vlen=256;       // XXX MVL not yet standardized in headers!
-    int opt_t = (vlen<=0? 3: 0);
+    cout<<"vl_nounroll("<<vl0<<"-->"<<vlen<<",ii="<<ii<<",jj="<<jj<<endl;
 
-    cout<<"vl_nounroll("<<vl0<<"-->"<<vlen<<",ii="<<ii<<",jj="<<jj
-        <<")opt_t="<<opt_t<<endl;
     // This is pinned at [max] vl, even if it may be "inefficient".
     auto u = unroll_suggest( vlen,ii,jj, 8/*b_period_max, don't care*/ );
-    auto uAlt = unroll_suggest(u);  // suggest an alternate nice vector length, sometimes.
-    if(1)
-        cout<<"\nUnrolls:"<<str(u,"\nOrig: ")<<endl;
-    if(uAlt.suggested==UNR_UNSET)
-        cout<<"Alt:  "<<name(uAlt.suggested)<<endl;
-    else
-        cout<<str(uAlt,"\nAlt:  ")<<endl;
-    cout<<endl;
+    cout<<"vl0="<<vl0<<" unroll_suggest("<<vlen<<","<<ii<<","<<jj
+        <<",8) --> vl="<<u.vl<<", vll="<<u.vll<<endl;
+    // suggest an alternate nice vector length, sometimes.
+    auto uAlt = unroll_suggest(u);
+    cout<<"vl0="<<vl0<<" unroll_suggest(u) --> vl="<<u.vl<<", vll="<<u.vll<<endl;
 
-    if(opt_t==3){ // we FORCE the alternate strategy (if it exists)
+    if(1){
+        cout<<"\nUnrolls:"<<str(u,"\nOrig: ")<<endl;
+
+        if(uAlt.suggested==UNR_UNSET)
+            cout<<"Alt:  "<<name(uAlt.suggested)<<endl;
+        else
+            cout<<str(uAlt,"\nAlt:  ")<<endl;
+        cout<<endl;
+    }
+
+    if(vl0 < 0){ // we FORCE the alternate strategy (if it exists)
         if(u.vll) // equiv uAlt.suggested != UNR_UNSET
         {
             assert( uAlt.suggested != UNR_UNSET );
             cout<<" (forcing alt. strategy)"<<endl;
-            unroll_suggest(u);
+            //unroll_suggest(u); // oops, duplicate call
             u = uAlt;
         }else{
             cout<<" (no really great alt.strategy)"<<endl;
@@ -105,25 +116,22 @@ void cf5_no_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
     auto use_sq = [&outer,&outer_fd,&vl_remember,&oss](){
         // if nec, define const sequence register "sq"
         if(!outer.find("have_sq")){
-            outer_fd["sq"]>>OSSFMT("_ve_lvl(256);");
-            vl_remember(256);
-            outer_fd["sq"]>>OSSFMT(left<<setw(40)<<"__vr const sq = _ve_vseq_v();"<<" // sq[i]=i");
+            //outer_fd["sq"]>>OSSFMT("_ve_lvl(256);");
+            //outer_fd["sq"]>>OSSFMT(left<<setw(40)<<"__vr const sq = _ve_vseq_v();"<<" // sq[i]=i");
+            INSCMT(outer_fd["sq"],"__vr const sq = _vel_vseq_vl(256);"," // sq[i]=i");
             outer["have_sq"].setType("TAG");
+            vl_remember(256);
         }
     };
     auto use_sqij = [&fd0,&fd,&use_sq,&oss,&ilo,&jj](){
         use_sq();
         if(!fd.find("have_sqij")){
             if(!fd0.find("sqij")) fd0["sqij"]>>"__vr sqij;";
-            string instr, comment;
-            if(ilo){
-                instr = "sqij = _ve_vaddul_vsv(ilo*jj,sq);";
-                comment = " // sqij[i]=i";
-            }else{
-                instr = "sqij = sq;";
-                comment = OSSFMT(" // sqij[i]=i+"<<ilo<<"*"<<jj);
-            }
-            fd["last"]["sqij"]>>OSSFMT(left<<setw(40)<<instr<<comment);
+            INSCMT(fd["last"]["sqij"], (ilo
+                        ?"sqij = _ve_vaddul_vsv(ilo*jj,sq);"
+                        :"sqij = sq;"),
+                    (ilo? OSSFMT("sqij[i]=i+"<<ilo<<"*"<<jj)
+                     :    string("sqij[i]=i")));
             fd["have_sqij"].setType("TAG");
         }
     };
@@ -180,6 +188,7 @@ void cf5_no_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
         use_sq();
         auto& cb = (iifirst? fd: fp);
         std::string vREG=(iifirst?"__vr ":"");
+#if 0 // clang BUG here because VL incorrectly tracked.
         if( jj==1 ){
             // for loop split, don't easily know if we can 'const' it
             string instr;
@@ -205,6 +214,35 @@ void cf5_no_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
                 cb>>OSSFMT(left<<setw(40)<<divmod<<" // a[]=(sq+"<<ilo*jj<<")/"<<jj<<" b[]=(sq+"<<ilo*jj<<")%"<<jj);
             }
         }
+#else // vel fixes clang compilation bugs
+        if( jj==1 ){
+            // for loop split, don't easily know if we can 'const' it
+            INSCMT(cb,(ilo==0
+                        ?OSSFMT(vREG<<"a = sq;")
+                        :OSSFMT(vREG<<"a = _vel_vaddul_vsvl(ilo,sq,vl0);")),
+                    OSSFMT("a[i] = "<<ilo<<"+i"));
+            INSCMT(cb,OSSFMT(vREG<<"b = _vel_vbrdl_vsl(0LL,vl0);"),
+                    "b[i] = 0");
+            // Note: vxor often "best" for other chips
+        }else if(jj>=vl0){
+            INSCMT(cb,OSSFMT(vREG<<"a = _vel_vbrdl_vsl(ilo,vl0);"),
+                    OSSFMT("a[i] = "<<ilo));
+            INSCMT(cb,OSSFMT(vREG<<"b = sq;"),
+                    "b[i] = i");
+        }else{ // note: mk_divmod also optimizes positivePow2(jj) case
+            mk_divmod();
+            use_sq();
+            if(iifirst) cb>>"__vr a,b;";
+            string divmod;
+            if(ilo==0){
+                INSCMT(cb,OSSFMT("DIVMOD_"<<jj<<"(sq, a, b);"),
+                        OSSFMT("a[]=sq/"<<jj<<" b[]=sq%"<<jj));
+            }else{
+                INSCMT(cb,OSSFMT("DIVMOD_"<<jj<<"(_ve_vaddul_vsv(ilo*jj,sq), a, b);"),
+                        OSSFMT("a[]=(sq+"<<ilo*jj<<")/"<<jj<<" b[]=(sq+"<<ilo*jj<<")%"<<jj));
+            }
+        }
+#endif
     }else{
         if(iifirst) fd>>"__vr a,b;";
     }
@@ -355,6 +393,7 @@ std::string cf5_no_unroll(int const vl00, LoopSplit const& lsii, LoopSplit const
     Cunit pr("cf5_no_unroll","C",0/*verbose*/);
     auto& inc = pr.root["includes"];
     inc >>"#include \"veintrin.h\""
+        >>"#include \"velintrin.h\""
         >>"#include <stdint.h>";
     inc["stdio.h"]>>"#include <stdio.h>";
 
@@ -414,19 +453,24 @@ std::string cf5_no_unroll(int const vl00, LoopSplit const& lsii, LoopSplit const
 std::string cf5_no_unrollX(Lpi const vlen, LoopSplit const& lsii, LoopSplit const& lsjj,
         int const opt_t, int const which/*=WHICH_KERNEL*/, char const* ofname/*=nullptr*/)
 {
-    cout<<" cf5_no_unrollX(vlen="<<vlen<<","<<lsii<<","<<lsjj<<",...)"<<endl;
-
-    string program = cf5_no_unroll((opt_t==3?(int)vlen:-(int)vlen),
-            lsii,lsjj,which,1/*verbose*/);
-    // wrap 'program' up with some boilerplate...
     ostringstream oss;
-    oss<<"// Autogenerated by "<<__FILE__<<" cf5_no_unrollX(vlen="<<vlen
-        <<","<<lsii<<","<<lsjj<<",...)\n";
-    oss<<"// Possible compile:\n";
-    oss<<"//   clang -target linux-ve -O3 -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics tmp-vi.c"<<endl;
+    string author=OSSFMT(" cf5_no_unrollX(vlen="<<vlen<<","<<lsii<<","<<lsjj<<",...)");
+    cout<<author<<endl;
+
+    // wrap 'program' up with some boilerplate...
+    oss<<"// Autogenerated by "<<__FILE__<<"\n"
+        "// "<<author<<"\n"
+        "// Possible compile:\n"
+        "//   clang -target linux-ve -O3 -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics tmp-vi.c"<<endl;
+
+    int const vl00 = (opt_t==3? -(int)vlen: +(int)vlen);
+    if(opt_t==3) cout<<" (negating vlen to "<<vl00<<" to signal alt-vl)"<<endl;
+    string program = cf5_no_unroll(vl00,lsii,lsjj,which,1/*verbose*/);
     oss<<program;
+
     oss<<"// vim: ts=2 sw=2 et cindent\n";
     // cino=^=l0,\\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\\:,0#,!^F,o,O,e,0=break\n"
+
     program = oss.str();
 
 #if 0

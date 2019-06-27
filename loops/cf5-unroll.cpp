@@ -25,27 +25,42 @@ static struct UnrollSuggest vl_unroll(int const vl0, int const ii, int const jj,
 {
     int vlen = abs(vl0);
     if(vlen==0) vlen=256;       // XXX MVL not yet standardized in headers!
-    int opt_t = (vlen<=0? 3: 0);
+    cout<<"vl_unroll("<<vl0<<"-->"<<vlen<<",ii="<<ii<<",jj="<<jj<<endl;
 
-    cout<<"vl_unroll("<<vl0<<"-->"<<vlen<<",ii="<<ii<<",jj="<<jj
-        <<")opt_t="<<opt_t<<endl;
     // This is pinned at [max] vl, even if it may be "inefficient".
     auto u = unroll_suggest( vlen,ii,jj, maxun );
-    auto uAlt = unroll_suggest(u);  // suggest an alternate nice vector length, sometimes.
-    if(1)
-        cout<<"\nUnrolls:"<<str(u,"\nOrig: ")<<endl;
-    if(uAlt.suggested==UNR_UNSET)
-        cout<<"Alt:  "<<name(uAlt.suggested)<<endl;
-    else
-        cout<<str(uAlt,"\nAlt:  ")<<endl;
-    cout<<endl;
+    cout<<"vl0="<<vl0<<" unroll_suggest("<<vlen<<","<<ii<<","<<jj
+        <<","<<maxun<<") --> vl="<<u.vl<<", vll="<<u.vll<<endl;
+    // suggest an alternate nice vector length, sometimes.
+    auto uAlt = unroll_suggest(u);
+    cout<<"vl0="<<vl0<<" unroll_suggest(u) --> vl="<<u.vl<<", vll="<<u.vll<<endl;
 
-    if(opt_t==3){ // we FORCE the alternate strategy (if it exists)
+    if(1){
+        cout<<"\nUnrolls:"<<str(u,"\nOrig: ")<<endl;
+
+        if(uAlt.suggested==UNR_UNSET)
+            cout<<"Alt:  "<<name(uAlt.suggested)<<endl;
+        else
+            cout<<str(uAlt,"\nAlt:  ")<<endl;
+        cout<<endl;
+    }
+
+    // Compare {N,I,K} nloops, induction-ops, kernel-ops
+    // with {N',I',K'} uAlt suggestion.
+    //
+    // OpSaving = Ops' - Ops
+    //          = N'*I'-N'*K - N*I+N*K
+    //          = N'*I' - N*I  -  (N'-N)*K
+    // Typical uAlt saving is I~4 to I'~1
+    // and suppose kernel K is 10 ops...
+    //
+
+    if(vl0 < 0){ // we FORCE the alternate strategy (if it exists)
         if(u.vll) // equiv uAlt.suggested != UNR_UNSET
         {
             assert( uAlt.suggested != UNR_UNSET );
             cout<<" (forcing alt. strategy)"<<endl;
-            unroll_suggest(u);
+            //unroll_suggest(u); // oops, duplicate call
             u = uAlt;
         }else{
             cout<<" (no really great alt.strategy)"<<endl;
@@ -107,11 +122,11 @@ void cf5_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
     int const nloop = (iijj+vl-1U) / vl;        // div_round_up(iijj,vl)
     auto& root=outer.getRoot().root; // a codeblock where I can add "state" (vl_remember)
 
-    //auto& fd = inner["../first"]; // definitions
-    // set up a 'fake' fused-loop scope (which may or may not contain a {..} code block)
     auto& outer_fd = outer["..*/first"];
+    auto& outer_fdup = outer_fd.goto_defines();
     outer_fd["first"];
     auto& fd0 = inner["first"];
+    // set up a 'fake' fused-loop scope (which may or may not contain a {..} code block)
     auto& fd = inner[pfx]["first"]; // in case loop split differs from fd ???
     auto& fp = inner[pfx]["preloop"];
     auto& cf5 = inner[pfx]["body"];
@@ -153,7 +168,8 @@ void cf5_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
             INSCMT(fd["last"]["sqij"], (ilo
                         ?"sqij = _ve_vaddul_vsv(ilo*jj,sq);"
                         :"sqij = sq;"),
-                    (ilo?string("sqij[i]=i"):OSSFMT("sqij[i]=i+"<<ilo<<"*"<<jj)));
+                    (ilo? OSSFMT("sqij[i]=i+"<<ilo<<"*"<<jj)
+                     :    string("sqij[i]=i")));
             fd["have_sqij"].setType("TAG");
         }
     };
@@ -236,7 +252,7 @@ void cf5_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
     if(unroll > nloop) unroll = nloop;
 
     string alg_descr=OSSFMT("// "<<pfx<<" unroll "<<unroll
-            <<" vl "<<vl<<"["<<fd0["cf5_save_vl"].getType()<<"]"
+            <<" vl "<<vl<<"("<<fd0["cf5_save_vl"].getType()<<")"
             <<" "<<kernComment()<<" nloop "<<nloop
             <<(jj==1? " jj==1": vl0%jj==0? " vl%jj==0"
                 : jj%vl==0? " jj%vl==0": positivePow2(jj)? " jj=2^N" : ""));
@@ -247,7 +263,8 @@ void cf5_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
     if(cyc) alg_descr.append(OSSFMT(" cyc "<<cyc));
     alg_descr.append(OSSFMT(" nFull:nPart="<<nFull<<":"<<nPart));
     DBG(alg_descr);
-    fp>>alg_descr;
+    outer_fdup>>alg_descr;
+    fd>>alg_descr;
 
     //int cycpre_update_ops = 3+(krn_needs.sqij? 1: 0); (or 1 more if jj is a tough divisor)
     //int pow2_update_ops = 3;
@@ -359,16 +376,30 @@ void cf5_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
                     fcp>>OSSFMT("DIVMOD_"<<jj<<"(cycsqij, "<<ac<<", __vr const "<<bc<<");");
                 }
             }
+            //uint64_t cyc_aincr = cyc*vl0/jj;
+            if(nloop%cyc){ // slower [optimisation for "most zeroes"?]
+                auto& fcq = fc["adjust"]; // for nloop%cyc "final-unroll" value (less 1 cyc_aincr)
+                // placed in a terminal code-block, to allow future calls
+                // to reuse the DIVMOD results prior to these adjustments
+                for(uint32_t c=0U; c<nloop%cyc; ++c){
+                    string ac = OSSFMT(pfx<<"_acyc_"<<c);
+                    auto instr = OSSFMT(ac<<" =_ve_vaddul_vsv("<<cyc_aincr<<", "<<ac<<");");
+                    fcq>>OSSFMT(left<<setw(40)<<instr);
+                    if(c==0U) fcq<<OSSFMT(" // nloop="<<nloop/cyc<<"*(cyc="<<cyc<<")"
+                            "+"<<nloop%cyc<<", cyc_aincr="<<cyc_aincr);
+                }
+            }
         }else{ // reuse previous divmods, only out-by-additive-constant
-            // TODO: if exactly identical, squash them.
-            // This is always possible for all repeated *_bcyc_N registers
             int64_t cyc00overjj = (ilo + (nloop/cyc-1U)*cyc_aincr);
-            uint64_t correction = cyc00overjj - oldcyc00/jj;
+            uint64_t corr0 = cyc00overjj - oldcyc00/jj;
             for(uint32_t c=0U; c<cyc; ++c){
                 string ac = OSSFMT(pfx<<"_acyc_"<<c);
                 string oac = OSSFMT(oldpfx<<"_acyc_"<<c);
-                if(correction==0) fcp>>OSSFMT(ac<<" = "<<oac<<";");
-                else fcp>>OSSFMT(ac<<" = _ve_vaddul_vsv("<<correction<<","<<oac<<");");
+                // roll in the (c < nloop%cyc) correction (both are additive)
+                uint64_t corr = corr0 + (c<nloop%cyc? cyc_aincr: 0);
+                if(corr==0) fcp>>OSSFMT(ac<<" = "<<oac<<";");
+                else fcp>>OSSFMT(ac<<" = _ve_vaddul_vsv("<<corr<<","<<oac<<");");
+                if(c<nloop%cyc) fcp<<OSSFMT(" // +"<<cyc_aincr);
                 string bc = OSSFMT(pfx<<"_bcyc_"<<c);
                 string obc = OSSFMT(oldpfx<<"_bcyc_"<<c);
 #if 0
@@ -376,16 +407,6 @@ void cf5_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
 #else
                 cf5_defs.define(bc,obc); // simplest register re-use by #define
 #endif
-            }
-        }
-        if(nloop%cyc){ // slower [optimisation for "most zeroes"?]
-            auto& fcq = fc["adjust"]; // for nloop%cyc "final-unroll" value (less 1 cyc_aincr)
-            for(uint32_t c=0U; c<nloop%cyc; ++c){
-                string ac = OSSFMT(pfx<<"_acyc_"<<c);
-                auto instr = OSSFMT(ac<<" =_ve_vaddul_vsv("<<cyc_aincr<<", "<<ac<<");");
-                fcq>>OSSFMT(left<<setw(40)<<instr);
-                if(c==0U) fcq<<OSSFMT(" // nloop="<<nloop/cyc<<"*(cyc="<<cyc<<")"
-                        "+"<<nloop%cyc<<", cyc_aincr="<<cyc_aincr);
             }
         }
         // reset from "final-unroll" values to initial ones
@@ -746,18 +767,21 @@ std::string cf5_unrollX(Lpi const vlen, LoopSplit const& lsii, LoopSplit const& 
     string author=OSSFMT(" cf5_unrollX(vlen="<<vlen<<","<<lsii<<","<<lsjj<<",...)");
     cout<<author<<endl;
 
-    string program = cf5_unroll((opt_t==3?(int)vlen:-(int)vlen),
-            lsii,lsjj,maxun,which,1/*verbose*/);
     // wrap 'program' up with some boilerplate...
-    oss<<"// Autogenerated by "<<__FILE__
-        <<"\n// "<<author
-        <<"// Possible compile:\n"
-        <<"//   clang -target linux-ve -O3 -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics tmp-vi.c"<<endl;
+    oss<<"// Autogenerated by "<<__FILE__<<"\n"
+        "// "<<author<<"\n"
+        "// Possible compile:\n"
+        "//   clang -target linux-ve -O3 -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics tmp-vi.c"<<endl;
+
+    int const vl00 = (opt_t==3? -(int)vlen: +(int)vlen);
+    if(opt_t==3) cout<<" (negating vlen to "<<vl00<<" to signal alt-vl)"<<endl;
+    string program = cf5_unroll(vl00,lsii,lsjj,maxun,which,1/*verbose*/);
     oss<<program;
+
     oss<<"// vim: ts=2 sw=2 et cindent\n";
     // cino=^=l0,\\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\\:,0#,!^F,o,O,e,0=break\n"
-    program = oss.str();
 
+    program = oss.str();
     cout<<program<<endl;
     
     if(ofname!=nullptr){

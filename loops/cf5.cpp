@@ -136,169 +136,6 @@ void other_fastdiv_methods(int const jj){
 
 /* emit kernel (comment/code).
  *
- * \p bKrn   code block for kernel
- * \p bDef   code block for defines (within an enclosing-scope)
- *           We may output to bDef.getRoot()["<STAR><STAR>/includes"]
- *           function calls may go to bDef["..<STAR>/fns/first"]
- * \p bOut   code block for kernel output (post-fused-loop)
- *
- * Notes:
- *
- * any re-usable data of the kernel should \e somehow
- * hoist such registers to our enclosing scope (... and maybe further)
- * Ex 1:  if b[] is const, A*b[]+C vector can be hoisted outside loops.
- *        (actually will later supply a loop-fuse that ALSO optimizes
- *         a generic lin.comb(a[]*A+b[]*B+C) for the inner loop)
- * Ex 2:  if a mask register is a function of a const b[] vector,
- *        and we have found b[] to be const (except for vl changes),
- *        the mask register can be hoisted to enclosing scope (outside loops)
- *        (perhaps a significant saving)
- * Ex 2:  sq register can be hoisted (AND combined with our sq?)
- *        instead of being recalculated
- */
-void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
-        int64_t const ii, int64_t const jj, int64_t const vl,
-        std::string extraComment,
-        int const which/*=0*/ /*comment,VecHash2*/,
-        std::string pfx/*="fuse2_"*/,
-        int const v/*=0*/ /*verbose*/,
-        string vA/*="a"*/, string vB/*="b"*/,
-        string vSEQ0/*="sq"*/, string sVL/*="vl"*/
-        ){
-    static ostringstream oss;
-
-    if( which==KERNEL_NONE ){ // just an optional extraComment
-        bKrn["beg"]>>OSSFMT("// KERNEL("<<vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"])");
-        if(!extraComment.empty()) bKrn["beg"]<<extraComment;
-    }else if( which==KERNEL_HASH ){
-        std::string vh2 = pfx + "VecHash2";
-        // constants moved upwards to beginning of scope enclosing bDef
-        auto& bDefConst = bDef["..*/first"];
-        // state variables at end of bDef
-        auto& bDefState = bDef["last"]["vechash"];
-        if(bDefState.code_str().empty()){
-            string vSeq = (vSEQ0.empty()? "_ve_vseq_v()": vSEQ0);
-            VecHash2::kern_C_begin(bDefConst, vSeq.c_str(), vl);
-            auto instr = OSSFMT("int64_t "<<vh2<<" = 0;");
-            bDefState>>OSSFMT(left<<setw(40)<<instr)
-                <<" // vh2({a,b}) hash output";
-            auto& bInc = bDef.getRoot()["**/includes"];
-            if(!bInc.find("stdio.h")) bInc["stdio.h"]>>"#include <stdio.h>";
-            if(!bOut.find("out_once")){
-                bOut>>"printf(\"jit "<<vh2<<" = %llu\\n\",(long long unsigned)"<<vh2<<");";
-                bOut["out_once"].setType("TAG");
-            }
-        }
-#if 0 // original: inline, many statements
-        bKrn["beg"]>>OSSFMT("// KERNEL("<<vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"])");
-        if(!extraComment.empty()) bKrn["beg"]<<" "<<extraComment;
-        VecHash2::kern_C(bKrn[OSSFMT(pfx<<"_VecHash2")],vA,vB,sVL,vh2);
-#else // NEW: as macro
-        if(!bDefConst.find("have_vechash2_kernel")){
-            auto m = VecHash2::kern_C_macro("VECHASH2_KERNEL");
-            bDefConst.define(m.first,m.second);
-            bDefConst["have_vechash2_kernel"].setType("TAG");
-        }
-        auto instr = OSSFMT("VECHASH2_KERNEL("<<vA<<","<<vB<<","<<sVL<<","<<vh2<<");");
-        auto node = OSSFMT(pfx<<"_VecHash2");
-        bKrn[node]>>OSSFMT(left<<setw(40)<<instr
-                    <<" // "<<vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"] "<<extraComment);
-#endif
-    }else if( which==KERNEL_PRINT ){
-        // XXX Does clang have any option to pass __vr efficiently ?
-        bool const nice_vector_register_args = true;
-        if( !nice_vector_register_args ){ // inlined...
-            auto& bInc = bDef.getRoot()["**/includes"];
-            if(!bInc.find("stdio.h")) bInc["stdio.h"]>>"#include <stdio.h>";
-            bKrn["beg"]>>OSSFMT("// KERNEL("<<vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"])");
-            if(!extraComment.empty()) bKrn["beg"]<<" "<<extraComment;
-            bKrn["prt"]>>"printf(\"a={\");"
-                >>"for(int i=0;i<"<<sVL<<";++i){ printf(\"%llu%s\","
-                >>"    (long long unsigned)_ve_lvs_svs_u64("<<vA<<",i),"
-                >>"    (i%8==0? \"\\n   \":\" \")); }"
-                >>"printf(\"}\\n\");"
-                >>"printf(\"b={\");"
-                >>"for(int i=0;i<"<<sVL<<";++i){ printf(\"%llu%s\","
-                >>"    (long long unsigned)_ve_lvs_svs_u64("<<vB<<",i),"
-                >>"    (i%8==0? \"i\\n   \":\" \")); }"
-                >>"printf(\"}\\n\");"
-                ;
-        }else{ // as function call (KERNEL_PRINT does not need speed)
-            auto& bInc = bDef.getRoot()["**/includes"];
-            if(!bInc.find("stdio.h")) bInc["stdio.h"]>>"#include <stdio.h>";
-            auto& bDefKernelFn = bDef["..*/fns/first"];
-            if(bDefKernelFn.find("cfuse2_kernel_print")==nullptr){
-                CBLOCK_SCOPE(cfuse2_kernel_print,
-                        "void cfuse2_kernel_print(__vr const a, __vr const b,"
-                        "\n        uint64_t const vl)",bDefKernelFn.getRoot(),bDefKernelFn);
-                cfuse2_kernel_print
-                    >>"int const terse=1;"
-                    >>"char const* linesep=\"\\n      \";"
-                    >>"printf(\"a[%3llu]={\",(long long unsigned)vl);"
-                    >>"for(int i=0;i<vl;++i){"
-                    >>"    if(terse && vl>=16) linesep=(vl>16 && i==7? \" ...\": \"\");"
-                    >>"    if(terse && vl>16 && i>=8 && i<vl-8) continue;"
-                    >>"    printf(\"%3llu%s\",\n"
-                    >>"      (long long unsigned)_ve_lvs_svs_u64(a,i),"
-                    >>"      (i%16==15? linesep: \" \")); }"
-                    >>"printf(\"}\\n\");"
-                    >>"linesep=\"\\n   \";"
-                    >>"printf(\"b[%3llu]={\",(long long unsigned)vl);"
-                    >>"for(int i=0;i<vl;++i){"
-                    >>"    if(terse && vl>=16) linesep=(vl>16 && i==7? \" ...\": \"\");"
-                    >>"    if(terse && vl>16 && i>=8 && i<vl-8) continue;"
-                    >>"    printf(\"%3llu%s\",\n"
-                    >>"      (long long unsigned)_ve_lvs_svs_u64(b,i),"
-                    >>"      (i%16==15? linesep: \" \")); }"
-                    >>"printf(\"}\\n\");"
-                    ;
-            }
-            bKrn["prt"]<<"cfuse2_kernel_print("<<vA<<", "<<vB<<", "<<sVL<<");";
-            if(!extraComment.empty()) bKrn["prt"]<<" // "<<extraComment;
-        }
-        if(!bOut.find("out_once")){
-            bOut>>"printf(\"cfuse KERNEL_PRINT done!\\n\");";
-            bOut["out_once"].setType("TAG");
-        }
-    }else if( which==KERNEL_CHECK ){
-        // as function call (KERNEL_PRINT does not need speed)
-        auto& bInc = bDef.getRoot()["**/includes"];
-        if(!bInc.find("stdio.h")) bInc["stdio.h"]>>"#include <stdio.h>";
-        if(!bInc.find("assert.h")) bInc["assert.h"]>>"#include <assert.h>";
-        auto& bDefKernelFn = bDef["..*/fns/first"];
-        if(bDefKernelFn.find("cfuse2_kernel_check")==nullptr){
-            CBLOCK_SCOPE(cfuse2_kernel_check,
-                    "void "
-                    "\n__attribute__((noinline))"
-                    "\ncfuse2_kernel_check(__vr const a, __vr const b,"
-                    "\n        uint64_t const cnt, uint64_t const vl, uint64_t const jj)"
-                    ,
-                    bDefKernelFn.getRoot(),bDefKernelFn);
-            cfuse2_kernel_check
-                >>"for(uint64_t i=0;i<vl;++i){"
-                >>"    assert( _ve_lvs_svs_u64(a,i) == (cnt+i)/jj );"
-                >>"    assert( _ve_lvs_svs_u64(b,i) == (cnt+i)%jj );"
-                >>"}"
-                ;
-        }
-        bKrn["prt"]<<"cfuse2_kernel_check("<<vA<<", "<<vB<<", cnt, "<<sVL<<", jj);";
-        if(!extraComment.empty()) bKrn["prt"]<<" // "<<extraComment;
-        if(!bOut.find("out_once")){
-            bOut>>"assert((uint64_t)cnt==(iijj+vl0-1)/vl0*vl0);"
-                >>"printf(\"cfuse KERNEL_CHECK done! no errors\\n\");"
-                >>"fflush(stdout);";
-            bOut["out_once"].setType("TAG");
-        }
-    }else if( which==KERNEL_SQIJ ){
-            bKrn["beg"]>>OSSFMT("// KERNEL("<<vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"],sqij="<<vA<<"*jj+"<<vB<<")");
-            bKrn["prt"]>>"__vr const x = STORE(0, _ve_addul_vsv(ptr,_ve_vmulul_vsv(stride,sqij)));";
-            if(!extraComment.empty()) bKrn["prt"]<<" // "<<extraComment;
-    }else{
-        THROW(OSSFMT("unknown kernel type "<<which<<" in fuse2_kernel"));
-    }
-}
-/* emit kernel (comment/code).
- *
  * Consider loops for(i=ilo..ihi)for(j=jlo..jhi)
  *
  * - if ilo==0, this behaves 'as usual'
@@ -465,11 +302,11 @@ void cf5_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
                     >>"    int const aok = (a_i == ilo+(cnt+i)/jj);"
                     >>"    int const bok = (b_i == jlo+(cnt+i)%jj);";
                 cf5_kernel_check
-                    >>(v>=2?"    if(1){":"if( !aok || !bok ) {")
-                    >>"          printf(\"expect a[%lu]=%lu b[%lu]=%lu but got %ld %ld\\n\","
-                    >>"              i, ilo+(cnt+i)/jj, i, jlo+(cnt+i)%jj, a_i,b_i);"
-                    >>"          fflush(stdout);"
-                    >>"      }";
+                    >>(v>=2?"    if(1){": "    if( !aok || !bok ) {")
+                    >>"        printf(\"expect a[%lu]=%lu b[%lu]=%lu but got %ld %ld\\n\","
+                    >>"               i, ilo+(cnt+i)/jj, i, jlo+(cnt+i)%jj, a_i,b_i);"
+                    >>"        fflush(stdout);"
+                    >>"    }";
                 cf5_kernel_check
                     >>"    assert( aok );"
                     >>"    assert( bok );"
@@ -501,7 +338,7 @@ void cf5_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
         bKrn["prt"]>>"__vr const x = STORE(0, _ve_addul_vsv(ptr,_ve_vmulul_vsv(stride,sqij)));";
         if(!extraComment.empty()) bKrn["prt"]<<" // "<<extraComment;
     }else{
-        THROW(OSSFMT("unknown kernel type "<<which<<" in fuse2_kernel"));
+        THROW(OSSFMT("unknown kernel type "<<which<<" in "<<__FUNCTION__));
     }
 }
 /** How many full/partial \c vl-sized loops are implied by vl,ii,jj?
