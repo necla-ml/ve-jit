@@ -118,6 +118,30 @@ mega1-cf4: Makefile cf4
 	rm -f tmpcf4u8/CHECK-$${vl}_$${ii}_$${jj}-vi{,.i,.s}; \
 	done; done; done; \
 	) >& $@.log;
+mega1-cf5: Makefile cf5
+	# for VE, concentrate on example codes at VL=256 or 255.
+	rm -f $@.log; \
+	( \
+	for vlen in 256 255 254 16 8 9 15 13 12 11 10 7 6 5 4 3 24 48 127 128 253 2 1; do \
+	for jj in 3 4 5 6 7 8 9 10 11 12 13 14 16 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 36 40 41 42 43 48 60 63 64 72 84 85 86 128 160 192 224 255 256 257 384 511 512 513 640 768 896 992 1023 1024 1025 1152 1280 2 1; do \
+	for ii in `seq 1 16`; do \
+	echo "vl,ii,jj= $$vlen $$ii $$jj"; \
+	./cf.sh cf5 $$vlen $$ii $$jj CHECK 8; \
+	rm -f tmpcf4u8/CHECK-$${vl}_$${ii}_$${jj}-vi{,.i,.s}; \
+	done; done; done; \
+	) >& $@.log;
+mega1-cf5u: Makefile cf5
+	# for VE, concentrate on example codes at VL=256 or 255.
+	rm -f $@.log; \
+	( \
+	for vlen in 256 255 254 16 8 9 15 13 12 11 10 7 6 5 4 3 24 48 127 128 253 2 1; do \
+	for jj in 3 4 5 6 7 8 9 10 11 12 13 14 16 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 36 40 41 42 43 48 60 63 64 72 84 85 86 128 160 192 224 255 256 257 384 511 512 513 640 768 896 992 1023 1024 1025 1152 1280 2 1; do \
+	for ii in `seq 1 16`; do \
+	echo "vl,ii,jj= $$vlen $$ii $$jj"; \
+	./cf.sh cf5 -a $$vlen $$ii $$jj CHECK 8; \
+	rm -f tmpcf4u8/CHECK-$${vl}_$${ii}_$${jj}-vi{,.i,.s}; \
+	done; done; done; \
+	) >& $@.log;
 mega2: Makefile fuse2
 	rm -f $@.log; \
 	( \
@@ -171,7 +195,7 @@ cf4u-sample.log: Makefile cf4
 		) 2>&1 | tee $@
 .PRECIOUS: cf5u-sample.log cf5u-sample2.log cf5-sample.log cf5-sample2.log
 .PHONY: cf5-logs	
-cf5-logs:
+cf5-logs: cf5
 	echo "cf5.log"   && ./cf5-sample2.sh "./cf5.sh   " CHECK 0 >& cf5.log
 	echo "cf5a.log"  && ./cf5-sample2.sh "./cf5.sh -a" CHECK 0 >& cf5a.log
 	echo "cf5u.log"  && ./cf5-sample2.sh "./cf5.sh   " CHECK 8 >& cf5u.log
@@ -195,6 +219,11 @@ cf5u-sample.log: Makefile cf5
 cf5u-sample2.log: Makefile cf5
 	( echo "$@" \
 		&& CLANG_FLAGS="-Wall -Werror" ./cf5-sample2.sh ./cf5.sh CHECK 8 \
+		&& echo "EVERYTHING LOOKS GOOD" \
+		) 2>&1 | tee $@
+cf5u-sample3.log: Makefile cf5
+	( echo "$@" \
+		&& CLANG_FLAGS="-Wall -Werror" ./cf5-sample3.sh "./cf.sh cf5   " CHECK 8 \
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
 cf5ua-sample3.log: Makefile cf5

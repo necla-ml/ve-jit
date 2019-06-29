@@ -179,8 +179,9 @@ std::string str(UnrollSuggest const& u, std::string const& pfx /*=""*/){
 
     //uint64_t vlen_equ = ve_vlen_suggest(iijj);
     //oss<<" // ve_vlen_suggest(iijj)="<<vlen_equ<<" (no jj effect, just equitable loop load)"<<endl;
-    oss<<"vl,ii,jj="<<u.vl<<","<<u.ii<<","<<u.jj<<" "<<u.suggested;
-    if(u.vl>0 && u.ii>0 && u.jj>0 && u.suggested!=UNR_UNSET && u.b_period_max>0){
+    oss<<"vl,ii,jj,maxun="<<u.vl<<","<<u.ii<<","<<u.jj<<","
+        <<u.b_period_max<<" "<<u.suggested;
+    if(u.vl>0 && u.ii>0 && u.jj>0 && u.suggested!=UNR_UNSET){
         if(u.unroll>0) oss<<" unroll="<<u.unroll;
         if(u.cycle>0) oss<<" cycle="<<u.cycle;
         int const nloop = (iijj+vl-1) / vl;    // div_round_up(iijj,vl)
@@ -188,19 +189,20 @@ std::string str(UnrollSuggest const& u, std::string const& pfx /*=""*/){
         int const b_period = lcm_vljj / vl;
         int const bcyc_regs = (nloop<b_period? nloop: b_period);
         if(1){ // debug
-            cout<<" vl,ii,jj="<<u.vl<<"["<<u.vll<<"],"<<u.ii<<","<<u.jj;
+            cout<<" vl,ii,jj,maxun="<<u.vl<<"["<<u.vll<<"],"<<u.ii<<","<<u.jj
+                <<","<<u.b_period_max;
             cout<<" iijj="<<iijj;
             cout<<" nloop="<<u.nloop;
             cout<<" b_period="<<b_period;
             cout<<" bcyc_regs="<<bcyc_regs
-                <<" u.unroll="<<u.unroll
-                <<" u.cycle="<<u.cycle
+                <<" unroll="<<u.unroll
+                <<" cycle="<<u.cycle
                 <<endl;
             cout.flush();
         }
         oss<<" nloop="<<u.nloop;
         if(nloop>1) oss<<" b_period="<<b_period;
-        int const unroll_any = min(nloop,u.b_period_max);
+        int const unroll_any = min(nloop,abs(u.b_period_max));
         int unroll_cyc = bcyc_regs; // or some small multiple
         if(bcyc_regs>0) unroll_cyc = unroll_any/bcyc_regs*bcyc_regs;
         // if specific unroll factors are needed, print them.
@@ -241,12 +243,23 @@ std::string str(UnrollSuggest const& u, std::string const& pfx /*=""*/){
 std::ostream& operator<<(std::ostream& os, UnrollSuggest const& u){
     return os<<str(u);
 }
-UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int const b_period_max,
+/** \c b_period_max and unroll limits are similar.
+ * -ve implies NEVER unroll (maxun=0 or 1).
+ * The limit can gaurd against precalculating to many registers.
+ *
+ * - ret.b_period_max is +/-, and related to ret.cycle and ret.unroll.
+ * - ret.unroll is always calculated, but b_period_max -ve means you should ignore it.
+ * - ret.cycle influences how much can be precalculated.
+ */
+UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int b_period_max,
         int const v/*verbose=0*/ ){
     int64_t const iijj = ii * jj;
     int const nloop = (iijj+vl-1) / vl;    // div_round_up(iijj,vl)
     enum Unroll strategy = UNR_DIVMOD;
     UnrollSuggest ret(vl,ii,jj,b_period_max);
+
+    int const maxun = (b_period_max>0? b_period_max: 0);
+    if(b_period_max<0) b_period_max = -b_period_max;
 
     if(v)cout<<"\nUNROLL_SUGGEST\n";
     bool const jj_pow2 = positivePow2(jj);
@@ -268,15 +281,12 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int cons
         && !(nloop>1 && vl%jj!=0 && jj%vl!=0) // ???
         && !(b_period>1 && !(nloop>1 && jj%vl==0) && jj_pow2 && bcyc_regs<b_period_max)
         ;
-    // print unrolling suggestion
-#if 0
-    if( nloop <= bcyc_regs )
-        cout<<" suggest full unroll(nloop="<<nloop<<") : jj="<<jj
-            <<", period="<<b_period<<", cyc_regs="<<bcyc_regs<<endl;
-    else
-        cout<<" suggest looped unroll(bcyc_regs="<<bcyc_regs<<") : jj="<<jj
-            <<", period="<<b_period<<", nloop="<<nloop<<endl;
-#else
+    // Adjust default values:
+    //ret.vll [0]
+    //ret.nloop
+    //ret.unroll [0]
+    //ret.cycle [0]
+    //
     // We cannot nicely do a generic loop cycling over S registers, because Aurora
     // has no load instructions like Sx = S[Sw], where Sw is a cyclic register index.
     //
@@ -307,9 +317,6 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int cons
         if(v)cout<<" A.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
             <<strategy<<"\n\t"
             <<", b_period="<<b_period<<b_period_pow2<<" no loop [precalc, no unroll]"<<endl;
-        //ret.vll = 0; // unchanged
-        //ret.nloop = // unchanged
-        //ret.unroll = 0; // unchanged (0 = "any" unroll is ok, so maybe b_period_max is a good choice)
     }else if( vl%jj == 0 ){
         ret.suggested = strategy = UNR_VLMODJJ;
         if(v)cout<<" B.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
@@ -418,7 +425,6 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int cons
         assert( !have_b_period );
         ret.unroll = min(b_period_max,nloop);
     }
-#endif
 #if 0
     // example code for precalc-unroll
     // bcyc and acyc may be precalculated registers (or possibly loaded from .rodata)
@@ -463,6 +469,9 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int cons
     }
 #endif
     //cout<<" dbg: "<<strategy<<"  sugg "<<ret.suggested<<" unroll "<<ret.unroll<<endl;
+    if(maxun>0 && ret.unroll==0){
+        cout<<"TODO: set u.unroll to something nice [maxun="<<maxun<<"]"<<endl;
+    }
     assert(ret.suggested != UNR_UNSET);
     return ret;
 }
@@ -497,7 +506,9 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
             // above could be different -- Ex. vl_min implying same # nloops
         }
     }
-    
+
+    // u.b_period_max -ve prevents all loop unrolling, so ignore u.unroll
+    int const unroll = (u.b_period_max>0? u.unroll: 0);
     //
     //  OpSave estimator
     //
@@ -522,19 +533,30 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
             :2);
         return ret;
     };
-    int const opsOrig = nloop0 * Iops(u.suggested) + nloop0*Kops;
-    auto OpSave = [&Kops,&Iops,&opsOrig,&iijj](enum Unroll const sugg, int const vll){
-        int const iops = Iops(sugg);
-        int const nl = (iijj+vll-1)/vll;
-        int const ops = nl*iops + nl*Kops;
-        int const ret = opsOrig - ops; // +ve is GOOD, vll saves operations
+
+    auto OpEst = [&Kops,&Iops,&iijj,&unroll](enum Unroll const sugg, int const vl){
+        int const iops = Iops(sugg);            // induction ops
+        int const nl = (iijj+vl-1)/vl;          // num loops
+        double ops = nl*iops + nl*Kops;         // induction + kernel ops
+        bool const vl_changes = iijj%vl;        // 1 unroll might have extra
+        if(vl_changes) ops += nl*(unroll<=1? 3.0: 3.0/unroll); // ~ 3 scalar ops
+        // XXX when unroll>1, OpEst should also favor nPart==0 (a tiny bit)
+        ops = (int)(ops*100.0)*0.01;
+        return ops;
+    };
+
+    //double const opsOrig = nloop0 * Iops(u.suggested) + nloop0*Kops;
+    double const opsOrig = OpEst(u.suggested,vl);
+    auto OpSave = [&OpEst,&opsOrig](enum Unroll const sugg, int const vll){
+        double ops = OpEst(sugg, vll);
+        double const ret = opsOrig - ops; // +ve is GOOD, vll saves operations
         return ret;
     };
 
     cout<<" checking [ "<<vl_max<<" to "<<vl_min<<" ] ... "
         <<" nloops orig "<<(iijj+vl-1)/vl<<", @vl_max:"<<(iijj+vl_max-1)/vl_max
         <<", @vl_min:"<<(iijj+vl_min-1)/vl_min
-        <<" OpSave assume kernel ops="<<Kops<<endl;
+        <<" OpSave kernel ops="<<Kops<<" unroll="<<unroll<<endl;
 
     //
     auto const sugg = u.suggested; // induction strategy
@@ -595,16 +617,21 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
             int opsave = OpSave(us.suggested, vll);
             cout<<" ("<<int(vll*1000./vl)*0.1<<"%) ---> alg "<<name(us.suggested)
                 <<" nloops "<<(iijj+vll-1)/vll<<" [save "<<opsave<<"] ";
-            if( u.suggested != UNR_UNSET && us.suggested == UNR_DIVMOD ){
+            if( us.suggested==UNR_DIVMOD && u.suggested!=UNR_UNSET && u.suggested!=UNR_DIVMOD ){
                 // this is the worst, so it cannot be an improvement (and might even have nloop higher)
-                cout<<" skipped: UNR_DIVMOD is never a good alt strategy"<<endl;
-                continue;
-            }else if( u.suggested == UNR_JJMODVL_NORESET
+                //cout<<" skipped: UNR_DIVMOD "<<endl;
+                //continue;
+                // BUT [new] it might lower vlen without nloop increase?
+                cout<<" bad-orig";
+            }
+            if( u.suggested == UNR_JJMODVL_NORESET
                     || u.suggested == UNR_NLOOP1
                     || u.suggested == UNR_VLMODJJ){
-                    cout<<"  ---> trivial orig "<<name(u.suggested)<<", no better alt"<<endl;
-                    continue;
-            }else{
+                    //cout<<"  ---> trivial orig "<<name(u.suggested)<<", no better alt"<<endl;
+                    //continue;
+                    cout<<" trivial-orig";
+            }
+            if(1){
                 // Is this alt any different?
                 //if(us.suggested == u.suggested && us.unroll>=u.unroll){ // it can't be much better
                 //    // Sometimes this can pick up iijj%vl==0 case! so NOT a good guess
@@ -613,7 +640,7 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
                 //    continue;
                 //}
                 if(us.suggested == u.suggested && opsave>=0 && iijj%vll==0){
-                    cout<<" ACCEPTED! (alg && ops~same, but iijj%vll==0)"<<endl;
+                    cout<<" ACCEPTED! iijj%vll==0"<<endl;
                     if(opsave >= best_opsave){ best_opsave = opsave; best_vll = vll; best_u=us; }
                     continue;
                 }
@@ -637,12 +664,12 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
                         || (us.suggested==UNR_VLMODJJ /*&& u.nloop == us.nloop*/) // trivial induction!
                         || (us.suggested==UNR_JJMODVL_NORESET /*&& u.nloop == us.nloop*/) // trivial!
                         ){
-                    cout<<" might be OK based on alg "<<name(us.suggested)<<" ...";
+                    cout<<" alg "<<name(us.suggested)<<" nicer";
                     //ret = us;    // return the nice alt
                     //u.vll = vll; // also record existence-of-alt into u
                     //break;
                     if(opsave<=0) {
-                        cout<<" but might not save ops"<<endl;
+                        cout<<" but higher ops."<<endl;
                         continue;
                     }
                 }
@@ -662,7 +689,7 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
         if(best_vll > 0){
             u.vll = best_vll;
             ret = best_u;
-            cout<<"Best [/lowest equiv] vll = "<<u.vll<<" [saved "<<best_opsave<<"]";
+            cout<<"Best [/lowest equiv] vl "<<u.vl<<" --> "<<u.vll<<" [saved "<<best_opsave<<"]";
             //UnrollSuggest us = unroll_suggest(u.vll, u.ii, u.jj, u.b_period_max, 0/*verbose*/);
         }
     }

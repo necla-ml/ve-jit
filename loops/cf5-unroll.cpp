@@ -19,6 +19,12 @@ using namespace cprog;
     (BLK)>>OSSFMT(left<<setw(40)<<ins<<" // "<<cmt); \
 } while(0)
 
+static bool tag_once(Cblock &cb, std::string const& sub){
+    Cblock *found = cb.find(sub);
+    if(!found) cb[sub].setType("TAG");
+    return found==nullptr;
+}
+
 /** vl0<0 means use |vl0| or a [better] lower alternate VL. */
 static struct UnrollSuggest vl_unroll(int const vl0, int const ii, int const jj,
         int const maxun)
@@ -68,33 +74,6 @@ static struct UnrollSuggest vl_unroll(int const vl0, int const ii, int const jj,
     }
     return u;
 }
-#if 0
-    // This is pinned at [max] vl, even if it may be "inefficient".
-    auto u = unroll_suggest( vlen,ii,jj, maxun );
-    int vl = u.vl;
-    auto uAlt = unroll_suggest(u);  // suggest an alternate nice vector length, sometimes.
-
-    cout<<"\nUnrolls:"<<str(u,"\nOrig: ")<<endl;
-    if(uAlt.suggested==UNR_UNSET) cout<<"Alt:  "<<name(uAlt.suggested)<<endl;
-    else cout<<str(uAlt,"\nAlt:  ")<<endl;
-    cout<<endl;
-
-    if(opt_t==3){ // we FORCE the alternate strategy (if it exists)
-        if(u.vll) // equiv uAlt.suggested != UNR_UNSET
-        {
-            assert( uAlt.suggested != UNR_UNSET );
-            cout<<" (forcing alt. strategy)"<<endl;
-            //vl = u.vll; unroll_suggest(u);
-            u = uAlt;
-            vl = u.vl;
-        }else{
-            cout<<" (no really great alt.strategy)"<<endl;
-        }
-    }
-
-    cout<<" cfuse2_unrollX ... u.unroll="<<u.unroll<<endl;
-    //if(u.unroll==0) u.unroll=maxun;
-#endif
 /** worker routine -- loop 'ii' split.
  * vlen<0 means use |vlen| or a better lower alt VL if one is found.
  */
@@ -155,30 +134,27 @@ void cf5_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
     // some kernels might ask for const sq reg to always be defined
     auto use_sq = [&outer,&outer_fd,&vl_remember,&oss](){
         // if nec, define const sequence register "sq"
-        if(!outer.find("have_sq")){
+        if(tag_once(outer,"have_sq")){
             INSCMT(outer_fd["sq"],"__vr const sq = _vel_vseq_vl(256);"," // sq[i]=i");
-            outer["have_sq"].setType("TAG");
             vl_remember(256);
         }
     };
     auto use_sqij = [&fd0,&fd,&use_sq,&oss,&ilo,&jj](){
         use_sq();
-        if(!fd.find("have_sqij")){
-            if(!fd0.find("sqij")) fd0["sqij"]>>"__vr sqij;";
-            INSCMT(fd["last"]["sqij"], (ilo
-                        ?"sqij = _ve_vaddul_vsv(ilo*jj,sq);"
-                        :"sqij = sq;"),
-                    (ilo? OSSFMT("sqij[i]=i+"<<ilo<<"*"<<jj)
-                     :    string("sqij[i]=i")));
-            fd["have_sqij"].setType("TAG");
+        if(tag_once(fd,"have_sqij")){
+            //auto& cb=fd["last"]["sqij"];
+            auto& cb=fd["sqij"];
+            char const* t =(tag_once(fd0,"sqij")? "__vr ": "");
+            if(ilo==0) INSCMT(cb,OSSFMT(t<<"sqij = sq;"),"sqij[i]=i");
+            else       INSCMT(cb,OSSFMT(t<<"sqij = _vel_vaddul_vsvl(ilo*jj,sq,vl0);"),
+                                 OSSFMT("sqij[i]=i+"<<ilo<<"*"<<jj));
         }
     };
     auto use_iijj = [&fd0,&fp,&iijj,&ii,&jj,&oss](){
         if(!fp.find("iijj")){
-            if(!fd0.find("iijj")) fd0["iijj"]>>"uint64_t iijj;";
-            //fp["iijj"]>>OSSFMT(left<<setw(40)<<"iijj=(uint64_t)ii*(uint64_t)jj;"
-            //        <<" // iijj="<<ii<<"*"<<jj<<"="<<iijj);
-            INSCMT(fp["iijj"], "iijj=(uint64_t)ii*(uint64_t)jj;",OSSFMT("iijj="<<ii<<"*"<<jj<<"="<<iijj));
+            char const* t=(tag_once(fd0,"iijj")? "uint64_t ": "");
+            INSCMT(fp["iijj"],OSSFMT(t<<"iijj=(uint64_t)ii*(uint64_t)jj;"),
+                    OSSFMT("iijj="<<iijj<<"="<<ii<<"*"<<jj));
         }
     };
     auto kernComment = [&ilo,&ihi,&jlo,&jhi,&oss](){
@@ -186,32 +162,28 @@ void cf5_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
     };
     auto mk_divmod = [&](){ mk_DIVMOD(outer,jj,iijj+vl0); };
     auto use_vl = [&fd0,&fd](){
-        if(!fd0.find("decl_vl")){
-            fd0["decl_vl"]<<"int64_t vl;";
-        }
-        if(!fd.find("have_vl")){
-            fd["last"]["vl"]>>"vl = vl0;";
-            fd["have_vl"].setType("TAG");
+        auto& cb=fd["last"];
+        if(tag_once(cb,"vl")){
+            cb["vl"]>>(tag_once(fd0,"decl_vl")?"int64_t ":"")<<"vl = vl0;";
         }
     };
+    // does this particular loop split need a final-VL check? .. iijj%vl!=0
+    auto have_vl = [&fd]()->bool{ return fd["last"].find("vl"); };
     //
     // --------- END helper lambdas ------------
     //
-
-    bool const iifirst = fd0.find("cf5u_iifirst") == nullptr;
-    fd0["cf5u_iifirst"].setType("TAG");
-    // first call initializes vector length [maybe save/restore?]
-    if(iifirst){
+    if(tag_once(fd0,"MEM_vl")){
+        // first call initializes vector length [maybe save/restore?]
         // 'vl_is(vl0)' might cut a useless LVL op
         if(!vl_is(vl0)){
-            fd>>OSSFMT("_ve_lvl(vl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0<<" iijj%vl0="
-                    <<iijj%vl0<<" iifirst="<<iifirst);
+            fd>>OSSFMT("_ve_lvl(vl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0
+                    <<" iijj%vl0="<<iijj%vl0);
             vl_remember(vl0);
             assert(vl_is(vl0));
         }
     }else if(!vl_is(vl0)){
-        fd>>OSSFMT("_ve_lvl(vl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0<<" iijj%vl0="
-                <<iijj%vl0<<" VL was "<<vl_str());
+        fd>>OSSFMT("_ve_lvl(vl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0
+            <<" iijj%vl0="<<iijj%vl0<<" VL was "<<vl_str());
         vl_remember(vl0);
     }else{
         fd>>OSSFMT("// VL was "<<vl_str()<<", same as vl0 = "<<vl0<<" ?");
@@ -302,9 +274,7 @@ void cf5_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
         assert( cyc>0 );
         // cyc is lcm(vl,jj) / vl
         auto& fc = outer_fd["last"];
-        if(!fc.find("cycsqij")){
-            fc["cycsqij"]>>"__vr cycsqij;";
-        }
+        if(tag_once(fc,"cycsqij")) fc["cycsqij"]>>"__vr cycsqij;";
         auto& fcp0 = fc["decl"];
         if(!fcp0.find(pfx+"_a")){
             fcp0>>"__vr"; char const* sep=" ";
@@ -361,7 +331,8 @@ void cf5_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
                         mk_divmod();
                         uint64_t nCyc = nloop/cyc;
                         int64_t cyc00 = (nCyc-1U)*cyc_aincr*jj;
-                        cout<<"unroll%cyc="<<unroll%cyc<<" nloop%cyc="<<nloop%cyc<<" nCyc="<<nCyc<<" cyc00="<<cyc00<<endl;
+                        cout<<"unroll%cyc="<<unroll%cyc<<" nloop%cyc="<<nloop%cyc
+                            <<" nCyc="<<nCyc<<" cyc00="<<cyc00<<endl;
                         cyc00 += ilo * jj; // <-- important!
                         INSCMT(fcp,(cyc00==0
                                     ?string("cycsqij = sq;")
@@ -372,7 +343,8 @@ void cf5_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
                     }
                 }else{
                     mk_divmod(); // note: mk_divmod also optimizes positivePow2(jj) case
-                    fcp>>OSSFMT("cycsqij = _ve_vaddul_vsv("<<vl0<<"/*VL*/,cycsqij);");
+                    //fcp>>OSSFMT("cycsqij = _ve_vaddul_vsv("<<vl0<<"/*VL*/,cycsqij);");
+                    fcp>>OSSFMT("cycsqij = _vel_vaddul_vsvl("<<vl0<<"/*VL*/,cycsqij,"<<vl0<<");");
                     fcp>>OSSFMT("DIVMOD_"<<jj<<"(cycsqij, "<<ac<<", __vr const "<<bc<<");");
                 }
             }
@@ -383,12 +355,24 @@ void cf5_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
                 // to reuse the DIVMOD results prior to these adjustments
                 for(uint32_t c=0U; c<nloop%cyc; ++c){
                     string ac = OSSFMT(pfx<<"_acyc_"<<c);
-                    auto instr = OSSFMT(ac<<" =_ve_vaddul_vsv("<<cyc_aincr<<", "<<ac<<");");
+                    //auto instr = OSSFMT(ac<<" =_ve_vaddul_vsv("<<cyc_aincr<<", "<<ac<<");");
+                    auto instr = OSSFMT(ac<<" =_vel_vaddul_vsvl("<<cyc_aincr<<", "<<ac<<","<<vl0<<");");
                     fcq>>OSSFMT(left<<setw(40)<<instr);
                     if(c==0U) fcq<<OSSFMT(" // nloop="<<nloop/cyc<<"*(cyc="<<cyc<<")"
                             "+"<<nloop%cyc<<", cyc_aincr="<<cyc_aincr);
                 }
             }
+#if 0 // debug...
+            if(which==KERNEL_PRINT){
+                auto& dbg = fc["dbg"];
+                dbg>>OSSFMT("printf(\""<<pfx<<" init:\\n\");");
+                for(uint32_t c=0U; c<cyc; ++c){
+                    string ac = OSSFMT(pfx<<"_acyc_"<<c);
+                    string bc = OSSFMT(pfx<<"_bcyc_"<<c);
+                    dbg>>OSSFMT("cf5_kernel_print("<<ac<<","<<bc<<","<<vl0<<");");
+                }
+            }
+#endif
         }else{ // reuse previous divmods, only out-by-additive-constant
             int64_t cyc00overjj = (ilo + (nloop/cyc-1U)*cyc_aincr);
             uint64_t corr0 = cyc00overjj - oldcyc00/jj;
@@ -398,7 +382,9 @@ void cf5_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
                 // roll in the (c < nloop%cyc) correction (both are additive)
                 uint64_t corr = corr0 + (c<nloop%cyc? cyc_aincr: 0);
                 if(corr==0) fcp>>OSSFMT(ac<<" = "<<oac<<";");
-                else fcp>>OSSFMT(ac<<" = _ve_vaddul_vsv("<<corr<<","<<oac<<");");
+                //else fcp>>OSSFMT(ac<<" = _ve_vaddul_vsv("<<corr<<","<<oac<<");");
+                else fcp>>OSSFMT(ac<<" = _vel_vaddul_vsvl("<<corr<<","<<oac
+                        <<","<<vl0<<");");
                 if(c<nloop%cyc) fcp<<OSSFMT(" // +"<<cyc_aincr);
                 string bc = OSSFMT(pfx<<"_bcyc_"<<c);
                 string obc = OSSFMT(oldpfx<<"_bcyc_"<<c);
@@ -413,13 +399,24 @@ void cf5_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
         for(uint32_t c=0U; c<cyc; ++c){
             string ac = OSSFMT(pfx<<"_acyc_"<<c);
             uint64_t nCyc = nloop/cyc + (c < nloop%cyc? 1: 0);
-            auto instr = OSSFMT(ac<<" =_ve_vaddul_vsv(-"<<nCyc*cyc_aincr<<", "<<ac<<");");
+            //auto instr = OSSFMT(ac<<" =_ve_vaddul_vsv(-"<<nCyc*cyc_aincr<<", "<<ac<<");");
+            auto instr = OSSFMT(ac<<" =_vel_vaddul_vsvl(-"<<nCyc*cyc_aincr<<", "<<ac<<",vl0);");
             fp>>OSSFMT(left<<setw(40)<<instr);
             if(c==0U) fp<<OSSFMT(" // nloop="<<nloop/cyc<<"*(cyc="<<cyc<<")+"<<nloop%cyc<<", cyc_aincr="<<cyc_aincr);
         }
-        if(!fcp.find("last")){
-            fcp["last"]>>"// Cyclic precalc END";
+#if 0 // debug...
+        if(which==KERNEL_PRINT){
+            auto& dbg = fp["dbg"];
+            dbg>>OSSFMT("printf(\""<<pfx<<" reset:\\n\");");
+            for(uint32_t c=0U; c<cyc; ++c){
+                string ac = OSSFMT(pfx<<"_acyc_"<<c);
+                string bc = OSSFMT(pfx<<"_bcyc_"<<c);
+                dbg>>OSSFMT("cf5_kernel_print("<<ac<<","<<bc<<","<<vl0<<");");
+            }
+            dbg>>OSSFMT("printf(\""<<pfx<<" reset DONE!\\n\");");
         }
+#endif
+        if(!fcp.find("last")) fcp["last"]>>"// Cyclic precalc END";
     }else{ // !cycpre --> declare a[], b[] fused-loop result registers
         if(!fd0.find("vrab")) fd0["vrab"]>>"__vr a,b;";
     }
@@ -431,7 +428,7 @@ void cf5_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
     if(fp_sets_ab){
         assert(!cycpre); // I believe these should be disjoint
         use_sq();
-        auto& cb = (iifirst? fd: fp);
+        auto& cb = fd; //(iifirst? fd: fp);
         if( jj==1 ){
             // for loop split, don't easily know if we can 'const' it
             //string instr;
@@ -466,6 +463,8 @@ void cf5_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
             }else{
                 //divmod = OSSFMT("DIVMOD_"<<jj<<"(_ve_vaddul_vsv(ilo*jj,sq), a, b);");
                 //cb>>OSSFMT(left<<setw(40)<<divmod<<" // a[]=(sq+"<<ilo*jj<<")/"<<jj<<" b[]=(sq+"<<ilo*jj<<")%"<<jj);
+                //INSCMT(cb,OSSFMT("DIVMOD_"<<jj<<"(_ve_vaddul_vsv(ilo*jj,sq), a, b);"),
+                //        OSSFMT("a[]=(sq+"<<ilo*jj<<")/"<<jj<<" b[]=(sq+"<<ilo*jj<<")%"<<jj));
                 INSCMT(cb,OSSFMT("DIVMOD_"<<jj<<"(_ve_vaddul_vsv(ilo*jj,sq), a, b);"),
                         OSSFMT("a[]=(sq+"<<ilo*jj<<")/"<<jj<<" b[]=(sq+"<<ilo*jj<<")%"<<jj));
             }
@@ -557,21 +556,24 @@ void cf5_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
 
             // ff
             if(!fp_sets_ab && cycpre){ // this MUST be before VL check, in this case
-                INSCMT(ff,OSSFMT(ac<<" = _ve_vaddul_vsv("<<cyc_aincr<<", "<<ac<<");"),
+                // XXX BUG without vel_FOO **HERE**
+                //INSCMT(ff,OSSFMT(ac<<" = _ve_vaddul_vsv("<<cyc_aincr<<", "<<ac<<");"),
+                //        OSSFMT("a~"<<ac<<", b~"<<bc));
+                INSCMT(ff,OSSFMT(ac<<" = _vel_vaddul_vsvl("<<cyc_aincr<<", "<<ac
+                            <<","<<(have_vl()?"vl":"vl0")<<");"),
                         OSSFMT("a~"<<ac<<", b~"<<bc));
             }
             if(last_iter_check && iijj%vl0 ){ // last iter has reduced VL
                 if(nloop == unroll){
                     auto final_vl = iijj % vl0;
-                    auto instr=OSSFMT("_ve_lvl("<<(fd.find("have_vl")?"vl=":"")<<final_vl<<");");
+                    auto instr=OSSFMT("_ve_lvl("<<(have_vl()?"vl=":"")<<final_vl<<");");
                     ff>>OSSFMT(left<<setw(40)<<instr<<" // iijj="<<iijj/vl0<<"*vl0+"<<final_vl);
                 }else{ // must check whether, this time through, vl changes
                     use_vl(); // vl = min(vl0,remain)
-                    ff  >>OSSFMT(left<<setw(40)<<(fd.find("have_cnt")
+                    INSCMT(ff,(fd.find("have_cnt")
                                 ?"vl = (vl0<iijj-cnt? vl0: iijj-cnt);"
-                                :"vl = (cnt<vl0? cnt: vl0);")
-                            <<" // iijj="<<iijj/vl0<<"*vl0+"<<iijj%vl0
-                            );
+                                :"vl = (cnt<vl0? cnt: vl0);"),
+                            OSSFMT(" // iijj="<<iijj/vl0<<"*vl0+"<<iijj%vl0));
                     ff>>"_ve_lvl(vl);";
                 }
             }else if(0 && iijj%vl0){ // XXX DEBUG
@@ -598,7 +600,7 @@ void cf5_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
             cf5_kernel(fk,fd,fz, ilo,ii,jlo,jj,vl, ""/*kernComment()*/, which,
                     pfx,1/*verbose*/,
                     (cycpre?ac:"a"), (cycpre?bc:"b"), "sq",
-                    (fd.find("have_vl")?"vl":"vl0"));
+                    (have_vl()?"vl":"vl0"));
 
             // fi (induce)
             auto& fc = loop_ab[OSSFMT("unr"<<u)]["cnt"];
@@ -665,16 +667,17 @@ void cf5_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
                     //  a = _ve_vsrl_vvs(sqij, jj_shift);              // a[i]=sq[i]/jj
                     //  b = _ve_vand_vsv("<<jithex(jj_minus_1)<<",sq); // b[i]=sq[i]%jj
                 }else{
-                    use_sqij();
                     if(fp_sets_ab){ // if pre-loop sets ab, recalc goes to fi (not ff)
+                        use_sqij();
                         mk_divmod();
-                        auto instr = "sqij = _ve_vaddul_vsv(vl0,sqij);";
+                        auto instr = "sqij = _ve_vaddul_vsv(vl0,sqij);//A";
                         fi>>OSSFMT(left<<setw(40)<<instr<<" // sqij[i] += "<<vl0);
                         auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);");
                         fi  >>OSSFMT(left<<setw(40)<<divmod
                                 <<" //  a[]=sq/"<<jj<<" b[]=sq%"<<jj<<" AAA");
                     }else if(!cycpre){
-                        auto instr = "sqij = _ve_vaddul_vsv(vl0,sqij);";
+                        use_sqij();
+                        auto instr = "sqij = _ve_vaddul_vsv(vl0,sqij);//B";
                         fi>>OSSFMT(left<<setw(40)<<instr<<" // sqij[i] += "<<vl0);
                     }
                 }

@@ -246,7 +246,7 @@ asmblock-ve.o: asmblock.cpp asmblock.hpp
 	$(CXX) ${CXXFLAGS} -c $< -o $@
 dllbuild-ve.o: dllbuild.cpp
 	$(CXX) $(CXXFLAGS) -Wall -Werror -c $< -o $@
-fuseloop-ve.o: fuseloop.cpp
+fuseloop-ve.o: fuseloop.cpp fuseloop.hpp
 	$(CXX) $(CXXFLAGS) -Wall -Werror -c $< -o $@
 ve_divmod-ve.o: ve_divmod.cpp
 	$(CXX) $(CXXFLAGS) -Wall -Werror -c $< -o $@
@@ -271,7 +271,7 @@ asmblock-ve.lo: asmblock.cpp asmblock.hpp
 	$(CXX) ${CXXFLAGS} -fPIC -c $< -o $@
 dllbuild-ve.lo: dllbuild.cpp
 	$(CXX) $(CXXFLAGS) -fPIC -Wall -Werror -c $< -o $@
-fuseloop-ve.lo: fuseloop.cpp
+fuseloop-ve.lo: fuseloop.cpp fuseloop.hpp
 	$(CXX) $(CXXFLAGS) -fPIC -Wall -Werror -c $< -o $@
 ve_divmod-ve.lo: ve_divmod.cpp
 	$(CXX) $(CXXFLAGS) -fPIC -Wall -Werror -c $< -o $@

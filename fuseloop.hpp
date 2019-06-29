@@ -60,9 +60,9 @@ struct UnrollSuggest {
      * \c unroll_suggest looks in range 100%--90% of original \c vl for
      * an alternative that might be better. */
     int vll;
-    /** \c nloop is a multiple of \c unroll for partial unroll cases,
-     * equal for full unroll,
-     * but is untied for <em>any small unroll</em> case. */
+    /** \c nloop is then number of kernel calls. When unrolling, the loop
+     * will be some full loops and maybe a final partial loop.
+     */
     int nloop;
     /** explicit unrolling factor may be given, possibly < nloop. */
     int unroll;
