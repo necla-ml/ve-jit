@@ -110,7 +110,7 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int cons
  * \return unroll suggestion at an efficient, possibly reduced, vector length.
  * \post if a nicer alt is found, \c u.vll records this reduce \c u.vl
  */
-UnrollSuggest unroll_suggest( UnrollSuggest & u, int vl_min=0 );
+UnrollSuggest unroll_suggest( UnrollSuggest & u, int vl_min=0, int v=0/*verbosity*/ );
 
 /** If nothing turned up with unroll_suggest, we can always try for equitable
  * loop vector length...

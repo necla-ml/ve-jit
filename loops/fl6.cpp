@@ -1,14 +1,14 @@
 /* Copyright (c) 2019 by NEC Corporation
  * This file is part of ve-jit */
 /** \file
- * cf5 extends cf4 to loop splitting
+ * fl6 is a code cleanup of cf5
  *
  * quick test:
  * ```
- * ./cf.sh cf5 15 3:6:9:12 9 CHECK 0 >& cf5.log
+ * ./fl.sh fl6 15 3:6:9:12 9 CHECK 0 >& fl6.log
  * ```
  */
-#include "cf3.hpp"
+#include "fl6.hpp"
 #include "../fuseloop.hpp"
 #include "../ve_divmod.hpp"
 #include "exechash.hpp"
@@ -46,94 +46,54 @@ using namespace std;
 using namespace loop;
 using namespace cprog;
 
-void other_fastdiv_methods(int const jj);
-#include "divide_by_constants_codegen_reference.c"
+static ostringstream oss;
 
-void other_fastdiv_methods(int const jj){
-    int const verbose=1;
-    // other fast divide approaches...
-    if(verbose>=1 && !positivePow2(jj)){
-        // libdivide relies on MULHI operation, which we don't have. It sometimes needs
-        // more ops, but for Aurora would be correct for larger (32-bit) input range.
-        magicu_info bogus = {0,0,0,0};
-        assert( sizeof(uint)*CHAR_BIT == 32 );
-        auto const ld = positivePow2(jj) ? bogus: compute_unsigned_magic_info( jj, 32 );
-        if( ld.pre_shift==0 ){
-            // NO assert( ld.post_shift==1 ); sometimes 1 or 2
-            // NO  assert( ld.post_shift==0 || ld.post_shift==1 || ld.post_shift==2 );
-            if( ld.post_shift==0 ){
-                // never happens?
-                cout<<" --> no pre or post-shift, increment="<<ld.increment
-                    <<", mul="<<(void*)(intptr_t)(intptr_t)(intptr_t)ld.multiplier;
-            }else{
-                cout<<" --> no pre-shift, post-shift="<<ld.post_shift
-                    <<",increment="<<ld.increment
-                    <<", mul="<<(void*)(intptr_t)ld.multiplier;
-            }
-        }else{
-            cout<<" OH?? ";
-            cout<<" --> pre-shift="<<ld.pre_shift<<", post-shift="<<ld.post_shift
-                <<",increment="<<ld.increment
-                <<", mul="<<(void*)(intptr_t)ld.multiplier;
-        }
+Fl6test::Fl6test(FusedLoopKernel& krn, int const v/*=0,verbose*/)
+: FusedLoopTest(krn, "Fl6test", v)
+{
+    // upper-level tree structure, above the fused-loop.
+    pr.root["first"];                           // reserve room for preamble, comments
+    auto& inc = pr.root["includes"];
+    inc["veintrin.h"]>>"#include \"veintrin.h\"";
+    inc["velintrin.h"]>>"#include \"velintrin.h\"";
+    inc["stdint.h"]>>"#include <stdint.h>";
+    inc["stdio.h"]>>"#include <stdio.h>";
+
+    // create a somewhat generic tree
+    auto& fns = pr.root["fns"];
+    fns["first"]; // reserve a node for optional function definitions
+    CBLOCK_SCOPE(fl6test,"int main(int argc,char**argv)",pr,fns);
+    // NEW: use tag function scope, for upward-find operations
+    //      will require extending the find string to match tag!
+    fl6test.setType("FUNCTION");
+    // outer path root.at("**/fl6test/body")
+
+    // example 'outer loops'
+    fl6test>>"int const nrep = 3;";
+    CBLOCK_FOR(loop1,-1,"for(int iloop1=0; iloop1<nrep; ++iloop1)",fl6test);
+    CBLOCK_FOR(loop2,-1,"for(int iloop2=0; iloop2<1; ++iloop2)",loop1);
+
+    if(v){
+        fl6test["first"]>>"printf(\"fl6 outer loop\\n\");";
+        loop2  >>"printf(\"fl6 inner loop @ (%d,%d)\\n\",iloop1,iloop2);";
     }
-    if(verbose>=1){
-        // Note: Aurora has shift-LEFT-add but no mul-add or shift-right-add for int vectors
-        struct fastdiv jj_fastdiv;
-        fastdiv_make( &jj_fastdiv, (uint32_t)jj );
-        cout<<endl<<"\t"
-            <<" mul,add,shr="<<(void*)(intptr_t)jj_fastdiv.mul
-            <<","<<jj_fastdiv.add<<","<<jj_fastdiv.shift;
+
+    auto& inner = loop2; // inner path outer.at("**/loop2/body")
+    inner["first"]; // --> 'fd' inner setup code used by all splits
+
+    if(v>1){
+        cout<<"\nScaffold";
+        cout<<pr.tree()<<endl;
     }
-    if(verbose>=1){
-        Ulpi jj_mod_inverse_lpi   = mod_inverse((Ulpi)jj);
-        Uvlpi jj_mod_inverse_Vlpi = mod_inverse((Uvlpi)jj);
-        cout<<" jj_modinv="<<(void*)(intptr_t)jj_mod_inverse_Vlpi
-            <<" or "<<(void*)(intptr_t)jj_mod_inverse_lpi;
+
+    this->outer_ = &fl6test;  // outer @ root.at("**/fl6test/body")
+    this->inner_ = &inner;    // inner @ outer.at("**/loop2/body")
+
+    if(v>2){
+        cout<<" outer @ "<<outer_->fullpath()<<endl;
+        cout<<" inner @ "<<inner_->fullpath()<<endl;
     }
 }
-
-// /** scope init for AsmFmtCols */
-// typedef std::list<std::pair<std::string,std::string>> AsmScope;
-
-#if 0 // C++17:
-template<typename... Args>
-std::string join_sep[](char const sep, Args&&... args){
-    std::ostringstream oss;
-    std::string ret( ((oss << args << sep), ...).str() );
-    //               ---------------------
-    //               C++17 fold expression, expands to
-    //               (oss<<arg1<<sep),(oss<<arg2<<sep), ...
-    if(!ret.empty()) ret.pop_back();
-    return ret;
-}
-#endif
-
-extern "C" {
-struct KernelNeeds kernel_needs(int const which){
-    KernelNeeds ret={0,0,0,0,0};
-    switch(which){
-      case(KERNEL_NONE): break;
-      case(KERNEL_HASH): ret.vl=1; ret.sq=1; ret.sqij=1; break;
-      case(KERNEL_PRINT): ret.vl=1; break;
-      case(KERNEL_CHECK): ret.cnt=1; ret.vl=1; ret.iijj=1; break;
-      case(KERNEL_SQIJ): ret.sqij=1; break;
-      default: cout<<" Warning: unhandled KERNEL type, which="<<which<<endl;
-    }
-    return ret;
-}
-
-char const* kernel_name(int const which){
-    return (which==KERNEL_NONE? "NONE"
-            :which==KERNEL_HASH? "HASH"
-            :which==KERNEL_PRINT? "PRINT"
-            :which==KERNEL_CHECK? "CHECK"
-            :which==KERNEL_SQIJ? "SQIJ"
-            :"HUH");
-}
-
-}//extern "C"
-
 /* emit kernel (comment/code).
  *
  * Consider loops for(i=ilo..ihi)for(j=jlo..jhi)
@@ -186,7 +146,6 @@ void cf5_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
         string vA/*="a"*/, string vB/*="b"*/,
         string vSEQ0/*="sq"*/, string sVL/*="vl"*/
         ){
-    static ostringstream oss;
 
     if( which==KERNEL_NONE ){ // just an optional extraComment
         bKrn["beg"]>>OSSFMT("// KERNEL("<<vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"])");
@@ -381,6 +340,7 @@ void cf5_help_msg(){
         <<"\n  -oFILE output code filename"
         <<"\n         - Ex. -ofile-vi.c for clang-vector-i|trinsics code"
         <<"\n         - TODO cf5.sh or cf5u.sh to compile & run JIT on VE"
+        <<"\n  -v[v...] verbosity [0]"
         <<"\n Parameters:"
         <<"\n   VLEN          vector length"
         <<"\n   [z:[l:[h:]]]I z<=l<=h<=I : 1st loops a=z..I (l,h TBD, l==z,h==I for now)"
@@ -396,6 +356,7 @@ int main(int argc,char**argv){
     uint32_t maxun=0U;
     char *ofname = nullptr;
     int which = WHICH_KERNEL;
+    int verbosity=0;
 
     if(argc > 1){
         // actually only the last -[tlu] option is used
@@ -404,6 +365,7 @@ int main(int argc,char**argv){
             cout<<" arg : "<<c<<endl;
             for( ; *c != '\0'; ++c){
                 if(*c=='h'){ cf5_help_msg(); opt_h = 1;
+                }else if(*c=='v'){ ++verbosity;
                 }else if(*c=='t'){ opt_t=2;
                 }else if(*c=='a'){ opt_t=3;
                 }else if(*c=='o'){
@@ -432,7 +394,7 @@ int main(int argc,char**argv){
     }
     cout<<" args: a = "<<a<<" opt_t="<<opt_t<<" ofname = "
         <<(ofname? ofname: "none")<<" which="<<kernel_name(which)
-        <<" maxun="<<maxun<<endl;
+        <<" maxun="<<maxun<<" verbosity "<<verbosity<<endl;
     if(argc > a+1) vl = atof(argv[a+1]);
     if(argc > a+2) h  = parseLoopSplit(argv[a+2]);
     if(argc > a+3) w  = parseLoopSplit(argv[a+3]);
@@ -441,11 +403,29 @@ int main(int argc,char**argv){
 
     uint32_t nerr=0U;
     if(opt_h == 0){
+        FusedLoopKernel *krn = nullptr;
+        switch(which){
+          case(KERNEL_NONE):    {krn = new FLKRN_none(); break;}
+          case(KERNEL_HASH):    {krn = new FLKRN_hash(); break;}
+          case(KERNEL_PRINT):   {krn = new FLKRN_print(); break;}
+          case(KERNEL_CHECK):   {krn = new FLKRN_check(); break;}
+          case(KERNEL_SQIJ):    {krn = new FLKRN_sqij(); break;}
+          default:              {krn = new FLKRN_none(); break;}
+        }
+        assert( krn != nullptr );
         try{
-            if(maxun==0) // no unroll...
-                cf5_no_unrollX(vl,h,w,opt_t,which,ofname);
-            else{ // unroll...
-                cf5_unrollX(vl,h,w,maxun,opt_t,which,ofname);
+            if(maxun==0){ // no unroll...
+#if 0
+                fl6_no_unrollX(vl,h,w,opt_t,which,ofname);
+#else
+                fl6_no_unrollY(h,w,*krn,vl,ofname,verbosity);
+#endif
+            }else{ // unroll...
+#if 0
+                fl6_unrollX(vl,h,w,maxun,opt_t,which,ofname);
+#else
+                fl6_unrollY(h,w,maxun,*krn,vl,ofname,verbosity);
+#endif
             }
         }
         catch(exception& e){
@@ -456,6 +436,7 @@ int main(int argc,char**argv){
             cout<<"Unknown exception"<<endl;
             ++nerr;
         }
+        delete krn;
     }
     delete[] ofname;
     if(nerr==0) cout<<"\nGoodbye"<<endl;

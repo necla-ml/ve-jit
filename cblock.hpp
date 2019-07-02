@@ -356,10 +356,10 @@ class Cblock {
     class Cblock * _parent;
   private:
     std::string _name;              ///< terminal \e path component (from root)
-    std::string _type;              ///< unused?
+    std::string _type;              ///< store /e notes (flags,state)
     CbmanipBase* _premanip;         ///< TODO support multiple?
     std::string _code;
-    std::vector<Cblock*> _sub;      ///< TODO separate '_exit' block with \e always-last semantics?
+    std::vector<Cblock*> _sub;      ///< name /e last => \e always-last semantics
     CbmanipBase* _postmanip;        ///< TODO support multiple?
     int _nwrites;   // counter
     int _maxwrites; // limit for _nwrites

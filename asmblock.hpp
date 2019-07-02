@@ -91,7 +91,7 @@ struct IndentSpec;
 struct PostIndent;
 struct PreIndent;
 
-/// \group Asmblock I/O helpers
+/// \defgroup Asmblock I/O helpers
 //@{
 /** stateless Asmblock output manipulators for operator<< */
 template<class T> inline T& operator<<(T& t, T& (*manip)(T&) ){ return manip(t); }
@@ -147,7 +147,7 @@ struct Asmblock : AsmFmtVe {
     //                     _nwrites(s._nwrites), _maxwrites(s._maxwrites)
     //{}
 
-    /// \group unformatted code addtion
+    /// \defgroup unformatted code addtion
     /// This is more suited to outputting indent-driven 'C' code,
     /// but let's keep it around, just in case...
     //@{
@@ -233,7 +233,7 @@ struct Asmblock : AsmFmtVe {
     //Asmblock* prev()
     ~Asmblock(){ clear(); }
     bool isRoot() const { return _parent == this; }
-    /// \group path functions
+    /// \defgroup path functions
     //@{
     std::string fullpath() const;
     /** find first Asmblock matching \c path, with wildcard extensions.
@@ -519,7 +519,7 @@ inline Asmblock * Asmblock::find_recurse_parent(std::string p) const {
     return nullptr;
 }
 
-/// \group Asmblock helpers
+/// \defgroup Asmblock helpers
 //@{ helpers
 /** provide an \c unlink'ed extern "C" block.
  * - You \b should \c .after(abspath) this to the desired location.

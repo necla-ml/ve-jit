@@ -883,6 +883,19 @@ cf5.log:
 	&& echo YAY; \
 	} >& $@ && echo YAY || mv cf5.log cf5.err
 
+fl6.hpp: fl6-kernels.hpp ../fuseloop.hpp
+fl6-kernels.hpp: ../cblock.hpp
+fl6-kernels.o: fl6-kernels.cpp fl6-kernels.hpp ../cblock.hpp ../stringutil.hpp ../vechash.hpp ../fuseloop.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} -c $< -o $@
+fl6-%.o: fl6-%.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} -c $< -o $@
+fl6-%-ve.o: fl6-%.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
+	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} -c $< -o $@
+fl6: fl6.cpp fl6-kernels.o cf3-common.o fl6-nounroll.o fl6-unroll.o ../libjit1-x86.a ../vechash.hpp ./exechash.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+fl6-ve: fl6.cpp fl6-kernels-ve.o cf3-common-ve.o fl6-nounroll-ve.o fl6-unroll-ve.o ../libjit1-ve.a ../vechash.hpp ./exechash.hpp
+	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+
 cfuse3: cfuse3.cpp ../libjit1-x86.a
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 %: %.cpp

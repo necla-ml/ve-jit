@@ -19,7 +19,7 @@ extern "C" { //}
 extern int const bitcount[256];
 extern int const multiplyDeBruijnBitPosition2[32];
 
-/// \group integer arithmetic
+/// \defgroup integer arithmetic
 //@{
 /** divide-by-\c _odiv via mul-add-shift */
 struct fastdiv {
@@ -53,7 +53,7 @@ inline uint32_t ulog2(uint32_t v) {
 void fastdiv_make(struct fastdiv *d, uint32_t divisor);
 //@}
 
-/// \group fastdiv64
+/// \defgroup fastdiv64
 /// fast division for 'small enough' numbers,
 /// without intermediates overflowing 64 bits.
 /// see https://github.com/lemire/constantdivisionbenchmarks, "lkk" algorithm.
@@ -82,7 +82,7 @@ FASTDIV_INLINE uint32_t fastdiv_uB(uint32_t const a, uint64_t const M) {
  * Probably nicer to calc. uint64_t D=a/d using fastdiv_uB, and then R=a-D*d.
  * (retain "everythin" in u64 registers).
  * \pre \c a and \c d < (1<<21).
- * When d is a power of \f$(v&(v-1)) == 0\f$, just use shifts, \ref positivePow2.
+ * When d is a power of \f$(v\&(v-1)) == 0\f$, just use shifts, \ref positivePow2.
  */
 FASTDIV_INLINE uint32_t fastmod_uB(uint32_t const a, uint64_t const M, uint32_t const d) {
     // Lemire original

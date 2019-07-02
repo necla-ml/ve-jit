@@ -61,14 +61,14 @@ int64_t ve_vlen_suggest_equ(int64_t const nitems){
         int64_t const nFull = nitems/MVL;
         int64_t const nLoops = (nitems+MVL-1)/MVL;
         int64_t const rem   = nitems%MVL;
-        if(v)cout<<" nFull="<<nFull<<" rem="<<rem<<" nLoops="<<nLoops<<endl;
+        if(v>0)cout<<" nFull="<<nFull<<" rem="<<rem<<" nLoops="<<nLoops<<endl;
         //if(rem+32 >= MVL){ // rem also large, latency already roughly equal.
         //    ret = MVL; } else
         if( nitems%nLoops == 0 ){
             // this is "good enough" for vector latency, but more importantly
             // avoids some special handling for last-time-through-loop.
             ret = nitems/nLoops;
-            if(v)cout<<"loop 0.."<<nitems<<" vlen perfect division as "<<ret<<"*"<<nitems/ret<<endl;
+            if(v>0)cout<<"loop 0.."<<nitems<<" vlen perfect division as "<<ret<<"*"<<nitems/ret<<endl;
             //x0_check_vl = false;
         }else{ // redistribute...
             // we need some remainder, set up a "nice" main vector length
@@ -90,14 +90,14 @@ int64_t ve_vlen_suggest_equ(int64_t const nitems){
             // B. using incorrect [uncalculated?] extra values
             // during the last loop pass.  (A.) is much better.
             //
-            if(v)cout<<" vleq="<<vleq<<" = "<<nitems<<"/"<<nLoops<<" = nitems/nLoops"<<endl;
+            if(v>0)cout<<" vleq="<<vleq<<" = "<<nitems<<"/"<<nLoops<<" = nitems/nLoops"<<endl;
             assert( vleq <= MVL );
             if( nitems%vleq != 0 ){
                 //vleq = (vleq+31)/32*32;
-                //if(v)cout<<"vleq rounded up to "<<vleq<<endl;
+                //if(v>0)cout<<"vleq rounded up to "<<vleq<<endl;
 
                 ret = vleq;
-                if(v)cout<<"loop 0.."<<nitems<<" vlen redistributed from "<<MVL<<"*"<<nFull<<"+"<<rem
+                if(v>0)cout<<"loop 0.."<<nitems<<" vlen redistributed from "<<MVL<<"*"<<nFull<<"+"<<rem
                     <<" to "<<vleq<<"*"<<nitems/vleq<<"+"<<nitems%vleq<<endl;
                 // Paranoia: if we somehow increased loop count, this logic has a bug
                 assert( (nitems+vleq-1)/vleq == nLoops );
@@ -117,14 +117,14 @@ int64_t ve_vlen_suggest(int64_t const nitems){
         int64_t const nFull = nitems/MVL;
         int64_t const nLoops = (nitems+MVL-1)/MVL;
         int64_t const rem   = nitems%MVL;
-        if(v)cout<<" nFull="<<nFull<<" rem="<<rem<<" nLoops="<<nLoops<<endl;
+        if(v>0)cout<<" nFull="<<nFull<<" rem="<<rem<<" nLoops="<<nLoops<<endl;
         if(rem+32 >= MVL){ // rem also large, latency already roughly equal.
             ret = MVL;
         }else if( nitems%nLoops == 0 ){
             // this is "good enough" for vector latency, but more importantly
             // avoids some special handling for last-time-through-loop.
             ret = nitems/nLoops;
-            if(v)cout<<"loop 0.."<<nitems<<" vlen perfect division as "<<ret<<"*"<<nitems/ret<<endl;
+            if(v>0)cout<<"loop 0.."<<nitems<<" vlen perfect division as "<<ret<<"*"<<nitems/ret<<endl;
             //x0_check_vl = false;
         }else{ // redistribute...
             // we need some remainder, set up a "nice" main vector length
@@ -146,17 +146,17 @@ int64_t ve_vlen_suggest(int64_t const nitems){
             // B. using incorrect [uncalculated?] extra values
             // during the last loop pass.  (A.) is much better.
             //
-            if(v)cout<<" vleq="<<vleq<<" = "<<nitems<<"/"<<nLoops<<" = nitems/nLoops"<<endl;
+            if(v>0)cout<<" vleq="<<vleq<<" = "<<nitems<<"/"<<nLoops<<" = nitems/nLoops"<<endl;
             assert( vleq <= MVL );
             if( nitems%vleq == 0 ){
             }else{
                 // guess latency increments for VE as vector length passes multiples of 32
                 // so round "main" vector up to a multiple of 32 (take whatever remains as remainder)
                 vleq = (vleq+31)/32*32;
-                if(v)cout<<"vleq rounded up to "<<vleq<<endl;
+                if(v>0)cout<<"vleq rounded up to "<<vleq<<endl;
 
                 ret = vleq;
-                if(v)cout<<"loop 0.."<<nitems<<" vlen redistributed from "<<MVL<<"*"<<nFull<<"+"<<rem
+                if(v>0)cout<<"loop 0.."<<nitems<<" vlen redistributed from "<<MVL<<"*"<<nFull<<"+"<<rem
                     <<" to "<<vleq<<"*"<<nitems/vleq<<"+"<<nitems%vleq<<endl;
                 // Paranoia: if we somehow increased loop count, this logic has a bug
                 assert( (nitems+vleq-1)/vleq == nLoops );
@@ -261,7 +261,7 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int b_pe
     int const maxun = (b_period_max>0? b_period_max: 0);
     if(b_period_max<0) b_period_max = -b_period_max;
 
-    if(v)cout<<"\nUNROLL_SUGGEST\n";
+    if(v>1)cout<<"\nUNROLL_SUGGEST\n";
     bool const jj_pow2 = positivePow2(jj);
     int const jj_shift = positivePow2Shift((uint32_t)jj);
     // Note: I began with a simple cyclic case, jj%vl==0.
@@ -314,12 +314,12 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int b_pe
     if( nloop == 1 ){
         ret.suggested = strategy = UNR_NLOOP1;
         ret.vl = iijj;
-        if(v)cout<<" A.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
+        if(v>0)cout<<" A.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
             <<strategy<<"\n\t"
             <<", b_period="<<b_period<<b_period_pow2<<" no loop [precalc, no unroll]"<<endl;
     }else if( vl%jj == 0 ){
         ret.suggested = strategy = UNR_VLMODJJ;
-        if(v)cout<<" B.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
+        if(v>0)cout<<" B.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
             <<strategy<<"\n\t"
             <<", b_period="<<b_period
             <<" has a trivial vl%jj==0 update [no precalc, any small unroll]"
@@ -337,7 +337,7 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int b_pe
             ret.suggested = strategy = UNR_JJMODVL_RESET;
             // depending on period==2, other power-of-two, or anything else,
             // have 3 different simple updates.
-            if(v)cout<<" C.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
+            if(v>0)cout<<" C.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
                 <<strategy<<"\n\t"
                     <<", b_period="<<b_period<<b_period_pow2
                     <<" has a simple jj%vl==0 update [no precalc, any small unroll]"
@@ -352,7 +352,7 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int b_pe
         }else{
             // update is trivial FOR(i,vl) b[i] = b[i] + vl;
             ret.suggested = strategy = UNR_JJMODVL_NORESET;
-            if(v)cout<<" c.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
+            if(v>0)cout<<" c.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
                 <<strategy<<"\n\t"
                     <<", b_period="<<b_period<<b_period_pow2
                     <<" has a trivial jj%vl==0 update [no precalc, any small unroll]"
@@ -365,7 +365,7 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int b_pe
     }else if( jj_pow2 ){
         if(nloop < b_period_max){
             ret.suggested = strategy = UNR_JJPOW2_NLOOP;
-            if(v)cout<<" D.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
+            if(v>0)cout<<" D.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
                 <<strategy<<"\n\t"
                 <<", b_period="<<b_period<<b_period_pow2<<", bcyc_regs="<<bcyc_regs
                 <<" has jj=2^"<<jj_shift<<" with precalc unroll(nloop="<<nloop<<")"
@@ -374,7 +374,7 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int b_pe
             ret.cycle = ret.unroll;
         }else if(bcyc_regs < b_period_max){
             ret.suggested = strategy = UNR_JJPOW2_CYC;
-            if(v)cout<<" E.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
+            if(v>0)cout<<" E.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
                 <<strategy<<"\n\t"
                 <<", b_period="<<b_period<<b_period_pow2<<", bcyc_regs="<<bcyc_regs
                 <<" has jj=2^"<<jj_shift<<" with precalc unroll(bcyc_regs="<<bcyc_regs<<")"
@@ -384,7 +384,7 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int b_pe
             ret.cycle = bcyc_regs;
         }else{
             ret.suggested = strategy = UNR_JJPOW2_BIG;
-            if(v)cout<<" F.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
+            if(v>0)cout<<" F.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
                 <<strategy<<"\n\t"
                 <<", b_period="<<b_period<<b_period_pow2<<", bcyc_regs="<<bcyc_regs
                 <<" has jj=2^"<<jj_shift<<" easy update, but large period [no precalc, any small unroll]"
@@ -393,7 +393,7 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int b_pe
         }
     }else if( nloop < b_period_max ){ // small nloop, any b_period
         ret.suggested = strategy = UNR_NLOOP;
-        if(v)cout<<" G.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
+        if(v>0)cout<<" G.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
             <<strategy<<"\n\t"
             <<", b_period="<<b_period<<b_period_pow2
             <<" suggest full precalc unroll(nloop="<<nloop<<")\n"
@@ -403,7 +403,7 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int b_pe
         // no. also ok for non-cyclic and low nloop ... assert( have_b_period );
     }else if( bcyc_regs < b_period_max ){ // small b_period, high nloop
         ret.suggested = strategy = UNR_CYC;
-        if(v)cout<<" H.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
+        if(v>0)cout<<" H.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
             <<strategy<<"\n\t"
             <<", b_period="<<b_period<<b_period_pow2
             <<" suggest partial precalc unroll(b_period="<<b_period<<")\n"
@@ -417,7 +417,7 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int b_pe
         ret.cycle = b_period;
     }else{ // nloop and b_period both high OR this is a simpler case
         ret.suggested = strategy = UNR_DIVMOD;
-        if(v)cout<<" I.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
+        if(v>0)cout<<" I.vl,ii,jj="<<vl<<","<<ii<<","<<jj<<" nloop="<<nloop<<" "
             <<strategy<<"\n\t"
             <<", b_period="<<b_period<<b_period_pow2<<" both high:"
             <<" full unroll(nloop="<<nloop<<") [no precalc] still possible"
@@ -476,7 +476,7 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int b_pe
     return ret;
 }
 /** u modified to set u.vll \em and return corresponding UnrollSuggest for the alt vl. */
-UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
+UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/, int const v/*=0,verbosity*/ ){
     if( u.suggested != UNR_UNSET ){
         cout<<" Looking for an alt strategy..."<<endl;
     }
@@ -553,7 +553,7 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
         return ret;
     };
 
-    cout<<" checking [ "<<vl_max<<" to "<<vl_min<<" ] ... "
+    if(v>0)cout<<" checking [ "<<vl_max<<" to "<<vl_min<<" ] ... "
         <<" nloops orig "<<(iijj+vl-1)/vl<<", @vl_max:"<<(iijj+vl_max-1)/vl_max
         <<", @vl_min:"<<(iijj+vl_min-1)/vl_min
         <<" OpSave kernel ops="<<Kops<<" unroll="<<unroll<<endl;
@@ -568,7 +568,7 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
         int const jj = u.jj;
         if( jj < vl ){
             int const vll = vl/jj*jj;
-            cout<<"   Note: vl/jj*jj = "<<vll<<" is an exact multiple of jj"
+            if(v>0)cout<<"   Note: vl/jj*jj = "<<vll<<" is an exact multiple of jj"
                 " (vl reduced by "<<(vl-vll)<<" or "<<int((vl-vll)*1000.0/vl)*0.1<<"%)"
                 <<"\n         with nloops' = "<<(u.ii*u.jj+vll-1)/vll
                 <<endl;
@@ -577,7 +577,7 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
             int const nup = (jj+vl-1)/vl;
             if( jj%nup == 0 ){
                 int const vll = jj/nup;
-                cout<<"   Note: vl = "<<jj/nup<<" would make jj an exact mult of vl"
+                if(v>0)cout<<"   Note: vl = "<<jj/nup<<" would make jj an exact mult of vl"
                     " (vl reduced by "<<(vl-vll)<<" or "<<int((vl-vll)*1000.0/vl)*0.1<<"%)"
                     <<"\n         with nloops' = "<<(u.ii*u.jj+vll-1)/vll
                     <<endl;
@@ -606,30 +606,30 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
 #else
     if(1){
 #endif
-        cout<<"Checking vll ... orig alg "<<name(u.suggested)<<" nloops "<<(iijj+vl-1)/vl
+        if(v>0)cout<<"Checking vll ... orig alg "<<name(u.suggested)<<" nloops "<<(iijj+vl-1)/vl
             <<" orig ops~"<<opsOrig<<endl;
         int best_vll=0;
         int best_opsave=0;
         UnrollSuggest best_u;
         for( int vll = vl_max; vll >= vl_min; --vll){
-            cout<<" "<<vll; cout.flush();
+            if(v>0)cout<<" "<<vll; cout.flush();
             UnrollSuggest us = unroll_suggest(vll, u.ii, u.jj, u.b_period_max, 0/*verbose*/);
             int opsave = OpSave(us.suggested, vll);
-            cout<<" ("<<int(vll*1000./vl)*0.1<<"%) ---> alg "<<name(us.suggested)
+            if(v>0)cout<<" ("<<int(vll*1000./vl)*0.1<<"%) ---> alg "<<name(us.suggested)
                 <<" nloops "<<(iijj+vll-1)/vll<<" [save "<<opsave<<"] ";
             if( us.suggested==UNR_DIVMOD && u.suggested!=UNR_UNSET && u.suggested!=UNR_DIVMOD ){
                 // this is the worst, so it cannot be an improvement (and might even have nloop higher)
                 //cout<<" skipped: UNR_DIVMOD "<<endl;
                 //continue;
                 // BUT [new] it might lower vlen without nloop increase?
-                cout<<" bad-orig";
+                if(v>0)cout<<" bad-orig";
             }
             if( u.suggested == UNR_JJMODVL_NORESET
                     || u.suggested == UNR_NLOOP1
                     || u.suggested == UNR_VLMODJJ){
                     //cout<<"  ---> trivial orig "<<name(u.suggested)<<", no better alt"<<endl;
                     //continue;
-                    cout<<" trivial-orig";
+                    if(v>0)cout<<" trivial-orig";
             }
             if(1){
                 // Is this alt any different?
@@ -640,13 +640,13 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
                 //    continue;
                 //}
                 if(us.suggested == u.suggested && opsave>=0 && iijj%vll==0){
-                    cout<<" ACCEPTED! iijj%vll==0"<<endl;
+                    if(v>0)cout<<" ACCEPTED! iijj%vll==0"<<endl;
                     if(opsave >= best_opsave){ best_opsave = opsave; best_vll = vll; best_u=us; }
                     continue;
                 }
                 if(u.suggested==UNR_JJMODVL_RESET /*other JJMODVL trivial, never here*/
                         && (us.suggested==UNR_JJPOW2_NLOOP || us.suggested==UNR_JJPOW2_BIG)){
-                    cout<<"  ---> JJPOW2 without precalc (4 vec ops) never beats JJMODVL"
+                    if(v>0)cout<<"  ---> JJPOW2 without precalc (4 vec ops) never beats JJMODVL"
                         <<" [save "<<opsave<<"]"<<endl;
                     continue;
                 }
@@ -664,32 +664,32 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
                         || (us.suggested==UNR_VLMODJJ /*&& u.nloop == us.nloop*/) // trivial induction!
                         || (us.suggested==UNR_JJMODVL_NORESET /*&& u.nloop == us.nloop*/) // trivial!
                         ){
-                    cout<<" alg "<<name(us.suggested)<<" nicer";
+                    if(v>0)cout<<" alg "<<name(us.suggested)<<" nicer";
                     //ret = us;    // return the nice alt
                     //u.vll = vll; // also record existence-of-alt into u
                     //break;
                     if(opsave<=0) {
-                        cout<<" but higher ops."<<endl;
+                        if(v>0)cout<<" but higher ops."<<endl;
                         continue;
                     }
                 }
 
                 // NEW: base acceptance on opsave (which assumes no unrolling/precalc)
                 if(opsave>=0){
-                    cout<<" ACCEPTED! (might save ops)"<<endl;
+                    if(v>0)cout<<" ACCEPTED! (might save ops)"<<endl;
                     //ret = us;    // return the nice alt
                     //u.vll = vll; // also record existence-of-alt into u
                     //break;
                     if(opsave >= best_opsave){ best_opsave = opsave; best_vll = vll; best_u=us; }
                     continue;
                 }
-                cout<<endl;
+                if(v>0)cout<<endl;
             }
         }
         if(best_vll > 0){
             u.vll = best_vll;
             ret = best_u;
-            cout<<"Best [/lowest equiv] vl "<<u.vl<<" --> "<<u.vll<<" [saved "<<best_opsave<<"]";
+            if(v>0)cout<<"Best [/lowest equiv] vl "<<u.vl<<" --> "<<u.vll<<" [saved "<<best_opsave<<"]";
             //UnrollSuggest us = unroll_suggest(u.vll, u.ii, u.jj, u.b_period_max, 0/*verbose*/);
         }
     }
@@ -701,14 +701,14 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/ ){
         if(vl_equ<=vl_max)          u.vll = vl_equ;      // VE latency-adjusted work balance
         else if(vl_equ_min<=vl_max) u.vll = vl_equ_min;  // else work balance only (not mult of 32)
         if(u.vll != 0){
-            cout<<" vl="<<u.vll<<" ACCEPTED! (for load balance, not unroll)";
+            if(v>0)cout<<" vl="<<u.vll<<" ACCEPTED! (for load balance, not unroll)";
             // This is something like vl_equ round up to mult of 32
             UnrollSuggest us = unroll_suggest(u.vll, u.ii, u.jj, u.b_period_max, 0/*verbose*/);
             ret = us;      // similar alg, but slightly better load balance (~vector latencies)
             // this might actually be bad, if you want very low latency last time through!
         }
     }
-    cout<<endl;
+    if(v>0)cout<<endl;
     return ret;
 }
 
@@ -741,7 +741,7 @@ std::vector<Vab> ref_vloop2(Lpi const vlen, Lpi const ii, Lpi const jj,
         vabs.back().hash =  vhash.u64();
     }
 
-    if(verbose){ // print ref result
+    if(verbose>0){ // print ref result
         // pretty-printing via vecprt
         int const n=8; // output up-to-n [ ... [up-to-n]] ints
         int const bignum = std::max( ii, jj );
