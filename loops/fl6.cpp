@@ -413,6 +413,11 @@ int main(int argc,char**argv){
           default:              {krn = new FLKRN_none(); break;}
         }
         assert( krn != nullptr );
+        assert( krn->vA     == "a" );
+        assert( krn->vB     == "b" );
+        assert( krn->vSEQ0  == "sq" );
+        assert( krn->sVL    == "vl" );
+        assert( krn->vSQIJ  == "sqij" );
         try{
             if(maxun==0){ // no unroll...
 #if 0

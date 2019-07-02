@@ -43,6 +43,7 @@ struct FusedLoopOpt {
     bool const altvl; /// perform a search for alternate lower VL (otherwise use stated VL as-is)
 };
 
+#if 0
 /** loop splitting involves \c for(ilo..ihi)for(jlo..jhi) loops */
 void cf5_kernel(cprog::Cblock& bKrn, cprog::Cblock& bDef, cprog::Cblock& bOut,
         int64_t const ilo, int64_t const ii,
@@ -55,6 +56,7 @@ void cf5_kernel(cprog::Cblock& bKrn, cprog::Cblock& bDef, cprog::Cblock& bOut,
         std::string vA="a", std::string vB="b",
         std::string vSEQ0="sq", std::string sVL="vl"
         );
+#endif
 
 /** produce fused-loop test program.
  *

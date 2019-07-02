@@ -7,8 +7,8 @@ namespace cprog {
 
 using namespace std;
 
-int mk_FASTDIV(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi/*=0*/){
-    int const v=1; // verbosity
+int mk_FASTDIV(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi/*=0*/,
+        int const v/*=0,verbose*/){
     bool const verify=true; // false after code burn-in
     bool const macro_constants = false;
     bool const define_FASTDIV_SHR = false;  // #define?
@@ -20,24 +20,24 @@ int mk_FASTDIV(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi/*=0*/){
     // where Cblock::define will place definitions (may need tweaking?)
     auto& scope=(cb.getName()=="body"? cb: cb["..*/body/.."]);
     string tag = OSSFMT("fastdiv_"<<jj); // "we were here before" tag
-    if(v) cout<<"mk_FASTDIV_"<<jj<<" range "<<vIn_hi<<" to scope "<<scope.fullpath()
+    if(v>1) cout<<"mk_FASTDIV_"<<jj<<" range "<<vIn_hi<<" to scope "<<scope.fullpath()
         //<<" <"<<scope.str()<<">"
         <<endl;;
     if(scope.find(tag)){
-        if(v) cout<<"FASTDIV_"<<jj<<" macro already there"<<endl;
+        if(v>1) cout<<"FASTDIV_"<<jj<<" macro already there"<<endl;
     }else{
         scope[tag].setType("TAG");
-        if(v) cout<<"FASTDIV_"<<jj<<" new macro, input range "<<vIn_hi<<endl;
+        if(v>0) cout<<"FASTDIV_"<<jj<<" new macro, input range "<<vIn_hi<<endl;
         struct fastdiv jj_fastdiv;
         uint32_t fastdiv_ops = 0U;
         {
             fastdiv_make( &jj_fastdiv, (uint32_t)jj );
-            cout<<" mul,add,shr="<<(void*)(intptr_t)jj_fastdiv.mul
+            if(v>2)cout<<" mul,add,shr="<<(void*)(intptr_t)jj_fastdiv.mul
                 <<","<<jj_fastdiv.add<<","<<jj_fastdiv.shift;
             if(jj_fastdiv.mul != 1) ++fastdiv_ops;
             if(jj_fastdiv.add != 0) ++fastdiv_ops;
             if(1) /*shift*/ ++fastdiv_ops;
-            if(v) cout<<" struct fastdiv (mul,add,shr) in "<<fastdiv_ops<<" ops"<<endl;
+            if(v>0) cout<<" struct fastdiv (mul,add,shr) in "<<fastdiv_ops<<" ops"<<endl;
         }
         string fastdiv_macro;
         // Accept fastdiv_ops<=2 because 1) bigger range; 2) sometimes smaller const mult
@@ -73,7 +73,7 @@ int mk_FASTDIV(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi/*=0*/){
 
             fastdiv_macro = mac;
             ret = 2;
-            if(v) cout<<"mk_FASTDIV "<<ret<<" ops, macro="<<fastdiv_macro<<endl;
+            if(v>0) cout<<"mk_FASTDIV "<<ret<<" ops, macro="<<fastdiv_macro<<endl;
             if(verify){ // quick correctness verification
                 uint32_t hi = vIn_hi;
                 if(hi==0){ hi = 257*min(jj,16384U); }
@@ -123,7 +123,7 @@ int mk_FASTDIV(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi/*=0*/){
             }
             fastdiv_macro = mac;
             ret = fastdiv_ops;
-            if(v) cout<<"mk_FASTDIV "<<ret<<" ops, macro="<<fastdiv_macro<<endl;
+            if(v>0) cout<<"mk_FASTDIV "<<ret<<" ops, macro="<<fastdiv_macro<<endl;
             if(verify){ // quick correctness verification
                 uint32_t hi = vIn_hi;
                 if(hi==0){ hi = 257*min(jj,16384U); }
@@ -138,34 +138,34 @@ int mk_FASTDIV(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi/*=0*/){
     return ret;
 }
 
-int mk_DIVMOD(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi/*=0*/){
-    int v=1;
+int mk_DIVMOD(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi/*=0*/,
+        int const v/*=0,verbose*/){
     ostringstream oss;
     // go up to some well-defined scope position and use a named-block to
     // record that this macro exists (try not to duplicate the definition)
     auto& scope=(cb.getName()=="body"? cb: cb["..*/body/.."]); // where Cblock::define will place definitions
-    if(v) cout<<"mk_DIVMOD_"<<jj<<" range "<<vIn_hi<<" to scope "<<scope.fullpath()
+    if(v>1) cout<<"mk_DIVMOD_"<<jj<<" range "<<vIn_hi<<" to scope "<<scope.fullpath()
         //<<" <"<<scope.str()<<">"
         <<endl;
     int nops=0;
     string tag = OSSFMT("divmod_"<<jj);
     if(scope.find(tag)){
-        if(v) cout<<"DIVMOD_"<<jj<<" macro already there"<<endl;
+        if(v>1) cout<<"DIVMOD_"<<jj<<" macro already there"<<endl;
     }else{
         scope[tag].setType("TAG"); // create the tag block "we were here before"
-        if(v) cout<<"DIVMOD_"<<jj<<" new macro"<<endl;
-        int nops = mk_FASTDIV(cb,jj,vIn_hi);
+        if(v>0) cout<<"DIVMOD_"<<jj<<" new macro"<<endl;
+        int nops = mk_FASTDIV(cb,jj,vIn_hi,v);
         string mac = OSSFMT(" \\\n          VDIV = FASTDIV_"<<jj<<"(V); \\\n");
         if(nops==1){
             assert(positivePow2(jj));
-            cout<<("MASK WITH jj-1 for modulus");
+            if(v>1) cout<<("MASK WITH jj-1 for modulus");
             mac = OSSFMT(mac<<"          VMOD = _ve_vand_vsv("<<jithex(jj-1)<<",V)");
             ++nops;
         }else{
             // VE does not have FMA ops for any integer type.
             //     so for 12/24-bit floats could consdier exact-floating calcs,
             //     but conversion ops probably kill this idea (not tried).
-            cout<<("MUL-SUB modulus");
+            if(v>1) cout<<("MUL-SUB modulus");
             mac = OSSFMT(mac<<"          VMOD = _ve_vsubul_vvv(V,_ve_vmulul_vsv("<<jj<<",VDIV))");
             if(!isIval(jj)) mac.append(" /*is non-Ival in register?*/");
             nops+=2;

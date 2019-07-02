@@ -43,6 +43,7 @@ char const*        kernel_name(int const which);  ///< \deprecated
 }//extern "C"
 
 struct FusedLoopKernelAbs {
+    FusedLoopKernelAbs(std::string pfx="Fl_") : pfx(pfx) {}
       virtual ~FusedLoopKernelAbs() = 0;
       virtual char const* name() const = 0;            ///< print name
       virtual struct KernelNeeds needs() const = 0;
@@ -55,7 +56,7 @@ struct FusedLoopKernelAbs {
               std::string extraComment,
               int const v=0                              ///< verbose?
               ) const = 0;
-      std::string pfx;    ///< name local vars to disambiguate kernels
+      std::string pfx;    ///< name local vars to disambiguate kernels. Must not be empty
       static std::ostringstream oss;              ///< for \ref OSSFMT
 };
 inline FusedLoopKernelAbs::~FusedLoopKernelAbs() {} // compulsory, even though empty
@@ -91,6 +92,7 @@ struct FLvars {
      */
       FLvars( FLVARS_CONSTRUCTOR_ARGS )
           : vA(vA),vB(vB),vSEQ0(vSEQ0),sVL(sVL),vSQIJ(vSQIJ)
+      //{ std::cout<<" +vA="<<vA<<" +sVL="<<sVL<<std::endl; }
       {}
       void vars( FLVARS_CONSTRUCTOR_ARGS );
       std::string vA;
@@ -100,11 +102,17 @@ struct FLvars {
       std::string vSQIJ;
 };
 
-/** add standardized string values to FusedLoopKernelAbs (still abstract class) */
+/** add standardized string values to FusedLoopKernelAbs (still abstract class).
+ * Feel free to set the \c pfx to something more descriptive, after construction.
+ */
 struct FusedLoopKernel: public FusedLoopKernelAbs, public FLvars
 {
+    /** constructor, always gives you the default \c pfx.
+     * But you can set \c pfx manually after construction. */
     FusedLoopKernel(FLVARS_CONSTRUCTOR_ARGS)
-        : FusedLoopKernelAbs(), FLvars(vA,vB,vSEQ0,sVL,vSQIJ) {}
+        : FusedLoopKernelAbs(), FLvars(vA,vB,vSEQ0,sVL,vSQIJ)
+    { //std::cout<<" %vA="<<vA<<" %vB="<<vB<<" %vSEQ0="<<vSEQ0<<" %sVL_="<<sVL_<<" %vSQIJ="<<vSQIJ<<std::endl;
+    }
     ~FusedLoopKernel() override {}
 };
 
@@ -126,7 +134,7 @@ struct FLKRN_none final : public FusedLoopKernel
 struct FLKRN_hash final : public FusedLoopKernel
 {
     FLKRN_hash( FLVARS_CONSTRUCTOR_ARGS )
-        : FusedLoopKernel(vA,vB,vSEQ0,vSQIJ) {std::cout<<"+HASH";}
+        : FusedLoopKernel(vA,vB,vSEQ0,sVL,vSQIJ) {/*std::cout<<"+HASH"*/;}
     ~FLKRN_hash() override {} // possible check proper tree state?
     char const* name() const override { return "HASH"; }
     struct KernelNeeds needs() const override;
@@ -140,7 +148,7 @@ struct FLKRN_hash final : public FusedLoopKernel
 struct FLKRN_print final : public FusedLoopKernel
 {
     FLKRN_print( FLVARS_CONSTRUCTOR_ARGS )
-        : FusedLoopKernel(vA,vB,vSEQ0,vSQIJ) {std::cout<<"+PRINT";}
+        : FusedLoopKernel(vA,vB,vSEQ0,sVL,vSQIJ) {std::cout<<"+PRINT";}
     ~FLKRN_print() override {} // possible check proper tree state?
     char const* name() const override { return "PRINT"; }
     struct KernelNeeds needs() const override;
@@ -154,7 +162,7 @@ struct FLKRN_print final : public FusedLoopKernel
 struct FLKRN_check final : public FusedLoopKernel
 {
     FLKRN_check( FLVARS_CONSTRUCTOR_ARGS )
-        : FusedLoopKernel(vA,vB,vSEQ0,vSQIJ) {std::cout<<"+CHECK";}
+        : FusedLoopKernel(vA,vB,vSEQ0,sVL,vSQIJ) {std::cout<<"+CHECK";}
     ~FLKRN_check() override {} // possible check proper tree state?
     char const* name() const override { return "CHECK"; }
     struct KernelNeeds needs() const override;
@@ -168,7 +176,7 @@ struct FLKRN_check final : public FusedLoopKernel
 struct FLKRN_sqij final : public FusedLoopKernel
 {
     FLKRN_sqij( FLVARS_CONSTRUCTOR_ARGS )
-        : FusedLoopKernel(vA,vB,vSEQ0,vSQIJ) {std::cout<<"+SQIJ";}
+        : FusedLoopKernel(vA,vB,vSEQ0,sVL,vSQIJ) {std::cout<<"+SQIJ";}
     ~FLKRN_sqij() override {} // possible check proper tree state?
     char const* name() const override { return "SQIJ"; }
     struct KernelNeeds needs() const override;

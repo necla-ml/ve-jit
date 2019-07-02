@@ -2,6 +2,7 @@ SHELL=/bin/bash
 NCXX:=nc++-2.1.28
 # on Aurora hosts, gcc is extremely old version, with incomplete <regex> impl
 GCXX:=clang++
+# however, clang++ seems still to have ABI bugs.
 GCC:=clang
 CLANG_VI_FLAGS?=-show-spill-message-vec -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics
 CXXLANG_FLAGS:=-target linux-ve -O3 -mllvm $(CLANG_VI_FLAGS)
@@ -895,6 +896,11 @@ fl6: fl6.cpp fl6-kernels.o cf3-common.o fl6-nounroll.o fl6-unroll.o ../libjit1-x
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 fl6-ve: fl6.cpp fl6-kernels-ve.o cf3-common-ve.o fl6-nounroll-ve.o fl6-unroll-ve.o ../libjit1-ve.a ../vechash.hpp ./exechash.hpp
 	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+fl6-bug: fl6-bug.cpp fl6-kernels.o ../libjit1-x86.a ../vechash.hpp ./exechash.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+fl6-bug2: fl6-bug.cpp fl6-kernels.o ../libjit1-x86.a ../vechash.hpp ./exechash.hpp
+	g++ -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+
 
 cfuse3: cfuse3.cpp ../libjit1-x86.a
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@

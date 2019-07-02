@@ -23,7 +23,8 @@ class Cblock;
  *   - if jj is 2^N, use shift/mask (prev method finds this solution)
  *   - if op count is 3 and range restrictions met, use computeM_uB method (mul,shift)
  */
-int mk_FASTDIV(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi=0);
+int mk_FASTDIV(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi=0,
+        int const v=0/*verbose*/);
 
 /** return DIVMOD macro to produce vectors \c vDiv=vReg/jj and \c vMod=vReg%jj where
  * \c jj is a constant divisor.
@@ -59,7 +60,8 @@ int mk_FASTDIV(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi=0);
  *  execution units a little better than pure-lea approaches.
  * 
  */
-int mk_DIVMOD(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi=0);
+int mk_DIVMOD(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi=0,
+        int const v=0/*verbose*/);
 
 }//cprog::
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break

@@ -110,7 +110,8 @@ Cblock& Cblock::unlink() {
  * Otherwise throw if \c p.empty() or use \c at(p) fails to find a path.
  * */
 Cblock& Cblock::operator[](std::string p){
-    if(p.empty()) THROW("Cblock[""] oops");
+    //if(p.empty()) THROW("Cblock[""] oops - empty string!");
+    assert(!p.empty());
     // Be careful to not create sub-block with names containing wildcard strings
     if(p.find("/") != std::string::npos){       // PATH! revert to full-path search
         return this->at(p);                     //       throw if not found
