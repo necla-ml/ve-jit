@@ -4,7 +4,7 @@
 #include "../stringutil.hpp"
 #include "../ve_divmod.hpp"
 #include <fstream>
-//#include <regex>
+#include <cstring>      // strncmp
 
 using namespace std;
 using namespace loop;
@@ -195,6 +195,10 @@ void fl6_unroll_split_ii(
     }else{
         fd>>OSSFMT("// VL was "<<vl_str()<<", same as vl0 = "<<vl0<<" ?");
     }
+    //if(verbose>2 && tag_once(fd0,"dbg"))
+    //    fd0["dbg"]>>OSSFMT("printf(\""<<pfx<<" BEGIN inner fused loops\\n\");");
+    if(verbose>2)
+        fd["dbg"]>>OSSFMT("printf(\""<<pfx<<" fused loops "<<kernComment()<<"\\n\");");
 
     if(unroll==0) { // 'any' small unroll...
         uint32_t un=0U;
@@ -369,8 +373,7 @@ void fl6_unroll_split_ii(
                             "+"<<nloop%cyc<<", cyc_aincr="<<cyc_aincr);
                 }
             }
-#if 0 // debug...
-            if(which==KERNEL_PRINT){
+            if(verbose>2 && strncmp("PRINT",krn.name(),5)==0){
                 auto& dbg = fc["dbg"];
                 dbg>>OSSFMT("printf(\""<<pfx<<" init:\\n\");");
                 for(uint32_t c=0U; c<cyc; ++c){
@@ -378,8 +381,8 @@ void fl6_unroll_split_ii(
                     string bc = OSSFMT(pfx<<"_bcyc_"<<c);
                     dbg>>OSSFMT("fl6_kernel_print("<<ac<<","<<bc<<","<<vl0<<");");
                 }
+                dbg>>OSSFMT("printf(\""<<pfx<<" init: (done printing)\\n\");");
             }
-#endif
         }else{ // reuse previous divmods, only out-by-additive-constant
             int64_t cyc00overjj = (ilo + (nloop/cyc-1U)*cyc_aincr);
             uint64_t corr0 = cyc00overjj - oldcyc00/jj;
@@ -411,8 +414,7 @@ void fl6_unroll_split_ii(
             fp>>OSSFMT(left<<setw(40)<<instr);
             if(c==0U) fp<<OSSFMT(" // nloop="<<nloop/cyc<<"*(cyc="<<cyc<<")+"<<nloop%cyc<<", cyc_aincr="<<cyc_aincr);
         }
-#if 0 // debug...
-        if(which==KERNEL_PRINT){
+        if(verbose>2 && strncmp("PRINT",krn.name(),5)==0){
             auto& dbg = fp["dbg"];
             dbg>>OSSFMT("printf(\""<<pfx<<" reset:\\n\");");
             for(uint32_t c=0U; c<cyc; ++c){
@@ -420,9 +422,8 @@ void fl6_unroll_split_ii(
                 string bc = OSSFMT(pfx<<"_bcyc_"<<c);
                 dbg>>OSSFMT("fl6_kernel_print("<<ac<<","<<bc<<","<<vl0<<");");
             }
-            dbg>>OSSFMT("printf(\""<<pfx<<" reset DONE!\\n\");");
+            dbg>>OSSFMT("printf(\""<<pfx<<" reset: (done printing)\\n\");");
         }
-#endif
         if(!fcp.find("last")) fcp["last"]>>"// Cyclic precalc END";
     }else{ // !cycpre --> declare a[], b[] fused-loop result registers
         if(!fd0.find("vrab")) fd0["vrab"]>>"__vr a,b;";
@@ -493,6 +494,12 @@ void fl6_unroll_split_ii(
         if(krn_needs.cnt){
             fk["last"]>>"cnt=vl0;";
         }
+        //assert(cycpre==0);
+        // XXX but really SHOULD be able to precalc these fixed a[],b[]
+        // XXX also, if "b = sq", then should elide the assignment and use "sq"
+        //  (this mixes with 'fp' init code block, though)
+        krn.vars((cycpre?"TBD-a":"a"), (cycpre?"TBD-b":"b"), "sq",
+                (have_vl()?"vl":"vl0"), "sqij");
         krn.emit(fk,fd,fz, ilo,ii,jlo,jj,vl, kernComment(), verbose);
     }else if(nloop>1){
         //CBLOCK_FOR(loop_ab,0,"for(int64_t cnt=0 ; cnt<iijj; cnt+=vl0)",cf4);
@@ -1110,7 +1117,7 @@ void fl6_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
                             "+"<<nloop%cyc<<", cyc_aincr="<<cyc_aincr);
                 }
             }
-#if 0 // debug...
+#if 1 // debug...
             if(which==KERNEL_PRINT){
                 auto& dbg = fc["dbg"];
                 dbg>>OSSFMT("printf(\""<<pfx<<" init:\\n\");");

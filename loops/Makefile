@@ -900,6 +900,25 @@ fl6-bug: fl6-bug.cpp fl6-kernels.o ../libjit1-x86.a ../vechash.hpp ./exechash.hp
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 fl6-bug2: fl6-bug.cpp fl6-kernels.o ../libjit1-x86.a ../vechash.hpp ./exechash.hpp
 	g++ -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+.PHONY:	fl6-prt fl6-run
+fl6-prt: # u~unroll a~alt-VL, This runs quickly since the JIT codes are only printed
+	@l=fl6x.log;   echo -n "$$l ... "; ./cf5-sample2.sh "./fl6 -kCHECK -u0" >& $$l && echo YAY || echo OHOH
+	@l=fl6y.log;   echo -n "$$l ... "; ./cf5-sample3.sh "./fl6 -kCHECK -u0" >& $$l && echo YAY || echo OHOH
+	@l=fl6xu.log;  echo -n "$$l ... "; ./cf5-sample2.sh "./fl6 -kCHECK -u8" >& $$l && echo YAY || echo OHOH
+	@l=fl6yu.log;  echo -n "$$l ... "; ./cf5-sample3.sh "./fl6 -kCHECK -u8" >& $$l && echo YAY || echo OHOH
+	@l=fl6xa.log;  echo -n "$$l ... "; ./cf5-sample2.sh "./fl6 -kCHECK -u0 -a" >& $$l && echo YAY || echo OHOH
+	@l=fl6ya.log;  echo -n "$$l ... "; ./cf5-sample3.sh "./fl6 -kCHECK -u0 -a" >& $$l && echo YAY || echo OHOH
+	@l=fl6xua.log; echo -n "$$l ... "; ./cf5-sample2.sh "./fl6 -kCHECK -u8 -a" >& $$l && echo YAY || echo OHOH
+	@l=fl6yua.log; echo -n "$$l ... "; ./cf5-sample3.sh "./fl6 -kCHECK -u8 -a" >& $$l && echo YAY || echo OHOH
+fl6-run: # u~unroll a~alt-VL
+	@l=fl6x-r.log;   echo -n "$$l ... "; ./cf5-sample2.sh "./fl.sh fl6" CHECK 0 >& $$l && echo YAY || echo OHOH
+	@l=fl6y-r.log;   echo -n "$$l ... "; ./cf5-sample3.sh "./fl.sh fl6" CHECK 0 >& $$l && echo YAY || echo OHOH
+	@l=fl6xu-r.log;  echo -n "$$l ... "; ./cf5-sample2.sh "./fl.sh fl6" CHECK 8 >& $$l && echo YAY || echo OHOH
+	@l=fl6yu-r.log;  echo -n "$$l ... "; ./cf5-sample3.sh "./fl.sh fl6" CHECK 8 >& $$l && echo YAY || echo OHOH
+	@l=fl6xa-r.log;  echo -n "$$l ... "; ./cf5-sample2.sh "./fl.sh fl6 -a" CHECK 0 >& $$l && echo YAY || echo OHOH
+	@l=fl6ya-r.log;  echo -n "$$l ... "; ./cf5-sample3.sh "./fl.sh fl6 -a" CHECK 0 >& $$l && echo YAY || echo OHOH
+	@l=fl6xua-r.log; echo -n "$$l ... "; ./cf5-sample2.sh "./fl.sh fl6 -a" CHECK 8 >& $$l && echo YAY || echo OHOH
+	@l=fl6yua-r.log; echo -n "$$l ... "; ./cf5-sample3.sh "./fl.sh fl6 -a" CHECK 8 >& $$l && echo YAY || echo OHOH
 
 
 cfuse3: cfuse3.cpp ../libjit1-x86.a

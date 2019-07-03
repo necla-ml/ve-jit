@@ -45,21 +45,22 @@ void FLKRN_check::emit(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
     auto& bInc = bDef.getRoot()["**/includes"];
     if(!bInc.find("stdio.h")) bInc["stdio.h"]>>"#include <stdio.h>";
     if(!bInc.find("assert.h")) bInc["assert.h"]>>"#include <assert.h>";
+    if(!bInc.find("stdlib.h")) bInc["stdlib.h"]>>"#include <stdlib.h>";
     if(as_function){
         auto& bDefKernelFn = bDef["..*/fns/first"];
-        if(bDefKernelFn.find("cf5_kernel_check")==nullptr){
-            CBLOCK_SCOPE(cf5_kernel_check,
+        if(bDefKernelFn.find("fl6_kernel_check")==nullptr){
+            CBLOCK_SCOPE(fl6_kernel_check,
                     "void "
                     "\n__attribute__((noinline))"
-                    "\ncf5_kernel_check(__vr const a, __vr const b, uint64_t const vl,"
+                    "\nfl6_kernel_check(__vr const a, __vr const b, uint64_t const vl,"
                     "\n        uint64_t const cnt, uint64_t const jj,"
                     "\n        uint64_t const ilo, uint64_t const jlo)"
                     ,
                     bDefKernelFn.getRoot(),bDefKernelFn);
 #if 0
-            cf5_kernel_check
+            fl6_kernel_check
                 >>"int v="<<(v?"1;":"(vl<=0?1:0); // clang bug?")
-                >>"if(v){ printf(\"cf5_kernel_check vl=%d cnt=%d jj=%d ilo=%d jlo=%d\\n\",(int)vl,(int)cnt,(int)jj,(int)ilo,(int)jlo);">>"    fflush(stdout); }"
+                >>"if(v){ printf(\"fl6_kernel_check vl=%d cnt=%d jj=%d ilo=%d jlo=%d\\n\",(int)vl,(int)cnt,(int)jj,(int)ilo,(int)jlo);">>"    fflush(stdout); }"
                 >>"for(uint64_t i=0;i<vl;++i){"
                 >>"    if(v){ printf(\"expect a[%lu]=%lu b[%lu]=%lu\\n\",i,ilo+(cnt+i)/jj,i,jlo+(cnt+i)%jj);">>"        fflush(stdout); }"
                 >>"    assert( _ve_lvs_svs_u64(a,i) == ilo+(cnt+i)/jj );"
@@ -67,28 +68,29 @@ void FLKRN_check::emit(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
                 >>"}"
                 ;
 #else
-            if(v>=1) cf5_kernel_check
-                >>"printf(\"cf5_kernel_check vl=%d cnt=%d jj=%d ilo=%d jlo=%d\\n\",(int)vl,(int)cnt,(int)jj,(int)ilo,(int)jlo);"
+            if(v>=1) fl6_kernel_check
+                >>"printf(\"fl6_kernel_check vl=%d cnt=%d jj=%d ilo=%d jlo=%d\\n\",(int)vl,(int)cnt,(int)jj,(int)ilo,(int)jlo);"
                     >>"fflush(stdout);";
-            cf5_kernel_check
+            fl6_kernel_check
                 >>"for(uint64_t i=0;i<vl;++i){"
                 >>"    int64_t const a_i = _ve_lvs_svs_u64(a,i);"
                 >>"    int64_t const b_i = _ve_lvs_svs_u64(b,i);"
                 >>"    int const aok = (a_i == ilo+(cnt+i)/jj);"
                 >>"    int const bok = (b_i == jlo+(cnt+i)%jj);";
-            cf5_kernel_check
+            fl6_kernel_check
                 >>(v>=2?"    if(1){": "    if( !aok || !bok ) {")
-                >>"        printf(\"expect a[%lu]=%lu b[%lu]=%lu but got %ld %ld\\n\","
+                >>"        printf(\"expect a[%lu]=%lu b[%lu]=%lu and got %ld %ld\\n\","
                 >>"               i, ilo+(cnt+i)/jj, i, jlo+(cnt+i)%jj, a_i,b_i);"
                 >>"        fflush(stdout);"
                 >>"    }";
-            cf5_kernel_check
-                >>"    assert( aok );"
-                >>"    assert( bok );"
+            fl6_kernel_check
+                >>"    if(!aok){printf(\" error: %s a[] wrong\\n\",__FILE__);}"
+                >>"    if(!bok){printf(\" error: %s b[] wrong\\n\",__FILE__);}"
+                >>"     if(!aok || !bok) exit(-1);"
                 >>"}";
 #endif
         }
-        string call=OSSFMT("cf5_kernel_check("<<vA<<","<<vB<<","<<sVL<<",cnt,jj,ilo,jlo);");
+        string call=OSSFMT("fl6_kernel_check("<<vA<<","<<vB<<","<<sVL<<",cnt,jj,ilo,jlo);");
         bKrn["chk"]<<OSSFMT(left<<setw(40)<<call<<" // "<<extraComment);
     }else{ // inline  (try to avoid clang bugs with arg-passing)
         auto& chk=bKrn["chk"];
@@ -166,20 +168,20 @@ void FLKRN_print::emit(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
     auto& bInc = bDef.getRoot()["**/includes"];
     if(!bInc.find("stdio.h")) bInc["stdio.h"]>>"#include <stdio.h>";
     auto& bDefKernelFn = bDef["..*/fns/first"];
-    if(bDefKernelFn.find("cf5_kernel_print")==nullptr){
-        CBLOCK_SCOPE(cf5_kernel_print,
-                "void cf5_kernel_print(__vr const a, __vr const b,"
+    if(bDefKernelFn.find("fl6_kernel_print")==nullptr){
+        CBLOCK_SCOPE(fl6_kernel_print,
+                "void fl6_kernel_print(__vr const a, __vr const b,"
                 "\n        uint64_t const vl)",bDefKernelFn.getRoot(),bDefKernelFn);
-        cf5_kernel_print
+        fl6_kernel_print
             >>"int const terse=1;"
             >>"char const* linesep=\"\\n      \";"
-            >>"printf(\"cf5_kernel_print(a,b,vl=%lu)\\n\",vl);"
+            >>"printf(\"fl6_kernel_print(a,b,vl=%lu)\\n\",vl);"
             >>"printf(\"a[%3llu]={\",(long long unsigned)vl);"
             >>"for(int i=0;i<vl;++i){"
             >>"    if(terse && vl>=16) linesep=(vl>16 && i==7? \" ...\": \"\");"
             >>"    if(terse && vl>16 && i>=8 && i<vl-8) continue;"
-            >>"    printf(\"%3llu%s\",\n"
-            >>"      (long long unsigned)_ve_lvs_svs_u64(a,i),"
+            >>"    printf(\"%3lld%s\",\n"
+            >>"      (long long signed)_ve_lvs_svs_u64(a,i),"
             >>"      (i%16==15? linesep: \" \")); }"
             >>"printf(\"}\\n\");"
             >>"linesep=\"\\n   \";"
@@ -187,13 +189,13 @@ void FLKRN_print::emit(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
             >>"for(int i=0;i<vl;++i){"
             >>"    if(terse && vl>=16) linesep=(vl>16 && i==7? \" ...\": \"\");"
             >>"    if(terse && vl>16 && i>=8 && i<vl-8) continue;"
-            >>"    printf(\"%3llu%s\",\n"
-            >>"      (long long unsigned)_ve_lvs_svs_u64(b,i),"
+            >>"    printf(\"%3lld%s\",\n"
+            >>"      (long long signed)_ve_lvs_svs_u64(b,i),"
             >>"      (i%16==15? linesep: \" \")); }"
             >>"printf(\"}\\n\");"
             ;
     }
-    bKrn["prt"]<<"cf5_kernel_print("<<vA<<", "<<vB<<", "<<sVL<<");";
+    bKrn["prt"]<<"fl6_kernel_print("<<vA<<", "<<vB<<", "<<sVL<<");";
     if(!extraComment.empty()) bKrn["prt"]<<" // "<<extraComment;
     if(!bOut.find("out_once")){
         bOut>>"printf(\"cfuse KERNEL_PRINT done!\\n\");";

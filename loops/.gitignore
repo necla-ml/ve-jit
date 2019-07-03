@@ -38,3 +38,4 @@ tmpcf*
 *.rej
 fl6
 old
+fl*.log
