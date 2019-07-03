@@ -20,7 +20,7 @@
 
 #include <inttypes.h>
 
-#include <link.h>
+#include <link.h>       // not available on Cygwin
 #include <dlfcn.h>
 
 #if !defined(__ELF_NATIVE_CLASS) /* VE compatibility patch */
