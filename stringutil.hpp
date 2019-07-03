@@ -235,7 +235,8 @@ std::string vecprt(int const n, int const wide, std::vector<T> v, int const vl){
     return oss.str();
 }
 
-/** open and close a tmp file from \c mkstemp, returning its name. */
+/** open and close a tmp file from \c mkstemp, returning its name.
+ * Cygwin would have to use _mktemp, I think. */
 inline std::string my_tmpnam() {
     std::string templ("tmpXXXXXX");
     char * templ_data = const_cast<char*>(templ.data()); // c++17 for non-const 'data()'

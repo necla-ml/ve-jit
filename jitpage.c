@@ -20,7 +20,9 @@
 
 #include <inttypes.h>
 
+#ifndef __CYGWIN__
 #include <link.h>       // not available on Cygwin
+#endif
 #include <dlfcn.h>
 
 #if !defined(__ELF_NATIVE_CLASS) /* VE compatibility patch */
@@ -309,6 +311,7 @@ void * dlopen_rel(char const* const relpath, int opt){
 /** use 0 to see full output */
 #define REMOVE_CODE 0
 
+#if !defined(__CYGWIN__)
 ///////////////////////////////////////////////////////////////////////////////
 #define BumpDyn(dyn,tag) do{ \
     for (; dyn->d_tag != DT_NULL; ++dyn) { \
@@ -359,9 +362,14 @@ FindPtr(const ElfW(Addr) load_addr,
 ///////////////////////////////////////////////////////////////////////////////
 #define Title(...) do{printf("-------------------------------------------------" \
         "------------------------------\n" __VA_ARGS__); fflush(stdout);}while(0)
+#endif //Cygwin
 
 void dl_dump(void * const handle){
-#ifndef _GNU_SOURCE
+#if defined(__CYGWIN__)
+    printf("Cygwin uses COFF format (dl_dump requires ELF)\n");
+
+#else
+#if !defined(_GNU_SOURCE)
 # warning Not using GNU extensions (dl_dump may not work)
 #endif
 #if 1 // try to compile anyway
@@ -595,6 +603,7 @@ void dl_dump(void * const handle){
 #endif //REMOVE_CODE < 5
 #endif
     return;
+#endif // CYGWIN
 }
 
 #endif // JIT_DLFUNCS

@@ -612,7 +612,7 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/, int const v/*=
         int best_opsave=0;
         UnrollSuggest best_u;
         for( int vll = vl_max; vll >= vl_min; --vll){
-            if(v>0)cout<<" "<<vll; cout.flush();
+            if(v>0){cout<<" "<<vll; cout.flush();}
             UnrollSuggest us = unroll_suggest(vll, u.ii, u.jj, u.b_period_max, 0/*verbose*/);
             int opsave = OpSave(us.suggested, vll);
             if(v>0)cout<<" ("<<int(vll*1000./vl)*0.1<<"%) ---> alg "<<name(us.suggested)
