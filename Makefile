@@ -5,6 +5,14 @@ SHELL:=/bin/bash
 # major clean and rebuild tests:
 #   dllbuild
 
+UNAME_S:=$(shell uname -s)
+OS:=$(patsubst(CYGWIN%,Cygwin,$(UNAME_S))
+ifeq ($(OS),Cygwin)
+READELF:='echo readelf'
+else
+READELF:=readelf
+endif
+
 ifneq ($(CC:ncc%=ncc),ncc)
 
 #
@@ -190,17 +198,17 @@ libjit1.a: asmfmt-ve.o jitpage-ve.o intutil-ve.o \
 	fuseloop-ve.o ve_divmod-ve.o
 	rm -f $@
 	$(AR) rcs $@ $^
-	readelf -h $@
+	$(READELF) -h $@
 # Simple code without C++ init section crap to avoid VE dynamic loader bug
 # with iostream initialization ... TEMPORARY WORKAROUND
 libjit1-justc-ve.a: jitpage-ve.o intutil-ve.o bin.mk-ve.lo
 	rm -f $@
 	$(AR) rcs $@ $^
-	readelf -h $@
+	$(READELF) -h $@
 libjit1-justc-x86.a: jitpage-x86.o intutil-x86.o bin.mk-x86.lo
 	rm -f $@
 	$(AR) rcs $@ $^
-	readelf -h $@
+	$(READELF) -h $@
 # The other part of the VE bug workaround is to distribute the C++ part
 # of libjit1 as a .lo object file, or as a monolithic C++ source file.
 # I'll also include libveli .cpp codes into the monolithic version
@@ -253,8 +261,8 @@ ve_divmod-ve.o: ve_divmod.cpp
 libjit1.so: jitpage.lo intutil.lo bin.mk-ve.lo \
 	asmfmt.lo asmblock-ve.lo cblock-ve.lo dllbuild-ve.lo fuseloop-ve.lo ve_divmod-ve.lo # C++ things
 	$(CXX) -o $@ -shared -Wl,-trace -wL,-verbose $^ #-ldl #-lnc++
-	readelf -h $@
-	readelf -d $@
+	$(READELF) -h $@
+	$(READELF) -d $@
 intutil.lo: intutil.c intutil.h
 	$(CC) ${CFLAGS} -fPIC -O2 -c $< -o $@
 jitpage.lo: jitpage.c jitpage.h
@@ -281,14 +289,14 @@ libjit1-x86.a: asmfmt-x86.o jitpage-x86.o intutil-x86.o \
 		vechash-x86.o asmblock-x86.o ve-msk-x86.o
 	rm -f $@
 	ar rcs $@ $^
-	readelf -h $@
-	readelf -d $@
+	$(READELF) -h $@
+	$(READELF) -d $@
 libjit1-x86.so: asmfmt-x86.lo jitpage-x86.lo intutil-x86.lo \
 		cblock-x86.lo dllbuild-x86.lo bin.mk-x86.lo fuseloop-x86.lo ve_divmod-x86.lo \
 		vechash-x86.lo asmblock-x86.lo ve-msk-x86.lo
 	gcc -o $@ -shared $^ # -ldl
-	readelf -h $@
-	readelf -d $@
+	$(READELF) -h $@
+	$(READELF) -d $@
 asmfmt-x86.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp stringutil.hpp jitpage.h
 	g++ ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
 asmfmt-x86.lo: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
@@ -520,14 +528,14 @@ bin.mk-x86.lo bin_mk.c: bin.mk ftostring
 	# objcopy method lacks --add-symbol.  could use custom linker script, but use ftostring...
 	./ftostring bin.mk bin_mk >& bin_mk.c
 	gcc -fPIC -c bin_mk.c -o $@ #&& rm -f bin_mk.c
-	readelf -s $@
-	readelf -h $@
+	$(READELF) -s $@
+	$(READELF) -h $@
 bin.mk-ve.lo: bin.mk ftostring
 	# objcopy method lacks --add-symbol.  could use custom linker script, but use ftostring...
 	./ftostring bin.mk bin_mk >& bin_mk.c
 	$(CC) -fPIC -c bin_mk.c -o $@ #&& rm -f bin_mk.c
-	readelf -s $@
-	readelf -h $@
+	$(READELF) -s $@
+	$(READELF) -h $@
 #bin.mk-ve.o: bin.mk
 #	nobjcopy --input binary --output elf64-ve --binary-architecture ve \
 #		--rename-section .data=.rodata,alloc,load,readonly,data,contents \
@@ -576,10 +584,10 @@ dllvebug.log:
 	# NOTE **all** above fail because dllbuild-veb is linked with a shared C++ library.
 dllbuild-x86: dllbuild.cpp libjit1-x86.a
 	g++ -o $@ $(CXXFLAGS) -Wall -Werror -DDLLBUILD_MAIN $< -L. libjit1-x86.a -ldl
-	readelf -d $@
+	$(READELF) -d $@
 dllbuild-x86b: dllbuild.cpp libjit1-x86.so
 	g++ -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1-x86.so -ldl
-	readelf -d $@
+	$(READELF) -d $@
 dllbuild-ve: dllbuild.cpp libjit1.a
 	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1.a -ldl
 	nreadelf -d $@
