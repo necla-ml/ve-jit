@@ -486,7 +486,7 @@ void cf5_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
         if(krn_needs.cnt){
             fk["last"]>>"cnt=vl0;";
         }
-        cf5_kernel(fk,fd,fz, ilo,ii,jlo,jj,vl, kernComment(), which,
+        cf5_kernel(outer,fd,fk,fz, ilo,ii,jlo,jj,vl, kernComment(), which,
                 pfx,0,"a","b","sq","vl0");
     }else if(nloop>1){
         //CBLOCK_FOR(loop_ab,0,"for(int64_t cnt=0 ; cnt<iijj; cnt+=vl0)",cf4);
@@ -597,7 +597,7 @@ void cf5_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
             //fuse2_kernel(fk, fd, fz, ii,jj,vl, kernComment(), which,
             //        OSSFMT("fuse2_unr"<<(cycpre?"cyc":""))/*pfx*/, 1/*verbose*/,
             //        (cycpre?ac:"a"), (cycpre?bc:"b"), "sq", "vl");
-            cf5_kernel(fk,fd,fz, ilo,ii,jlo,jj,vl, ""/*kernComment()*/, which,
+            cf5_kernel(outer,fd,fk,fz, ilo,ii,jlo,jj,vl, ""/*kernComment()*/, which,
                     pfx,1/*verbose*/,
                     (cycpre?ac:"a"), (cycpre?bc:"b"), "sq",
                     (have_vl()?"vl":"vl0"));

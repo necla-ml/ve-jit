@@ -321,7 +321,7 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
             fd["have_cnt"].setType("TAG");
             fk["last"]>>"cnt=vl0;";
         }
-        fuse2_kernel(fk, fd, fz, ii,jj,vl, kernComment(), which);
+        fuse4_kernel(outer, fd, fk, fz, ii,jj,vl, kernComment(), which);
     }else if(nloop>1){
         //CBLOCK_FOR(loop_ab,0,"for(int64_t cnt=0 ; cnt<iijj; cnt+=vl0)",cf4);
         //--------------------------------------- cnt_update; cnt_test
@@ -422,7 +422,8 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
             }
 
             // fk
-            fuse2_kernel(fk, fd, fz, ii,jj,vl, kernComment(), which,
+            fuse4_kernel(outer, fd, fk, fz,
+                    ii,jj,vl, kernComment(), which,
                     OSSFMT("fuse2_unr"<<(cycpre?"cyc":""))/*pfx*/, 1/*verbose*/,
                     (cycpre?ac:"a"), (cycpre?bc:"b"), "sq", "vl");
 

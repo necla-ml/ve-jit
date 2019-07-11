@@ -242,7 +242,7 @@ void cf5_no_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
         if(krn_needs.cnt){
             fk["last"]>>"cnt=vl0;";
         }
-        cf5_kernel(fk,fd,fz, ilo,ii,jlo,jj,vl, kernComment(), which,
+        cf5_kernel(outer,fd,fk,fz, ilo,ii,jlo,jj,vl, kernComment(), which,
                 pfx,0,"a","b","sq","vl0");
     }else if(nloop>1){
         //CBLOCK_FOR(loop_ab,0,"for(int64_t cnt=0 ; cnt<iijj; cnt+=vl0)",inner);
@@ -277,7 +277,7 @@ void cf5_no_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
         }
 
         // fk
-        cf5_kernel(fk, fd, fz, ilo,ii,jlo,jj,vl, kernComment(), which,
+        cf5_kernel(outer, fd, fk, fz, ilo,ii,jlo,jj,vl, kernComment(), which,
                 pfx,0,"a","b","sq",(fd0.find("decl_vl")?"vl":"vl0"));
 
         // manage a,b induction, vl change (loop exit?)

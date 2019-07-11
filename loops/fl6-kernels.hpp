@@ -27,37 +27,49 @@
 #define WHICH_KERNEL KERNEL_CHECK
 
 extern "C" {
-/** bool flags indicating kernel requests for certain defined variables.
- * Variable existence is flagged with tags in the Cblock tree in a 'definitions'
- * code block. */
-struct KernelNeeds{
-    uint8_t cnt;        ///< fd["have_cnt"]  cnt=0, vl0, 2*vl0, etc, also defined at exit of fused-loop scope
-    uint8_t iijj;       ///< fd["have_iijj"] const ii*jj product of loop limits
-    uint8_t sq;         ///< fd["have_sq"]   const {0..vl-1} vector
-    uint8_t sqij;       ///< fd["have_sqij"] {cnt..cnt+vl-1} vector
-    uint8_t vl;         ///< fd["have_vl"]   current VL scalar
-};
+    /** bool flags indicating kernel requests for certain defined variables.
+     * Variable existence is flagged with tags in the Cblock tree in a 'definitions'
+     * code block. */
+    struct KernelNeeds{
+        uint8_t cnt;        ///< fd["have_cnt"]  cnt=0, vl0, 2*vl0, etc, also defined at exit of fused-loop scope
+        uint8_t iijj;       ///< fd["have_iijj"] const ii*jj product of loop limits
+        uint8_t sq;         ///< fd["have_sq"]   const {0..vl-1} vector
+        uint8_t sqij;       ///< fd["have_sqij"] {cnt..cnt+vl-1} vector
+        uint8_t vl;         ///< fd["have_vl"]   current VL scalar
+    };
 
-struct KernelNeeds kernel_needs(int const which); ///< \deprecated
-char const*        kernel_name(int const which);  ///< \deprecated
+    struct KernelNeeds kernel_needs(int const which); ///< \deprecated
+    char const*        kernel_name(int const which);  ///< \deprecated
 }//extern "C"
 
 struct FusedLoopKernelAbs {
     FusedLoopKernelAbs(std::string pfx="Fl_") : pfx(pfx) {}
-      virtual ~FusedLoopKernelAbs() = 0;
-      virtual char const* name() const = 0;            ///< print name
-      virtual struct KernelNeeds needs() const = 0;
-      virtual void emit(cprog::Cblock& bKrn, cprog::Cblock& bDef, cprog::Cblock& bOut,
-              /* \e ALWAYS variables */
-              int64_t const ilo, int64_t const ii,
-              int64_t const jlo, int64_t const jj,
-              /* optional */
-              int64_t const vl,
-              std::string extraComment,
-              int const v=0                              ///< verbose?
-              ) const = 0;
-      std::string pfx;    ///< name local vars to disambiguate kernels. Must not be empty
-      static std::ostringstream oss;              ///< for \ref OSSFMT
+    virtual ~FusedLoopKernelAbs() = 0;
+    virtual char const* name() const = 0;            ///< print name
+    virtual struct KernelNeeds needs() const = 0;
+    /** add support for kernel into JIT code tree.
+     * \p bOuter  function scope (around outer loops, unique)
+     * \p bInner  at beginning of inner scope, unique
+     * \p bDef    inner loop block with kernel invocations, multiple possible
+     * \p bKrn    invoke the kernel (may change as \c emit calls occur)
+     * \p bOut    final 'output' block (sometimes need this to avoid
+     *            having compiler optimize away all kernel calls)
+     * Since bOuter and bInner are "const" throughout a function scope,
+     * they should be set up by concrete class constructors for readability.
+     */
+    virtual void emit(
+            //cprog::Cblock& bOuter, cprog::Cblock& bInner,
+            cprog::Cblock& bDef, cprog::Cblock& bKrn, cprog::Cblock& bOut,
+            /* \e ALWAYS variables */
+            int64_t const ilo, int64_t const ii,
+            int64_t const jlo, int64_t const jj,
+            /* optional */
+            int64_t const vl,
+            std::string extraComment,
+            int const v=0                              ///< verbose?
+            ) const = 0;
+    std::string pfx;    ///< name local vars to disambiguate kernels. Must not be empty
+    static std::ostringstream oss;              ///< for \ref OSSFMT
 };
 inline FusedLoopKernelAbs::~FusedLoopKernelAbs() {} // compulsory, even though empty
 
@@ -76,6 +88,10 @@ struct FLvars {
     std::string vA="a", std::string vB="b", \
     std::string vSEQ0="sq", std::string sVL="vl", \
     std::string vSQIJ="sqij"
+#define FLVARS_CONSTRUCTOR_ARGS2 \
+    std::string vA/*="a"*/, std::string vB/*="b"*/, \
+    std::string vSEQ0/*="sq"*/, std::string sVL/*="vl"*/, \
+    std::string vSQIJ/*="sqij"*/
     /** code around the fused loop may name things differently.
      * @param vA        ["a"] vector of for loop /e i indices
      * @param vB        ["b"] vector of for loop /e j indices
@@ -90,16 +106,16 @@ struct FLvars {
      *
      * - A kernel can ignore any of these it doesn't need.
      */
-      FLvars( FLVARS_CONSTRUCTOR_ARGS )
-          : vA(vA),vB(vB),vSEQ0(vSEQ0),sVL(sVL),vSQIJ(vSQIJ)
-      //{ std::cout<<" +vA="<<vA<<" +sVL="<<sVL<<std::endl; }
-      {}
-      void vars( FLVARS_CONSTRUCTOR_ARGS );
-      std::string vA;
-      std::string vB;
-      std::string vSEQ0;
-      std::string sVL;
-      std::string vSQIJ;
+    FLvars( FLVARS_CONSTRUCTOR_ARGS )
+        : vA(vA),vB(vB),vSEQ0(vSEQ0),sVL(sVL),vSQIJ(vSQIJ)
+          //{ std::cout<<" +vA="<<vA<<" +sVL="<<sVL<<std::endl; }
+    {}
+    void vars( FLVARS_CONSTRUCTOR_ARGS );
+    std::string vA;
+    std::string vB;
+    std::string vSEQ0;
+    std::string sVL;
+    std::string vSQIJ;
 };
 
 /** add standardized string values to FusedLoopKernelAbs (still abstract class).
@@ -109,22 +125,34 @@ struct FusedLoopKernel: public FusedLoopKernelAbs, public FLvars
 {
     /** constructor, always gives you the default \c pfx.
      * But you can set \c pfx manually after construction. */
-    FusedLoopKernel(FLVARS_CONSTRUCTOR_ARGS)
+    FusedLoopKernel(
+            cprog::Cblock& bOuter, cprog::Cblock& bInner,
+            FLVARS_CONSTRUCTOR_ARGS)
         : FusedLoopKernelAbs(), FLvars(vA,vB,vSEQ0,sVL,vSQIJ)
+          , outer(bOuter), inner(bInner)
     { //std::cout<<" %vA="<<vA<<" %vB="<<vB<<" %vSEQ0="<<vSEQ0<<" %sVL_="<<sVL_<<" %vSQIJ="<<vSQIJ<<std::endl;
     }
     ~FusedLoopKernel() override {}
+    cprog::Cblock& outer;
+    cprog::Cblock& inner;
 };
+/** factory */
+FusedLoopKernel* mkFusedLoopKernel(int const which,
+        cprog::Cblock& outer, cprog::Cblock& inner,
+        FLVARS_CONSTRUCTOR_ARGS);
 
 /** empty kernel - OK for browsing the generating JIT code. */
 struct FLKRN_none final : public FusedLoopKernel
 {
-    FLKRN_none( FLVARS_CONSTRUCTOR_ARGS )
-        : FusedLoopKernel(vA,vB,vSEQ0,sVL,vSQIJ) {std::cout<<"+NONE";}
+    FLKRN_none(cprog::Cblock& bOuter, cprog::Cblock& bInner,
+            FLVARS_CONSTRUCTOR_ARGS )
+        : FusedLoopKernel(bOuter,bInner,vA,vB,vSEQ0,sVL,vSQIJ)
+    {/*std::cout<<"+NONE";*/}
     ~FLKRN_none() override {} // possible check proper tree state?
     char const* name() const override { return "NONE"; }
     struct KernelNeeds needs() const override;
-    void emit(cprog::Cblock& bKrn, cprog::Cblock& bDef, cprog::Cblock& bOut,
+    void emit(cprog::Cblock& bDef,
+            cprog::Cblock& bKrn, cprog::Cblock& bOut,
             int64_t const ilo, int64_t const ii,
             int64_t const jlo, int64_t const jj,
             int64_t const vl, std::string extraComment, int const v=0/*verbose*/
@@ -133,12 +161,15 @@ struct FLKRN_none final : public FusedLoopKernel
 /** kernel that calculates a "correctness hash" of a[],b[] fused-loop index vectors. */
 struct FLKRN_hash final : public FusedLoopKernel
 {
-    FLKRN_hash( FLVARS_CONSTRUCTOR_ARGS )
-        : FusedLoopKernel(vA,vB,vSEQ0,sVL,vSQIJ) {/*std::cout<<"+HASH"*/;}
+    FLKRN_hash(cprog::Cblock& bOuter, cprog::Cblock& bInner,
+            FLVARS_CONSTRUCTOR_ARGS )
+        : FusedLoopKernel(bOuter,bInner,vA,vB,vSEQ0,sVL,vSQIJ)
+    {/*std::cout<<"+HASH"*/;}
     ~FLKRN_hash() override {} // possible check proper tree state?
     char const* name() const override { return "HASH"; }
     struct KernelNeeds needs() const override;
-    void emit(cprog::Cblock& bKrn, cprog::Cblock& bDef, cprog::Cblock& bOut,
+    void emit(cprog::Cblock& bDef,
+            cprog::Cblock& bKrn, cprog::Cblock& bOut,
             int64_t const ilo, int64_t const ii,
             int64_t const jlo, int64_t const jj,
             int64_t const vl, std::string extraComment, int const v=0/*verbose*/
@@ -147,12 +178,15 @@ struct FLKRN_hash final : public FusedLoopKernel
 /** kernel the prints the a[], b[] fused-loop index vectors. */
 struct FLKRN_print final : public FusedLoopKernel
 {
-    FLKRN_print( FLVARS_CONSTRUCTOR_ARGS )
-        : FusedLoopKernel(vA,vB,vSEQ0,sVL,vSQIJ) {std::cout<<"+PRINT";}
+    FLKRN_print(cprog::Cblock& bOuter, cprog::Cblock& bInner,
+            FLVARS_CONSTRUCTOR_ARGS )
+        : FusedLoopKernel(bOuter,bInner,vA,vB,vSEQ0,sVL,vSQIJ)
+    {std::cout<<"+PRINT";}
     ~FLKRN_print() override {} // possible check proper tree state?
     char const* name() const override { return "PRINT"; }
     struct KernelNeeds needs() const override;
-    void emit(cprog::Cblock& bKrn, cprog::Cblock& bDef, cprog::Cblock& bOut,
+    void emit(cprog::Cblock& bDef,
+            cprog::Cblock& bKrn, cprog::Cblock& bOut,
             int64_t const ilo, int64_t const ii,
             int64_t const jlo, int64_t const jj,
             int64_t const vl, std::string extraComment, int const v=0/*verbose*/
@@ -161,12 +195,15 @@ struct FLKRN_print final : public FusedLoopKernel
 /** kernel that executes a correctness check of a[], b[] fused-loop index vectors. */
 struct FLKRN_check final : public FusedLoopKernel
 {
-    FLKRN_check( FLVARS_CONSTRUCTOR_ARGS )
-        : FusedLoopKernel(vA,vB,vSEQ0,sVL,vSQIJ) {std::cout<<"+CHECK";}
+    FLKRN_check(cprog::Cblock& bOuter, cprog::Cblock& bInner,
+            FLVARS_CONSTRUCTOR_ARGS )
+        : FusedLoopKernel(bOuter,bInner,vA,vB,vSEQ0,sVL,vSQIJ)
+    {/*std::cout<<"+CHECK";*/}
     ~FLKRN_check() override {} // possible check proper tree state?
     char const* name() const override { return "CHECK"; }
     struct KernelNeeds needs() const override;
-    void emit(cprog::Cblock& bKrn, cprog::Cblock& bDef, cprog::Cblock& bOut,
+    void emit(cprog::Cblock& bDef,
+            cprog::Cblock& bKrn, cprog::Cblock& bOut,
             int64_t const ilo, int64_t const ii,
             int64_t const jlo, int64_t const jj,
             int64_t const vl, std::string extraComment, int const v=0/*verbose*/
@@ -175,12 +212,15 @@ struct FLKRN_check final : public FusedLoopKernel
 /** dummy kernel that wants \c KernelNeeds an sqij input vector. */
 struct FLKRN_sqij final : public FusedLoopKernel
 {
-    FLKRN_sqij( FLVARS_CONSTRUCTOR_ARGS )
-        : FusedLoopKernel(vA,vB,vSEQ0,sVL,vSQIJ) {std::cout<<"+SQIJ";}
+    FLKRN_sqij(cprog::Cblock& bOuter, cprog::Cblock& bInner,
+            FLVARS_CONSTRUCTOR_ARGS )
+        : FusedLoopKernel(bOuter,bInner,vA,vB,vSEQ0,sVL,vSQIJ)
+    {/*std::cout<<"+SQIJ";*/}
     ~FLKRN_sqij() override {} // possible check proper tree state?
     char const* name() const override { return "SQIJ"; }
     struct KernelNeeds needs() const override;
-    void emit(cprog::Cblock& bKrn, cprog::Cblock& bDef, cprog::Cblock& bOut,
+    void emit(cprog::Cblock& bDef,
+            cprog::Cblock& bKrn, cprog::Cblock& bOut,
             int64_t const ilo, int64_t const ii,
             int64_t const jlo, int64_t const jj,
             int64_t const vl, std::string extraComment, int const v=0/*verbose*/

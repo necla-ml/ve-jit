@@ -33,7 +33,24 @@ struct KernelNeeds FLKRN_print::needs() const{ return kernel_needs_default[KERNE
 struct KernelNeeds FLKRN_check::needs() const{ return kernel_needs_default[KERNEL_CHECK]; }
 struct KernelNeeds FLKRN_sqij::needs() const{ return kernel_needs_default[KERNEL_SQIJ]; }
 
-void FLKRN_check::emit(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
+FusedLoopKernel* mkFusedLoopKernel(int const which,
+        cprog::Cblock& outer, cprog::Cblock& inner,
+        FLVARS_CONSTRUCTOR_ARGS2){
+    FusedLoopKernel *krn = nullptr;
+#define FLKRN_ARGS outer,inner,vA,vB,vSEQ0,sVL,vSQIJ
+    switch(which){
+      case(KERNEL_NONE):    {krn = new FLKRN_none (FLKRN_ARGS); break;}
+      case(KERNEL_HASH):    {krn = new FLKRN_hash (FLKRN_ARGS); break;}
+      case(KERNEL_PRINT):   {krn = new FLKRN_print(FLKRN_ARGS); break;}
+      case(KERNEL_CHECK):   {krn = new FLKRN_check(FLKRN_ARGS); break;}
+      case(KERNEL_SQIJ):    {krn = new FLKRN_sqij (FLKRN_ARGS); break;}
+      default:              {krn = new FLKRN_none (FLKRN_ARGS); break;}
+    }
+#undef FLKRN_ARGS
+    return krn;
+}
+void FLKRN_check::emit(Cblock& bDef,
+        Cblock& bKrn, Cblock& bOut,
         int64_t const ilo, int64_t const ii,
         int64_t const jlo, int64_t const jj,
         int64_t const vl, std::string extraComment, int const v/*=0, verbose*/
@@ -112,7 +129,8 @@ void FLKRN_check::emit(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
     }
 }
 
-void FLKRN_none::emit(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
+void FLKRN_none::emit(Cblock& bDef,
+        Cblock& bKrn, Cblock& bOut,
         int64_t const ilo, int64_t const ii,
         int64_t const jlo, int64_t const jj,
         int64_t const vl, std::string extraComment, int const v/*=0, verbose*/
@@ -120,26 +138,36 @@ void FLKRN_none::emit(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
     bKrn["beg"]>>OSSFMT("// KERNEL("<<vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"])");
     if(!extraComment.empty()) bKrn["beg"]<<extraComment;
 }
-void FLKRN_hash::emit(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
+void FLKRN_hash::emit(Cblock& bDef,
+        Cblock& bKrn, Cblock& bOut,
         int64_t const ilo, int64_t const ii,
         int64_t const jlo, int64_t const jj,
         int64_t const vl, std::string extraComment, int const v/*=0, verbose*/
         ) const{
-    std::string vh2 = pfx + "VecHash2";
-    // constants moved upwards to beginning of scope enclosing bDef
-    auto& bDefConst = bDef["..*/first"];
+    {
+        // constants moved upwards to beginning of scope enclosing bDef
+        auto& bDefConst = bDef["..*/first"];
+        string vSeq = (vSEQ0.empty()? "_ve_vseq_v()": vSEQ0);
+        VecHash2::kern_C_begin(outer,inner,bDefConst, vSeq.c_str(), vl);
+        if(!bDefConst.find("have_vechash2_kernel")){
+            auto m = VecHash2::kern_C_macro("VECHASH2_KERNEL");
+            bDefConst.define(m.first,m.second);
+            bDefConst["have_vechash2_kernel"].setType("TAG");
+        }
+    }
+    //std::string vh2 = pfx + "VecHash2";
+    std::string vh2 = "vh2_hash"; // new kern_C_begin !
     // state variables at end of bDef
     auto& bDefState = bDef["last"]["vechash"];
     if(bDefState.code_str().empty()){
-        string vSeq = (vSEQ0.empty()? "_ve_vseq_v()": vSEQ0);
-        VecHash2::kern_C_begin(bDefConst, vSeq.c_str(), vl);
-        auto instr = OSSFMT("int64_t "<<vh2<<" = 0;");
-        bDefState>>OSSFMT(left<<setw(40)<<instr)
-            <<" // vh2({a,b}) hash output";
+        //auto instr = OSSFMT("int64_t "<<vh2<<" = 0;");
+        //bDefState>>OSSFMT(left<<setw(40)<<instr)
+        //    <<" // vh2({a,b}) hash output";
         auto& bInc = bDef.getRoot()["**/includes"];
         if(!bInc.find("stdio.h")) bInc["stdio.h"]>>"#include <stdio.h>";
         if(!bOut.find("out_once")){
-            bOut>>"printf(\"jit "<<vh2<<" = %llu\\n\",(long long unsigned)"<<vh2<<");";
+            bOut>>"printf(\""<<pfx<<" jit "<<vh2<<" = %llu\\n\""
+                ",(long long unsigned)"<<vh2<<");";
             bOut["out_once"].setType("TAG");
         }
     }
@@ -148,18 +176,14 @@ void FLKRN_hash::emit(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
     if(!extraComment.empty()) bKrn["beg"]<<" "<<extraComment;
     VecHash2::kern_C(bKrn[OSSFMT(pfx<<"_VecHash2")],vA,vB,sVL,vh2);
 #else // NEW: as macro
-    if(!bDefConst.find("have_vechash2_kernel")){
-        auto m = VecHash2::kern_C_macro("VECHASH2_KERNEL");
-        bDefConst.define(m.first,m.second);
-        bDefConst["have_vechash2_kernel"].setType("TAG");
-    }
     auto instr = OSSFMT("VECHASH2_KERNEL("<<vA<<","<<vB<<","<<sVL<<","<<vh2<<");");
     auto node = OSSFMT(pfx<<"_VecHash2");
     bKrn[node]>>OSSFMT(left<<setw(40)<<instr
             <<" // "<<vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"] "<<extraComment);
 #endif
 }
-void FLKRN_print::emit(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
+void FLKRN_print::emit(Cblock& bDef,
+        Cblock& bKrn, Cblock& bOut,
         int64_t const ilo, int64_t const ii,
         int64_t const jlo, int64_t const jj,
         int64_t const vl, std::string extraComment, int const v/*=0, verbose*/
@@ -202,7 +226,8 @@ void FLKRN_print::emit(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
         bOut["out_once"].setType("TAG");
     }
 }
-void FLKRN_sqij::emit(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
+void FLKRN_sqij::emit(Cblock& bDef,
+        Cblock& bKrn, Cblock& bOut,
         int64_t const ilo, int64_t const ii,
         int64_t const jlo, int64_t const jj,
         int64_t const vl, std::string extraComment, int const v/*=0, verbose*/

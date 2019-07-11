@@ -185,8 +185,25 @@ struct VecHash2 {
             std::string tmp );
     static void kern_asm_end( AsmFmtCols &a );
     // output 'C' code snippets
-    static void kern_C_begin( cprog::Cblock &defines,
+    /** output 'C' code snippets to JIT code tree.
+     * \p outer     function scope, (where outer loops go)
+     * \p inner     inner loop scope
+     * \p defines   sub-block of inner loop scope
+     * - Simple apps can use outer==inner==defines and omit passing outer and inner.
+     * - You may also pass only inner and defines and we'll assume outer==inner. */
+    static void kern_C_begin( cprog::Cblock &outer, cprog::Cblock &inner,
+            cprog::Cblock &defines,
             char const* client_vs=nullptr, uint32_t const seed=0 );
+    static void kern_C_begin( cprog::Cblock &inner,
+            cprog::Cblock &defines,
+            char const* client_vs=nullptr, uint32_t const seed=0 ){
+        kern_C_begin(inner,inner,defines,client_vs,seed);
+    }
+    static void kern_C_begin(
+            cprog::Cblock &defines,
+            char const* client_vs=nullptr, uint32_t const seed=0 ){
+        kern_C_begin(defines,defines,defines,client_vs,seed);
+    }
     static void kern_C( cprog::Cblock &parent,
             std::string va, std::string vb, std::string vl, std::string hash);
     /** strings `{"macname(VA,VB,VL,HASH)", "do{...}while(0)"}` */

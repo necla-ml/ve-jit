@@ -159,7 +159,8 @@ void other_fastdiv_methods(int const jj){
  * Ex 2:  sq register can be hoisted (AND combined with our sq?)
  *        instead of being recalculated
  */
-void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
+void fuse4_kernel(Cblock& bOuter, Cblock& bDef,
+        Cblock& bKrn, Cblock& bOut,
         int64_t const ii, int64_t const jj, int64_t const vl,
         std::string extraComment,
         int const which/*=0*/ /*comment,VecHash2*/,
@@ -179,9 +180,13 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
         auto& bDefConst = bDef["..*/first"];
         // state variables at end of bDef
         auto& bDefState = bDef["last"]["vechash"];
+        //cout<<"bDef @ "<<bDef.fullpath()<<endl;
+        //cout<<"bDefConst @ "<<bDefConst.fullpath()<<endl;
+        //cout<<"bDefState @ "<<bDefState.fullpath()<<endl;
         if(bDefState.code_str().empty()){
             string vSeq = (vSEQ0.empty()? "_ve_vseq_v()": vSEQ0);
-            VecHash2::kern_C_begin(bDefConst, vSeq.c_str(), vl);
+
+            VecHash2::kern_C_begin(bOuter,bDefConst,bDefConst, vSeq.c_str(), vl);
             auto instr = OSSFMT("int64_t "<<vh2<<" = 0;");
             bDefState>>OSSFMT(left<<setw(40)<<instr)
                 <<" // vh2({a,b}) hash output";
@@ -198,11 +203,11 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
         VecHash2::kern_C(bKrn[OSSFMT(pfx<<"_VecHash2")],vA,vB,sVL,vh2);
 #else // NEW: as macro
         if(!bDefConst.find("have_vechash2_kernel")){
-            auto m = VecHash2::kern_C_macro("VECHASH2_KERNEL");
+            auto m = VecHash2::kern_C_macro("VECHASH4_KERNEL");
             bDefConst.define(m.first,m.second);
             bDefConst["have_vechash2_kernel"].setType("TAG");
         }
-        auto instr = OSSFMT("VECHASH2_KERNEL("<<vA<<","<<vB<<","<<sVL<<","<<vh2<<");");
+        auto instr = OSSFMT("VECHASH4_KERNEL("<<vA<<","<<vB<<","<<sVL<<","<<vh2<<");");
         auto node = OSSFMT(pfx<<"_VecHash2");
         bKrn[node]>>OSSFMT(left<<setw(40)<<instr
                     <<" // "<<vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"] "<<extraComment);
@@ -230,11 +235,11 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
             auto& bInc = bDef.getRoot()["**/includes"];
             if(!bInc.find("stdio.h")) bInc["stdio.h"]>>"#include <stdio.h>";
             auto& bDefKernelFn = bDef["..*/fns/first"];
-            if(bDefKernelFn.find("cfuse2_kernel_print")==nullptr){
-                CBLOCK_SCOPE(cfuse2_kernel_print,
-                        "void cfuse2_kernel_print(__vr const a, __vr const b,"
+            if(bDefKernelFn.find("cfuse4_kernel_print")==nullptr){
+                CBLOCK_SCOPE(cfuse4_kernel_print,
+                        "void cfuse4_kernel_print(__vr const a, __vr const b,"
                         "\n        uint64_t const vl)",bDefKernelFn.getRoot(),bDefKernelFn);
-                cfuse2_kernel_print
+                cfuse4_kernel_print
                     >>"int const terse=1;"
                     >>"char const* linesep=\"\\n      \";"
                     >>"printf(\"a[%3llu]={\",(long long unsigned)vl);"
@@ -256,7 +261,7 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
                     >>"printf(\"}\\n\");"
                     ;
             }
-            bKrn["prt"]<<"cfuse2_kernel_print("<<vA<<", "<<vB<<", "<<sVL<<");";
+            bKrn["prt"]<<"cfuse4_kernel_print("<<vA<<", "<<vB<<", "<<sVL<<");";
             if(!extraComment.empty()) bKrn["prt"]<<" // "<<extraComment;
         }
         if(!bOut.find("out_once")){
@@ -269,22 +274,22 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
         if(!bInc.find("stdio.h")) bInc["stdio.h"]>>"#include <stdio.h>";
         if(!bInc.find("assert.h")) bInc["assert.h"]>>"#include <assert.h>";
         auto& bDefKernelFn = bDef["..*/fns/first"];
-        if(bDefKernelFn.find("cfuse2_kernel_check")==nullptr){
-            CBLOCK_SCOPE(cfuse2_kernel_check,
+        if(bDefKernelFn.find("cfuse4_kernel_check")==nullptr){
+            CBLOCK_SCOPE(cfuse4_kernel_check,
                     "void "
                     "\n__attribute__((noinline))"
-                    "\ncfuse2_kernel_check(__vr const a, __vr const b,"
+                    "\ncfuse4_kernel_check(__vr const a, __vr const b,"
                     "\n        uint64_t const cnt, uint64_t const vl, uint64_t const jj)"
                     ,
                     bDefKernelFn.getRoot(),bDefKernelFn);
-            cfuse2_kernel_check
+            cfuse4_kernel_check
                 >>"for(uint64_t i=0;i<vl;++i){"
                 >>"    assert( _ve_lvs_svs_u64(a,i) == (cnt+i)/jj );"
                 >>"    assert( _ve_lvs_svs_u64(b,i) == (cnt+i)%jj );"
                 >>"}"
                 ;
         }
-        bKrn["prt"]<<"cfuse2_kernel_check("<<vA<<", "<<vB<<", cnt, "<<sVL<<", jj);";
+        bKrn["prt"]<<"cfuse4_kernel_check("<<vA<<", "<<vB<<", cnt, "<<sVL<<", jj);";
         if(!extraComment.empty()) bKrn["prt"]<<" // "<<extraComment;
         if(!bOut.find("out_once")){
             bOut>>"assert((uint64_t)cnt==(iijj+vl0-1)/vl0*vl0);"
@@ -297,7 +302,7 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
             bKrn["prt"]>>"__vr const x = STORE(0, _ve_addul_vsv(ptr,_ve_vmulul_vsv(stride,sqij)));";
             if(!extraComment.empty()) bKrn["prt"]<<" // "<<extraComment;
     }else{
-        THROW(OSSFMT("unknown kernel type "<<which<<" in fuse2_kernel"));
+        THROW(OSSFMT("unknown kernel type "<<which<<" in fuse4_kernel"));
     }
 }
 /** How many full/partial \c vl-sized loops are implied by vl,ii,jj?
@@ -976,7 +981,7 @@ KERNEL_BLOCK:
         if(onceK){
             //cout<<"=== // #KERNEL_BLOCK: (fallthrough)\n"
             //<<"=== //        # <your code here, using a[] b[] loop-index vectors\n";
-            fuse2_kernel(fk, fd, fz, ii,jj,vl, kernComment(), which);
+            fuse4_kernel(fd, fd, fk, fz, ii,jj,vl, kernComment(), which);
         }
 
         // KERNEL-BLOCK

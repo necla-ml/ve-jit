@@ -68,6 +68,17 @@ void fuse2_kernel(cprog::Cblock& bKrn, cprog::Cblock& bDef, cprog::Cblock& bOut,
 	std::string vSEQ0="sq", std::string sVL="vl"
         );
 
+void fuse4_kernel(cprog::Cblock& bOuter, cprog::Cblock& bKrn,
+        cprog::Cblock& bDef, cprog::Cblock& bOut,
+        int64_t const ii, int64_t const jj, int64_t const vl,
+        std::string extraComment,
+        int const which=0/*comment,VecHash2*/,
+        std::string pfx="fuse2_",
+        int const v=0/*verbose*/,
+        std::string vA="a", std::string vB="b",
+	std::string vSEQ0="sq", std::string sVL="vl"
+        );
+
 /** This \e should go into \ref stringutil.hpp, but some VE hosts have old
  * g++ with problematic regex header. This function can be used to rename
  * variables from stock code strings to rename things like 'a','b','cnt'
@@ -123,7 +134,8 @@ std::string cf5_unrollX(loop::Lpi const vlen, LoopSplit const& lsii, LoopSplit c
         int const which=WHICH_KERNEL, char const* ofname=nullptr);
 
 /** loop splitting involves \c for(ilo..ihi)for(jlo..jhi) loops */
-void cf5_kernel(cprog::Cblock& bKrn, cprog::Cblock& bDef, cprog::Cblock& bOut,
+void cf5_kernel(cprog::Cblock& bOuter, cprog::Cblock& bDef,
+        cprog::Cblock& bKrn, cprog::Cblock& bOut,
         int64_t const ilo, int64_t const ii,
         int64_t const jlo, int64_t const jj,
         int64_t const vl,

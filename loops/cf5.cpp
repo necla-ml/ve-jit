@@ -175,7 +175,8 @@ char const* kernel_name(int const which){
  * Ex 2:  sq register can be hoisted (AND combined with our sq?)
  *        instead of being recalculated
  */
-void cf5_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
+void cf5_kernel(Cblock& bOuter, Cblock& bDef,
+        Cblock& bKrn, Cblock& bOut,
         int64_t const ilo, int64_t const ii,
         int64_t const jlo, int64_t const jj,
         int64_t const vl,
@@ -199,7 +200,7 @@ void cf5_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
         auto& bDefState = bDef["last"]["vechash"];
         if(bDefState.code_str().empty()){
             string vSeq = (vSEQ0.empty()? "_ve_vseq_v()": vSEQ0);
-            VecHash2::kern_C_begin(bDefConst, vSeq.c_str(), vl);
+            VecHash2::kern_C_begin(bOuter,bDefConst,bDefConst, vSeq.c_str(), vl);
             auto instr = OSSFMT("int64_t "<<vh2<<" = 0;");
             bDefState>>OSSFMT(left<<setw(40)<<instr)
                 <<" // vh2({a,b}) hash output";

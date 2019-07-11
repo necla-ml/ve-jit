@@ -58,6 +58,12 @@
 /** what kernel? */
 #define WHICH_KERNEL KERNEL_HASH
 
+#define INSCMT(BLK,INS,CMT) do{ \
+    auto ins=(INS); \
+    auto cmt=(CMT); \
+    (BLK)>>OSSFMT(left<<setw(40)<<ins<<" // "<<cmt); \
+} while(0)
+
 void other_fastdiv_methods(int const jj);
 
 using namespace std;
@@ -126,8 +132,8 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
         if(bDefState.code_str().empty()){
             string vSeq = (vSEQ0.empty()? "_ve_vseq_v()": vSEQ0);
             VecHash2::kern_C_begin(bDefConst, vSeq.c_str(), vl);
-            bDefState>>OSSFMT(left<<setw(40)<<OSSFMT("int64_t "<<vh2<<" = 0;"))
-                <<" // vh2({a,b}) hash output";
+            INSCMT(bDefState,OSSFMT("int64_t "<<vh2<<" = 0;"),
+                    "vh2({a,b}) hash output");
             bDef.getRoot()["includes"]>>"#include <stdio.h>";
             bOut>>"printf(\"jit "<<vh2<<" = %llu\\n\",(long long unsigned)"<<vh2<<");";
         }
@@ -138,9 +144,9 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
 #else // NEW: as macro
         auto m = VecHash2::kern_C_macro("VECHASH2_KERNEL");
         bDefConst.define(m.first,m.second);
-        bKrn[OSSFMT(pfx<<"_VecHash2")]
-            >>OSSFMT(left<<setw(40)<<OSSFMT("VECHASH2_KERNEL("<<vA<<","<<vB<<","<<sVL<<","<<vh2<<");")
-                        <<" // "<<vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"] "<<extraComment);
+        INSCMT(bKrn[OSSFMT(pfx<<"_VecHash2")],
+                OSSFMT("VECHASH2_KERNEL("<<vA<<","<<vB<<","<<sVL<<","<<vh2<<");"),
+                OSSFMT(vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"] "<<extraComment));
 #endif
     }else if( which==KERNEL_PRINT ){
         // XXX Does clang have any option to pass __vr efficiently ?
@@ -200,10 +206,16 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
         auto& bDefKernelFn = bDef["..*/fns/first"];
         if(bDefKernelFn.find("cfuse2_kernel_print")==nullptr){
             CBLOCK_SCOPE(cfuse2_kernel_check,
-                    "void cfuse2_kernel_check(__vr const a, __vr const b,"
-                    "\n        uint64_t const cnt, uint64_t const vl, uint64_t const jj)"
-                    "\n__attribute__((noinline))",
-                    bDefKernelFn.getRoot(),bDefKernelFn);
+                    // original
+                    //"void cfuse2_kernel_check(__vr const a, __vr const b,"
+                    //"\n        uint64_t const cnt, uint64_t const vl, uint64_t const jj)"
+                    //"\n__attribute__((noinline))",
+                    // following is OK for gcc
+                    "void __attribute__((noinline)) cfuse2_kernel_check("
+                    "\n        __vr const a, __vr const b, uint64_t const cnt,"
+                    "\n        uint64_t const vl, uint64_t const jj)"
+                    ,
+                    bDefKernelFn.getRoot(), bDefKernelFn);
             cfuse2_kernel_check
                 >>"for(uint64_t i=0;i<vl;++i){"
                 >>"    assert( _ve_lvs_svs_u64("<<vA<<",i) == (cnt+i)/jj );"
@@ -808,16 +820,17 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
                 if(jj<vl0){ // same as INIT_BLOCK code
                     fp_sets_ab = false;
                     mk_divmod();
-                    ff>>OSSFMT(left<<setw(40)<<OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);")
-                            <<" //  a[]=sq/"<<jj<<" b[]=sq%"<<jj);
-                    fi>>OSSFMT(left<<setw(40)<<OSSFMT("sqij = _ve_vaddul_vsv(vl0,sqij);")
-                            <<" // sqij[i] += "<<vl0);
+                    auto instr=OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);");
+                    INSCMT(ff,OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);"),
+                            OSSFMT("a[]=sq/"<<jj<<" b[]=sq%"<<jj));
+                    INSCMT(fi,OSSFMT("sqij = _ve_vaddul_vsv(vl0,sqij);"),
+                            OSSFMT("sqij[i] += "<<vl0));
                 }else{
                     mk_divmod();
-                    fi  >>OSSFMT(left<<setw(40)<<"sqij = _ve_vaddul_vsv(vl0,sqij);"
-                            <<" // sqij[] += "<<vl0)
-                        >>OSSFMT(left<<setw(40)<<OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);")
-                                <<" //  a[]=sq/"<<jj<<" b[]=sq%"<<jj);
+                    INSCMT(fi,OSSFMT("sqij = _ve_vaddul_vsv(vl0,sqij);"),
+                            OSSFMT("sqij[] += "<<vl0));
+                    INSCMT(fi,OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);"),
+                            OSSFMT("a[]=sq/"<<jj<<" b[]=sq%"<<jj));
                 }
             }
         }
@@ -834,8 +847,8 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
                 mk_divmod();
                 use_sq();
                 fp>>"__vr a,b;";
-                fp>>OSSFMT(left<<setw(40)<<OSSFMT("DIVMOD_"<<jj<<"(sq, a, b);"))
-                    <<OSSFMT(" // a[]=sq/"<<jj<<" b[]=sq%"<<jj);
+                INSCMT(fp,OSSFMT("DIVMOD_"<<jj<<"(sq, a, b);"),
+                        OSSFMT("a[]=sq/"<<jj<<" b[]=sq%"<<jj));
             }
         }else{
             fp>>"__vr a,b;";

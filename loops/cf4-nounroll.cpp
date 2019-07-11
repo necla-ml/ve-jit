@@ -170,7 +170,7 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
             fd["have_cnt"].setType("TAG");
             fk["last"]>>"cnt=vl0;";
         }
-        fuse2_kernel(fk, fd, fz, ii,jj,vl, kernComment(), which);
+        fuse4_kernel(outer, fd, fk, fz, ii,jj,vl, kernComment(), which);
     }else if(nloop>1){
         //CBLOCK_FOR(loop_ab,0,"for(int64_t cnt=0 ; cnt<iijj; cnt+=vl0)",inner);
         string loop_ab_string;
@@ -205,7 +205,7 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
         }
 
         // fk
-        fuse2_kernel(fk, fd, fz, ii,jj,vl, kernComment(), which);
+        fuse4_kernel(outer, fd, fk, fz, ii,jj,vl, kernComment(), which);
 
         // manage a,b induction, vl change (loop exit?)
         auto& fi = loop_ab["iter"];

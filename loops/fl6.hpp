@@ -72,31 +72,45 @@ std::string fl6_no_unrollX(loop::Lpi const vlen,
 /** prototype fused-loop 'main' test program.
  * XXX fix construction (scaffold vs 'new' to allocate ?)*/
 struct FusedLoopTest{
-    FusedLoopTest(FusedLoopKernel& krn, std::string name="", int const v=0/*verbose*/)
+    FusedLoopTest(
+            //FusedLoopKernel& krn
+            int const which
+            , std::string name=""
+            , int const v=0/*verbose*/)
         : pr((name.empty()?std::string{"FusedLoopTest"}:name), "C", v),
-        krn(krn), outer_(nullptr), inner_(nullptr) {/*not yet usable*/}
+        outer_(nullptr), inner_(nullptr), krn_(nullptr)
+        {/*not yet usable*/}
+    ~FusedLoopTest() {if(krn_){ delete krn_; krn_=nullptr;}};
     cprog::Cblock& outer();     ///< outside outer loops, often func scope
     cprog::Cblock& inner();     ///< where the fused-loop goes
+    FusedLoopKernel& krn();
     cprog::Cunit pr;
-    FusedLoopKernel& krn;
   protected:
     cprog::Cblock* outer_;       ///< outside outer loops, often top-level function scope
     cprog::Cblock* inner_;       ///< where the fused-loop goes
+    FusedLoopKernel* krn_;  ///< owned, references *outer_ and *inner_
 };
 
+/** Generic JIT tree structure for fl6 tests. */
 class Fl6test final : public FusedLoopTest
 {
   public:
-    Fl6test(FusedLoopKernel& krn, int const v=0/*verbose*/);
+    //Fl6test(FusedLoopKernel& krn, int const v=0/*verbose*/);
+    Fl6test(int const which, int const v=0/*verbose*/);
 };
 
 /** New fuse-loop test program. */
 std::string fl6_no_unrollY(LoopSplit const& lsii, LoopSplit const& lsjj,
-        FusedLoopKernel& krn, loop::Lpi const vlen=0,
+        //FusedLoopKernel& krn,
+        Fl6test& fl6t,
+        loop::Lpi const vlen=0,
         char const* ofname=nullptr, int const v=0/*verbose*/);
 
 std::string fl6_unrollY(LoopSplit const& lsii, LoopSplit const& lsjj,
-        int const maxun, FusedLoopKernel& krn, loop::Lpi const vlen=0,
+        int const maxun,
+        //FusedLoopKernel& krn,
+        Fl6test& fl6t,
+        loop::Lpi const vlen=0,
         char const* ofname=nullptr, int v=0/*verbose*/);
 
 //
@@ -118,6 +132,10 @@ inline cprog::Cblock& FusedLoopTest::inner() {
     return *inner_;
     //return outer().at("**/loop2/body");
     //return outer().at("loop1/body/loop2/body");
+}
+inline FusedLoopKernel& FusedLoopTest::krn() {
+    assert(krn_!=nullptr);
+    return *krn_;
 }
 
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break

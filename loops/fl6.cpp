@@ -48,6 +48,7 @@ using namespace cprog;
 
 static ostringstream oss;
 
+#if 0
 Fl6test::Fl6test(FusedLoopKernel& krn, int const v/*=0,verbose*/)
 : FusedLoopTest(krn, "Fl6test", v)
 {
@@ -94,6 +95,56 @@ Fl6test::Fl6test(FusedLoopKernel& krn, int const v/*=0,verbose*/)
         cout<<" inner @ "<<inner_->fullpath()<<endl;
     }
 }
+#else
+Fl6test::Fl6test(int const which, int const v/*=0,verbose*/)
+: FusedLoopTest(which, "Fl6test", v) // pr set up, other ptrs still NULL
+{
+    // upper-level tree structure, above the fused-loop.
+    pr.root["first"];                           // reserve room for preamble, comments
+    auto& inc = pr.root["includes"];
+    inc["veintrin.h"]>>"#include \"veintrin.h\"";
+    inc["velintrin.h"]>>"#include \"velintrin.h\"";
+    inc["stdint.h"]>>"#include <stdint.h>";
+    inc["stdio.h"]>>"#include <stdio.h>";
+
+    // create a somewhat generic tree
+    auto& fns = pr.root["fns"];
+    fns["first"]; // reserve a node for optional function definitions
+    CBLOCK_SCOPE(fl6test,"int main(int argc,char**argv)",pr,fns);
+    // NEW: use tag function scope, for upward-find operations
+    //      will require extending the find string to match tag!
+    fl6test.setType("FUNCTION");
+    // outer path root.at("**/fl6test/body")
+
+    // example 'outer loops'
+    fl6test>>"int const nrep = 3;";
+    CBLOCK_FOR(loop1,-1,"for(int iloop1=0; iloop1<nrep; ++iloop1)",fl6test);
+    CBLOCK_FOR(loop2,-1,"for(int iloop2=0; iloop2<1; ++iloop2)",loop1);
+
+    if(v){
+        fl6test["first"]>>"printf(\"fl6 outer loop\\n\");";
+        loop2  >>"printf(\"fl6 inner loop @ (%d,%d)\\n\",iloop1,iloop2);";
+    }
+
+    loop2["first"]; // --> 'fd' inner setup code used by all splits
+
+    if(v>1){
+        cout<<"\nScaffold";
+        cout<<pr.tree()<<endl;
+    }
+
+    this->outer_ = &fl6test;  // outer @ root.at("**/fl6test/body")
+    this->inner_ = &loop2;    // inner @ outer.at("**/loop2/body")
+
+    if(v>2){
+        cout<<" outer @ "<<outer_->fullpath()<<endl;
+        cout<<" inner @ "<<inner_->fullpath()<<endl;
+    }
+
+    this->krn_ = mkFusedLoopKernel(which,*outer_,*inner_ /*, defaults*/ );
+}
+#endif
+#if 0
 /* emit kernel (comment/code).
  *
  * Consider loops for(i=ilo..ihi)for(j=jlo..jhi)
@@ -135,7 +186,8 @@ Fl6test::Fl6test(FusedLoopKernel& krn, int const v/*=0,verbose*/)
  * Ex 2:  sq register can be hoisted (AND combined with our sq?)
  *        instead of being recalculated
  */
-void cf5_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
+void cf5_kernel(cprog::Cblock& bOuter, cprog::Cblock& bDef,
+        cprog::Cblock& bKrn, cprog::Cblock& bOut,
         int64_t const ilo, int64_t const ii,
         int64_t const jlo, int64_t const jj,
         int64_t const vl,
@@ -158,7 +210,7 @@ void cf5_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
         auto& bDefState = bDef["last"]["vechash"];
         if(bDefState.code_str().empty()){
             string vSeq = (vSEQ0.empty()? "_ve_vseq_v()": vSEQ0);
-            VecHash2::kern_C_begin(bDefConst, vSeq.c_str(), vl);
+            VecHash2::kern_C_begin(bOuter,bOuter,bDefConst, vSeq.c_str(), vl);
             auto instr = OSSFMT("int64_t "<<vh2<<" = 0;");
             bDefState>>OSSFMT(left<<setw(40)<<instr)
                 <<" // vh2({a,b}) hash output";
@@ -300,6 +352,7 @@ void cf5_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
         THROW(OSSFMT("unknown kernel type "<<which<<" in "<<__FUNCTION__));
     }
 }
+#endif
 /** How many full/partial \c vl-sized loops are implied by vl,ii,jj?
  * \return \c nloops so for(0..ii)for(0..jj) vectorizes as for(0..nloops).
  *
@@ -403,34 +456,20 @@ int main(int argc,char**argv){
 
     uint32_t nerr=0U;
     if(opt_h == 0){
-        FusedLoopKernel *krn = nullptr;
-        switch(which){
-          case(KERNEL_NONE):    {krn = new FLKRN_none(); break;}
-          case(KERNEL_HASH):    {krn = new FLKRN_hash(); break;}
-          case(KERNEL_PRINT):   {krn = new FLKRN_print(); break;}
-          case(KERNEL_CHECK):   {krn = new FLKRN_check(); break;}
-          case(KERNEL_SQIJ):    {krn = new FLKRN_sqij(); break;}
-          default:              {krn = new FLKRN_none(); break;}
+        Fl6test fl6t{which,max(0,verbosity-2)};
+        if(1){
+            auto& krn = fl6t.krn();
+            assert( krn.vA     == "a" );
+            assert( krn.vB     == "b" );
+            assert( krn.vSEQ0  == "sq" );
+            assert( krn.sVL    == "vl" );
+            assert( krn.vSQIJ  == "sqij" );
         }
-        assert( krn != nullptr );
-        assert( krn->vA     == "a" );
-        assert( krn->vB     == "b" );
-        assert( krn->vSEQ0  == "sq" );
-        assert( krn->sVL    == "vl" );
-        assert( krn->vSQIJ  == "sqij" );
         try{
             if(maxun==0){ // no unroll...
-#if 0
-                fl6_no_unrollX(vl,h,w,opt_t,which,ofname);
-#else
-                fl6_no_unrollY(h,w,*krn,vl,ofname,verbosity);
-#endif
+                fl6_no_unrollY(h,w,fl6t,vl,ofname,verbosity);
             }else{ // unroll...
-#if 0
-                fl6_unrollX(vl,h,w,maxun,opt_t,which,ofname);
-#else
-                fl6_unrollY(h,w,maxun,*krn,vl,ofname,verbosity);
-#endif
+                fl6_unrollY(h,w,maxun,fl6t,vl,ofname,verbosity);
             }
         }
         catch(exception& e){
@@ -441,7 +480,6 @@ int main(int argc,char**argv){
             cout<<"Unknown exception"<<endl;
             ++nerr;
         }
-        delete krn;
     }
     delete[] ofname;
     if(nerr==0) cout<<"\nGoodbye"<<endl;

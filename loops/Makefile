@@ -8,7 +8,7 @@ CLANG_VI_FLAGS?=-show-spill-message-vec -fno-vectorize -fno-unroll-loops -fno-sl
 CXXLANG_FLAGS:=-target linux-ve -O3 -mllvm $(CLANG_VI_FLAGS)
 
 .PHONY: all more ve force force-lib mega1-sample.log mega1
-all: fuse2 fuse2lin fuse3 mega1-sample.log cfuse2 cf3
+all: fuse2 fuse2lin fuse3 mega1-sample.log cfuse2 cf3 cf4 cf5 fl6
 	@echo 'ALL DONE with make all'
 	@echo ' extra targets:'
 	@echo '    more  force-lib ../libjit1[-x86].a'
