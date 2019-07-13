@@ -124,7 +124,7 @@ UnrollSuggest unroll_suggest( UnrollSuggest & u, int vl_min=0, int v=0/*verbosit
  * int64_t const vl_init = ve_vlen_suggest(nitems);
  * bool const vl_chklast = nitems>vl_init && nitems%vl_init != 0;
  * ```
- * followed by a loop that might resemble:
+ * followed by a <em>old-style veintrin.h</em> loop that might resemble:
  * ```
  * _ve_lvl(vl_init);
  * for(int i=0; i<nitems; i+=vl_init){

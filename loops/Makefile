@@ -920,6 +920,29 @@ fl6-run: # u~unroll a~alt-VL
 	@l=fl6xua-r.log; echo -n "$$l ... "; ./cf5-sample2.sh "./fl.sh fl6 -a" CHECK 8 >& $$l && echo YAY || echo OHOH
 	@l=fl6yua-r.log; echo -n "$$l ... "; ./cf5-sample3.sh "./fl.sh fl6 -a" CHECK 8 >& $$l && echo YAY || echo OHOH
 
+# fl7 switches to _vel_ intrinsics
+fl7.hpp: fl7-kernels.hpp ../fuseloop.hpp
+fl7-kernels.hpp: ../cblock.hpp
+fl7-kernels.o: fl7-kernels.cpp fl7-kernels.hpp ../cblock.hpp ../stringutil.hpp ../vechash.hpp ../fuseloop.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} -c $< -o $@
+fl7-%.o: fl7-%.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} -c $< -o $@
+fl7-%-ve.o: fl7-%.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
+	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} -c $< -o $@
+fl7: fl7.cpp fl7-kernels.o cf3-common.o fl7-nounroll.o fl7-unroll.o ../libjit1-x86.a ../vechash.hpp ./exechash.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+fl7-ve: fl7.cpp fl7-kernels-ve.o cf3-common-ve.o fl7-nounroll-ve.o fl7-unroll-ve.o ../libjit1-ve.a ../vechash.hpp ./exechash.hpp
+	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+fl7-run: # u~unroll a~alt-VL
+	@l=fl7x-r.log;   echo -n "$$l ... "; ./cf5-sample2.sh "./fl.sh fl7" CHECK 0 >& $$l && echo YAY || echo OHOH
+	@l=fl7y-r.log;   echo -n "$$l ... "; ./cf5-sample3.sh "./fl.sh fl7" CHECK 0 >& $$l && echo YAY || echo OHOH
+	@l=fl7xu-r.log;  echo -n "$$l ... "; ./cf5-sample2.sh "./fl.sh fl7" CHECK 8 >& $$l && echo YAY || echo OHOH
+	@l=fl7yu-r.log;  echo -n "$$l ... "; ./cf5-sample3.sh "./fl.sh fl7" CHECK 8 >& $$l && echo YAY || echo OHOH
+	@l=fl7xa-r.log;  echo -n "$$l ... "; ./cf5-sample2.sh "./fl.sh fl7 -a" CHECK 0 >& $$l && echo YAY || echo OHOH
+	@l=fl7ya-r.log;  echo -n "$$l ... "; ./cf5-sample3.sh "./fl.sh fl7 -a" CHECK 0 >& $$l && echo YAY || echo OHOH
+	@l=fl7xua-r.log; echo -n "$$l ... "; ./cf5-sample2.sh "./fl.sh fl7 -a" CHECK 8 >& $$l && echo YAY || echo OHOH
+	@l=fl7yua-r.log; echo -n "$$l ... "; ./cf5-sample3.sh "./fl.sh fl7 -a" CHECK 8 >& $$l && echo YAY || echo OHOH
+
 
 cfuse3: cfuse3.cpp ../libjit1-x86.a
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@

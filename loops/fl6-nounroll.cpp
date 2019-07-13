@@ -139,7 +139,7 @@ void fl6_no_unroll_split_ii(
             auto& cb=fd["last"]["sqij"];
             char const* t =(tag_once(fd0,"sqij")? "__vr ": "");
             if(ilo==0) INSCMT(cb,OSSFMT(t<<"sqij = sq;"),"sqij[i]=i");
-            else       INSCMT(cb,OSSFMT(t<<"sqij = _ve_vaddul_vsv(ilo*jj,sq);"),
+            else       INSCMT(cb,OSSFMT(t<<"sqij = _vel_vaddul_vsvl(ilo*jj,sq, vl0);"),
                                  OSSFMT("sqij[i]=i+"<<ilo<<"*"<<jj));
         }
     };
@@ -164,7 +164,8 @@ void fl6_no_unroll_split_ii(
         }
     };
     // does this particular loop split need a final-VL check? .. iijj%vl!=0
-    //auto have_vl = [&fd]()->bool{ return fd["last"].find("vl"); };
+    auto have_vl = [&fd]()->bool{ return fd["last"].find("vl"); };
+    auto vlR = [&have_vl](){ return have_vl()? "vl": "vl0"; };
     //
     // --------- END helper lambdas ------------
     //
@@ -172,13 +173,13 @@ void fl6_no_unroll_split_ii(
     if(tag_once(fd0,"set_vl")){
         // 'vl_is(vl0)' might cut a useless LVL op
         if(!vl_is(vl0)){
-            fd>>OSSFMT("_ve_lvl(vl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0
+            fd>>OSSFMT(" /* XXX _ve_lvl(vl0)) */ ;  // VL="<<vl0<<" jj%vl0="<<jj%vl0
                     <<" iijj%vl0="<<iijj%vl0);
             vl_remember(vl0);
             assert(vl_is(vl0));
         }
     }else if(!vl_is(vl0)){
-        fd>>OSSFMT("_ve_lvl(vl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0
+        fd>>OSSFMT(" /* XXX _ve_lvl(vl0)) */ ;  // VL="<<vl0<<" jj%vl0="<<jj%vl0
                 <<" iijj%vl0="<<iijj%vl0<<" VL was "<<vl_str());
         vl_remember(vl0);
     }else{
@@ -225,10 +226,10 @@ void fl6_no_unroll_split_ii(
             if(decl_ab) cb>>"__vr a,b;";
             string divmod;
             if(ilo==0){
-                INSCMT(cb,OSSFMT("DIVMOD_"<<jj<<"(sq, a, b);"),
+                INSCMT(cb,OSSFMT("DIVMOD_"<<jj<<"(sq,vl0, a, b);"),
                         OSSFMT("a[]=sq/"<<jj<<" b[]=sq%"<<jj));
             }else{
-                INSCMT(cb,OSSFMT("DIVMOD_"<<jj<<"(_ve_vaddul_vsv(ilo*jj,sq), a, b);"),
+                INSCMT(cb,OSSFMT("DIVMOD_"<<jj<<"(_vel_vaddul_vsvl(ilo*jj,sq, vl0),vl0, a, b);"),
                         OSSFMT("a[]=(sq+"<<ilo*jj<<")/"<<jj<<" b[]=(sq+"<<ilo*jj<<")%"<<jj));
             }
         }
@@ -279,12 +280,12 @@ void fl6_no_unroll_split_ii(
                     ?"vl = (vl0<iijj-cnt? vl0: iijj-cnt);"
                     :"vl = (cnt<vl0? cnt: vl0);");
             INSCMT(ff,instr,OSSFMT("iijj="<<iijj/vl0<<"*vl0+"<<iijj%vl0));
-            ff>>"_ve_lvl(vl);";
+            ff>>" /* XXX _ve_lvl(vl)) */ ;";
         }
         if(!fp_sets_ab){
             use_sqij();
             mk_divmod();
-            auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);");
+            auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sqij,vl0, a,b);");
             ff>>OSSFMT(left<<setw(40)<<divmod
                     <<" //  a[]=sq/"<<jj<<" b[]=sq%"<<jj);
         }
@@ -299,11 +300,12 @@ void fl6_no_unroll_split_ii(
         if(vl0%jj==0){                      // avoid div,mod -- 1 vec op
             int64_t vlojj = vl0/jj;
             fl6_defs.DEF(vlojj);
-            fi  >>OSSFMT(left<<setw(40)<<"a =_ve_vadduw_vsv(vlojj, a);"
+            fi  >>OSSFMT(left<<setw(40)<<"a =_vel_vadduw_vsvl(vlojj, a, "<<vlR()<<");"
                     <<" // a[i]+="<<vl0/jj<<", b[] same");
         }else if(jj%vl0==0){
+            // NO! assert(have_vl()); // so vlR() can be replaced with "vl0" in this block ...
             if(nloop<=jj/vl0){ // !have_jjMODvl_reset
-                auto instr = OSSFMT("b = _ve_vadduw_vsv("<<vl0<<",b);");
+                auto instr = OSSFMT("b = _vel_vadduw_vsvl("<<vl0<<",b, "<<vlR()<<");");
                 fi>>OSSFMT(left<<setw(40)<<instr<<" // b[] += vl0, a[] const");
             }else{ // various nice ways to do periodic reset... [potentially better with unroll!]
                 if(!fp.find("tmod")){
@@ -339,10 +341,12 @@ void fl6_no_unroll_split_ii(
                 // these are hand-implemented (based on raw a[],b[])
                 //
                 fi  >>"if(tmod){"; // using mk_scope or CBLOCK_SCOPE is entirely optional...
-                INSCMT(fi,"    b = _ve_vadduw_vsv(vl0,b);","b[] += vl0 (easy, a[] unchanged)");
+                INSCMT(fi,OSSFMT("    b = _vel_vadduw_vsvl(vl0,b, "<<vlR()<<");"),
+                        "b[] += vl0 (easy, a[] unchanged)");
                 fi  >>"}else{";
-                INSCMT(fi,"    a = _ve_vadduw_vsv(1,a);","a[] += 1");
-                INSCMT(fi,"    b = sq;",                  "b[] = sq[] (reset)");
+                INSCMT(fi,OSSFMT("    a = _vel_vadduw_vsvl(1,a, "<<vlR()<<");"),
+                        "a[] += 1");
+                INSCMT(fi,"    b = sq;", "b[] = sq[] (reset)");
                 fi  >>"}";
             }
         }else if(0 && positivePow2(jj)){
@@ -350,19 +354,18 @@ void fl6_no_unroll_split_ii(
             // (mk_divmod now recognizes jj=2^N)
             //
             // induction from prev a,b is longer than full recalc!
-            //  sqij = _ve_vaddul_vsv(vl0,sqij);
-            //  a = _ve_vsrl_vvs(sqij, jj_shift);              // a[i]=sq[i]/jj
-            //  b = _ve_vand_vsv("<<jithex(jj_minus_1)<<",sq); // b[i]=sq[i]%jj
+            //  sqij = _vel_vaddul_vsvl(vl0,sqij, vl);
+            //  a = _vel_vsrl_vvsl(sqij, jj_shift, vl);              // a[i]=sq[i]/jj
+            //  b = _vel_vand_vsvl("<<jithex(jj_minus_1)<<",sq, vl); // b[i]=sq[i]%jj
         }else{
             use_sqij();
             mk_divmod();
-            string instr = "sqij = _ve_vaddul_vsv(vl0,sqij);";
-            fi>>OSSFMT(left<<setw(40)<<instr<<" // sqij[i] += "<<vl0);
+            string instr = "sqij = _vel_vaddul_vsvl(vl0,sqij, vl0);";
+            INSCMT(fi,instr,OSSFMT("sqij[i] += "<<vl0));
             if(fp_sets_ab){
-                auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);");
+                auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sqij,vl0, a,b);");
                 cout<<divmod<<endl;
-                fi>>OSSFMT(left<<setw(40)<<divmod
-                        <<" //  a[]=sq/"<<jj<<" b[]=sq%"<<jj);
+                INSCMT(fi,divmod,OSSFMT("a[]=sq/"<<jj<<" b[]=sq%"<<jj));
             }
         }
     }

@@ -178,7 +178,7 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
         // state variables at end of bDef
         auto& bDefState = bDef["last"]["vechash"];
         if(bDefState.code_str().empty()){
-            string vSeq = (vSEQ0.empty()? "_ve_vseq_v()": vSEQ0);
+            string vSeq = (vSEQ0.empty()? "_vel_vseq_vl(None)": vSEQ0);
             VecHash2::kern_C_begin(bDefConst, vSeq.c_str(), vl);
             auto instr = OSSFMT("int64_t "<<vh2<<" = 0;");
             bDefState>>OSSFMT(left<<setw(40)<<instr)
@@ -215,12 +215,12 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
             if(!extraComment.empty()) bKrn["beg"]<<" "<<extraComment;
             bKrn["prt"]>>"printf(\"a={\");"
                 >>"for(int i=0;i<"<<sVL<<";++i){ printf(\"%llu%s\","
-                >>"    (long long unsigned)_ve_lvs_svs_u64("<<vA<<",i),"
+                >>"    (long long unsigned)_vel_lvsl_svs("<<vA<<",i),"
                 >>"    (i%8==0? \"\\n   \":\" \")); }"
                 >>"printf(\"}\\n\");"
                 >>"printf(\"b={\");"
                 >>"for(int i=0;i<"<<sVL<<";++i){ printf(\"%llu%s\","
-                >>"    (long long unsigned)_ve_lvs_svs_u64("<<vB<<",i),"
+                >>"    (long long unsigned)_vel_lvsl_svs("<<vB<<",i),"
                 >>"    (i%8==0? \"i\\n   \":\" \")); }"
                 >>"printf(\"}\\n\");"
                 ;
@@ -240,7 +240,7 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
                     >>"    if(terse && vl>=16) linesep=(vl>16 && i==7? \" ...\": \"\");"
                     >>"    if(terse && vl>16 && i>=8 && i<vl-8) continue;"
                     >>"    printf(\"%3llu%s\",\n"
-                    >>"      (long long unsigned)_ve_lvs_svs_u64(a,i),"
+                    >>"      (long long unsigned)_vel_lvsl_svs(a,i),"
                     >>"      (i%16==15? linesep: \" \")); }"
                     >>"printf(\"}\\n\");"
                     >>"linesep=\"\\n   \";"
@@ -249,7 +249,7 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
                     >>"    if(terse && vl>=16) linesep=(vl>16 && i==7? \" ...\": \"\");"
                     >>"    if(terse && vl>16 && i>=8 && i<vl-8) continue;"
                     >>"    printf(\"%3llu%s\",\n"
-                    >>"      (long long unsigned)_ve_lvs_svs_u64(b,i),"
+                    >>"      (long long unsigned)_vel_lvsl_svs(b,i),"
                     >>"      (i%16==15? linesep: \" \")); }"
                     >>"printf(\"}\\n\");"
                     ;
@@ -277,8 +277,8 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
                     bDefKernelFn.getRoot(),bDefKernelFn);
             cfuse2_kernel_check
                 >>"for(uint64_t i=0;i<vl;++i){"
-                >>"    assert( _ve_lvs_svs_u64(a,i) == (cnt+i)/jj );"
-                >>"    assert( _ve_lvs_svs_u64(b,i) == (cnt+i)%jj );"
+                >>"    assert( _vel_lvsl_svs(a,i) == (cnt+i)/jj );"
+                >>"    assert( _vel_lvsl_svs(b,i) == (cnt+i)%jj );"
                 >>"}"
                 ;
         }
@@ -290,9 +290,9 @@ void fuse2_kernel(Cblock& bKrn, Cblock& bDef, Cblock& bOut,
             bOut["out_once"].setType("TAG");
         }
     }else if( which==KERNEL_SQIJ ){
-            bKrn["beg"]>>OSSFMT("// KERNEL("<<vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"],sqij="<<vA<<"*jj+"<<vB<<")");
-            bKrn["prt"]>>"__vr const x = STORE(0, _ve_addul_vsv(ptr,_ve_vmulul_vsv(stride,sqij)));";
-            if(!extraComment.empty()) bKrn["prt"]<<" // "<<extraComment;
+        bKrn["beg"]>>OSSFMT("// KERNEL("<<vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"],sqij="<<vA<<"*jj+"<<vB<<")");
+        bKrn["prt"]>>"__vr const x = STORE(0, _vel_addul_vsvl(ptr,_vel_vmulul_vsvl(stride,sqij,"<<sVL<<"),"<<sVL<<"));";
+        if(!extraComment.empty()) bKrn["prt"]<<" // "<<extraComment;
     }else{
         THROW(OSSFMT("unknown kernel type "<<which<<" in fuse2_kernel"));
     }
@@ -517,6 +517,7 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj,
         auto& fz = cfuse2["last"]["first"];
 
         inc >>"#include \"veintrin.h\""
+            >>"#include \"velintrin.h\""
             >>"#include \"stdint.h\""
             ;
         // local labels:
@@ -531,7 +532,7 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj,
         //fd.scope(block,"vectorized double-loop --> index vectors");
         //+++++++++++++++++ constant registers +++++++++++++++++++
         //fd.ins("lvl vl0",                   "VL = vl0");
-        fd>>OSSFMT("_ve_lvl(vl0);  // VL = "<<vl0);
+        fd>>OSSFMT(" /* XXX _ve_lvl(vl0)) */ ;  // VL = "<<vl0);
         if(which==KERNEL_PRINT){
             if(!fd.find("have_vl")){
                 fd  >>"int64_t vl = vl0;";
@@ -602,17 +603,17 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj,
                 FOR(i,vl) a[i] = i;    // sq/jj   or perhaps change have_sq?
                 FOR(i,vl) b[i] = 0;    // sq%jj
                 assert(have_bA_bD==0); assert(have_sq==0); assert(have_jj_shift==0);
-                fp>>vREG<<"a = _ve_vseq_v();         // a[i] = i";
-                //fp>>vREG<<"b = _ve_vbrd_vs_i64(0LL); // b[i] = 0"; // is this as good as vxor?
-                fp>>vREG<<"b; b=_ve_vxor_vvv(b,b);"; // typically "best way" for any CPU
+                fp>>vREG<<"a = _vel_vseq_vl(vl0);         // a[i] = i";
+                //fp>>vREG<<"b = _vel_vbrdl_vsl(0LL, vl0); // b[i] = 0"; // is this as good as vxor?
+                fp>>vREG<<"b; b=_vel_vxor_vvvl(b,b, vl0);"; // typically "best way" for any CPU
             }else if(jj>=vl){
                 tr+="init:iloop 1 jj>=vl";
                 if(verbose)cout<<" b";
                 FOR(i,vl) a[i] = 0;    // sq < vl, so sq/jj < 1
                 FOR(i,vl) b[i] = i;
                 if(nloop<=1) {assert(have_bA_bD==0); assert(have_sq==0); assert(have_jj_shift==0);}
-                fp>>vREG<<"a = _ve_vbrd_vs_i64(0LL); // a[i] = 0";
-                fp>>vREG<<"b = _ve_vseq_v();         // b[i] = i;";
+                fp>>vREG<<"a = _vel_vbrdl_vsl(0LL, vl0); // a[i] = 0";
+                fp>>vREG<<"b = _vel_vseq_vl(vl0);         // b[i] = i;";
             }else if( positivePow2(jj) ){
                 tr+="init:iloop 1 pow2jj";
                 if(verbose)cout<<" c";
@@ -624,12 +625,12 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj,
                 //fp.ins("vsrl.l.zx a, sq,"+jitdec(jj_shift), "a[i]=sq[i]/jj =sq[i]>>"+jitdec(jj_shift));
                 //fp.ins("vand.l    b, "+jitimm(jj_minus_1)+",sq", "b[i]=sq[i]%jj =sq[i] & (2^"+jitdec(jj_shift)+"-1)");
                 //fd.DEF(jj_shift);
-                //fp>>vREG<<"a = _ve_vsrl_vvs(sq, jj_shift); // a[i]=sq[i]/jj = sq[i]>>"<<jitdec(jj_shift);
-                //fp>>vREG<<"b = _ve_vand_vsv("<<jithex(jj-1)<<",sq);       // b[i]=sq[i]%jj";
+                //fp>>vREG<<"a = _vel_vsrl_vvsl(sq, jj_shift, vl0); // a[i]=sq[i]/jj = sq[i]>>"<<jitdec(jj_shift);
+                //fp>>vREG<<"b = _vel_vand_vsvl("<<jithex(jj-1)<<",sq, vl0);       // b[i]=sq[i]%jj";
                 //fp["last"].set(OSSFMT("DIVMOD_"<<jj<<"(a,b,sqij);"));
                 fd.define(OSSFMT("DIVMOD_"<<jj<<"(A,B,SQIJ)"),
-                        OSSFMT("A = _ve_vsrl_vvs(SQ, "<<jj_shift<<"); \\\n" // a[i]=sq[i]/jj
-                            "                           B = _ve_vand_vsv("<<jithex(jj-1)<<",SQ)")); // b[i]=sq[i]%jj
+                        OSSFMT("A = _vel_vsrl_vvsl(SQ, "<<jj_shift<<", vl0); \\\n" // a[i]=sq[i]/jj
+                            "                           B = _vel_vand_vsvl("<<jithex(jj-1)<<",SQ, vl0)")); // b[i]=sq[i]%jj
                 fp>>OSSFMT("DIVMOD_"<<jj<<"("<<vREG<<"a, "<<vREG<<"b, sq);");
             }else{
                 tr+="init:iloop 1 fastdiv";
@@ -644,7 +645,7 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj,
                 if(nloop<=1) assert(have_bA_bD==0); assert(have_sq==1); assert(have_jj_shift==0);
                 ++cnt_sq; ++cnt_jj_M;
                 fp  >>vREG<<"a = FASTDIV_"<<asDec(jj)<<"(sq);                           // a[i] = sq[i]/jj"
-                    >>vREG<<"b = _ve_vsubul_vvv(sq,_ve_vmulul_vsv(jj, a)); // b[i] = sq[i] - jj*a[i]";
+                    >>vREG<<"b = _vel_vsubul_vvvl(sq,_vel_vmulul_vsvl(jj, a, vl0), vl0); // b[i] = sq[i] - jj*a[i]";
             }
         }
         if(onceI){
@@ -673,7 +674,7 @@ INDUCE:
                 }
                 fi  >>"// (ii*jj)%vl0 != 0 --> last iter VL change"
                     >>"vl = (vl0<iijj-cnt? vl0: iijj-cnt); // vl = min(vl0,iijj-cnt)"
-                    >>"_ve_lvl(vl);";
+                    >>" /* XXX _ve_lvl(vl)) */ ;";
             }
         }
         // 2. Induction from a->ax, b->bx
@@ -693,7 +694,7 @@ INDUCE:
                 }else{
                     fd.define("vlojj",OSSFMT(vl0/jj<<"/*vl/jj*/"));
                 }
-                fi>>OSSFMT("a =_ve_vadduw_vsv(vlojj, a);"
+                fi>>OSSFMT("a =_vel_vadduw_vsvl(vlojj, a, vl);"
                         <<" // a[i] += (vl/jj="<<vl0/jj<<"), b[] unchanged");
             }
         }else if(jj%vl0 == 0 ){  // -------------1 or 2 vec op (conditional)
@@ -708,7 +709,7 @@ INDUCE:
                 ++cnt_jjMODvl; assert( have_jjMODvl );
                 //if(onceI && STYLE==STYLE_GOTO && fi[".."].code_str().empty() ) fi[".."]>>"INDUCE:    // jj%vl0 == 0";
                 if(onceI) //fi.ins("add b, "+jitdec(vl0)+",b",    "b[i] += vl0, a[] const");
-                /**/ CBLK(fi,"b = _ve_vadduw_vsv("<<jitdec(vl0)<<",b); // b[i] += vl0, a[] const");
+                /**/ CBLK(fi,"b = _vel_vadduw_vsvl("<<jitdec(vl0)<<",b, vl); // b[i] += vl0, a[] const");
             }else{
                 // This case is potentially faster with a partial precalc unroll
                 // The division should be done with compute_uB
@@ -790,9 +791,9 @@ INDUCE:
                     //fi.lab("INDUCE_DONE");
                     //fi.pop_scope();
                     fi  >>"if(tmod){" // using mk_scope or CBLOCK_SCOPE is entirely optional...
-                        >>"    b = _ve_vaddul_vsv(vl0,b); // b[i] += vl0 (easy, a[] unchanged)"
+                        >>"    b = _vel_vaddul_vsvl(vl0,b, vl); // b[i] += vl0 (easy, a[] unchanged)"
                         >>"}else{"
-                        >>"    a = _ve_vaddul_vsv(1,a);   // a[i] += 1"
+                        >>"    a = _vel_vaddul_vsvl(1,a, vl);   // a[i] += 1"
                         >>"    b = sq;                    // b[i] = sq[i] (reset case)"
                         >>"}";
                 }
@@ -830,21 +831,21 @@ INDUCE:
                     .ins("vaddu.l a,a,bD"
                             , "a[i] += bD[i]");
 #elif 0 // 4 ops, so full recalc is faster!
-                fi  >>"bA = _ve_vaddul_vsv("<<jitdec(vl0)<<",b);"
+                fi  >>"bA = _vel_vaddul_vsvl("<<jitdec(vl0)<<",b, vl);"
                     " // bA[i] = b[i]+vl0 (jj="<<jitdec(jj)<<" power-of-two)"
-                    >>"bD = _ve_vsrl_vvs(bA,"<<jitdec(jj_shift)<<";"
+                    >>"bD = _vel_vsrl_vvsl(bA,"<<jitdec(jj_shift)<<", vl);"
                     " // bD[i] = bA[i]>>jj_shift["<<jitdec(jj_shift)<<"]"
-                    >>"b  = _ve_vand_vsv("<<jithex(jj_minus_1)<<",bA);"
+                    >>"b  = _vel_vand_vsvl("<<jithex(jj_minus_1)<<",bA, vl);"
                     " // b[i] = bA[i]&jj_mask = bA[i]%"<<jitdec(vl0)
-                    >>"a = _ve_vaddul_vvv(a,bD);   // a[i] += bD[i]"
+                    >>"a = _vel_vaddul_vvvl(a,bD, vl);   // a[i] += bD[i]"
                     ;
 #else
                 // cf. pow2 "induction" by full recalc:
-                //  sqij = _ve_vaddul_vsv(vl0,sqij);
-                //  a = _ve_vsrl_vvs(sqij, jj_shift);              // a[i]=sq[i]/jj
-                //  b = _ve_vand_vsv("<<jithex(jj_minus_1)<<",sq); // b[i]=sq[i]%jj
+                //  sqij = _vel_vaddul_vsvl(vl0,sqij, vl);
+                //  a = _vel_vsrl_vvsl(sqij, jj_shift, vl);              // a[i]=sq[i]/jj
+                //  b = _vel_vand_vsvl("<<jithex(jj_minus_1)<<",sq, vl); // b[i]=sq[i]%jj
                 def_sqij=true;
-                fi>>"sqij = _ve_vaddul_vsv(vl0,sqij);                // sqij[i] += "<<jitdec(vl0);
+                fi>>"sqij = _vel_vaddul_vsvl(vl0,sqij, vl);                // sqij[i] += "<<jitdec(vl0);
                 // (same as INIT_BLOCK code)
                 fp.clear(); fp["../beg"].clear(); fp["../end"].clear();
                 fp["last"].set(OSSFMT("DIVMOD_"<<jj<<"(a,b,sqij);"));
@@ -896,13 +897,13 @@ INDUCE:
                     // but also has one less op, so it *might* be a speed winner.
                     // [ the next block could also do the same calc ]
                     def_sqij=true;
-                    fi>>"sqij = _ve_vaddul_vsv(vl0,sqij);                // sqij[i] += "<<jitdec(vl0);
+                    fi>>"sqij = _vel_vaddul_vsvl(vl0,sqij, vl);                // sqij[i] += "<<jitdec(vl0);
                     // (same as INIT_BLOCK code)
                     mk_DIVMOD(cfuse2,jj,iijj+vl0); // give iijj to recognize mul-shr opportunity
                     fp.clear(); fp["../beg"].clear(); fp["../end"].clear();
                     //fp["last"].set(OSSFMT(
                     //            "a = FASTDIV_"<<jj<<"(sqij); // a[i] = sqij[i]/jj recalc\n"
-                    //            "b = _ve_vsubul_vvv(sqij,_ve_vmulul_vsv(jj, a)); // b[i] = sqij[i] - jj*a[i]"));
+                    //            "b = _vel_vsubul_vvvl(sqij,_vel_vmulul_vsvl(jj, a, vl), vl); // b[i] = sqij[i] - jj*a[i]"));
                     fp["last"].set(OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b); // a[]=sqij[]/jj; b[]=sqij[]%jj;"));
                 }else if(jj+vl < FASTDIV_SAFEMAX) { // o/w use safer induction formula
                     // Ex. ./cfuse2 -t 256 1500 1500, 1500 x 1500 image will be enough to overflow
@@ -911,21 +912,21 @@ INDUCE:
                     // of overflow because b[i] < jj (much smaller)
                     assert( jj + vl < FASTDIV_SAFEMAX );
                     fi  >>"// FASTDIV induce from prev b to avoid overflow"
-                        >>"__vr bD = FASTDIV_"<<asDec(jj)<<"(_ve_vaddul_vsv(vl0,b));   // bD[i]=(b[i]+vl0)/[jj="<<jitdec(jj)<<"]"
-                        >>"a = _ve_vaddul_vvv(a, bD);                     // a[i] += bD[i]"
-                        >>"b = _ve_vsubul_vvv(b, _ve_vmulul_vsv(jj, bD)); // b[i] -= jj*bD[i]"
+                        >>"__vr bD = FASTDIV_"<<asDec(jj)<<"(_vel_vaddul_vsvl(vl0,b, vl));   // bD[i]=(b[i]+vl0)/[jj="<<jitdec(jj)<<"]"
+                        >>"a = _vel_vaddul_vvvl(a, bD, vl);                     // a[i] += bD[i]"
+                        >>"b = _vel_vsubul_vvvl(b, _vel_vmulul_vsvl(jj, bD, vl), vl); // b[i] -= jj*bD[i]"
                         ;
                 }else{
                     // Ex. ./cfuse2 -t 256 3 4000001 has jj too large for 2-op FASTDIV
                     def_sqij=true;
-                    fi  >>"sqij = _ve_vaddul_vsv(vl0,sqij);                // sqij[i] += "<<jitdec(vl0);
+                    fi  >>"sqij = _vel_vaddul_vsvl(vl0,sqij, vl);                // sqij[i] += "<<jitdec(vl0);
                     // (same as INIT_BLOCK code)
 #if 0
                     cout<<"unhandled case: need large-number vector-division-by-constant "<<jj<<endl;
                     fp.clear(); fp["../beg"].clear(); fp["../end"].clear();
                     fp["last"].set(OSSFMT(
-                                "a = _ve_vdivsl_vvs(sqij, outWidth) // a[i] = sqij[i]/jj XXX SLOW XXX\n"
-                                "b = _ve_vsubul_vvv(sqij,_ve_vmulul_vsv(jj, a)); // b[i] = sqij[i] - jj*a[i]"));
+                                "a = _vel_vdivsl_vvsl(sqij, outWidth, vl) // a[i] = sqij[i]/jj XXX SLOW XXX\n"
+                                "b = _vel_vsubul_vvvl(sqij,_vel_vmulul_vsvl(jj, a, vl), vl); // b[i] = sqij[i] - jj*a[i]"));
                     THROW("MISSING OPTIMIZATION:\nPlease implement mul-add-shift division algorithm HERE");
 #else // new mk_DIVMOD function expands to include generic cases of division by constant
                     mk_DIVMOD(cfuse2, jj, iijj+vl0); // defines FASTDIV_jj(V) and DIVMOD_jj(V,A,B,VDIV,VMOD)
@@ -960,7 +961,7 @@ INDUCE:
                 //fi.ins("mins.l vl, vl0, cnt",    "vl = min(vl,cnt)");
                 //fi.ins("lvl vl");
                 fi  >>"vl = (vl0<cnt? vl0: cnt); // vl = min(vl0,cnt) for last iter,"
-                    >>"_ve_lvl(vl);";
+                    >>" /* XXX _ve_lvl(vl)) */ ;";
             }
         }
 #endif
@@ -1051,19 +1052,19 @@ KERNEL_BLOCK:
 #if 0 // move toward generic (and more flexible) FASTDIV_jj and DIVMOD_jj macros
             fd  .define(OSSFMT("FASTDIV_"<<jj<<"_M"), jithex(jj_M)+"/*in reg?*/")
                 .define(OSSFMT("FASTDIV_"<<jj<<"(VR)"),
-                        OSSFMT("_ve_vsrl_vvs(_ve_vmulul_vsv("
-                            "FASTDIV_"<<jj<<"_M, (VR)), "
-                            <<FASTDIV_C<<")"));
+                        OSSFMT("_vel_vsrl_vvsl(_vel_vmulul_vsvl("
+                            "FASTDIV_"<<jj<<"_M, (VR), vl), "
+                            <<FASTDIV_C<<", vl)"));
 #else
             mk_DIVMOD(cfuse2,jj,iijj+vl0);
 #endif
         }
         if(cnt_sq){
-            fd["..*/first"]>>"__vr const sq = _ve_vseq_v();";
+            fd["..*/first"]>>"__vr const sq = _vel_vseq_vl(vl);";
         }
         if(def_sqij){
             if(cnt_sq) fd>>"__vr sqij = sq;";
-            else       fd>>"__vr sqij = _ve_vseq_v();";
+            else       fd>>"__vr sqij = _vel_vseq_vl(vl);";
             //fk>>"// *this* kernel also has defined sqij[]=a[]*"<<asDec(jj)<<"+b[]";
         }else if(nloop>1){
             fp["../beg"].set("if(cnt==0){"); // this is a gross simplification,
@@ -1074,7 +1075,7 @@ KERNEL_BLOCK:
         // LOOP_DONE ...
         if(SAVE_RESTORE_VLEN){
             //fz.ins("lvl vl_save","load VL <-- vl_save (restore VL on exit)");
-            fz  >>"//_ve_lvl(vl_save); // restore VL on exit XXX when SVL op is supported!!!";
+            fz  >>"// /* XXX _ve_lvl(vl_save)) */ ; // restore VL on exit XXX when SVL op is supported!!!";
         }
 
 #undef FOR

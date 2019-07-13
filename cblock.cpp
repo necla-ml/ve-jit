@@ -861,7 +861,7 @@ string cjitConvolutionForward00( int const verbosity=0 /*struct param const* con
 {
     Cunit pr("program");
     pr["includes"]<<Endl<<CSTR(#include "vednn.h")
-        <<Endl<<CSTR(#include "veintrin.h")
+        <<Endl<<CSTR(#include "velintrin.h")
         <<"\n#include <stdio.h>"
         <<"\n#include <stdlib.h>"
         <<"\n#include <assert.h>"
@@ -956,14 +956,14 @@ string cjitConvolutionForward00( int const verbosity=0 /*struct param const* con
 
     //auto& fn_vec_init =
     fn["vec_init"]
-        >>"_ve_lvl(VLEN);"
-        >>"const __vr vzeros = _ve_vbrdu_vs_f32(0.0f); // lower 32-bits are zero bits, so same as _ve_pvbrd_vs_i64(0UL)"
-        >>"const __vr vrseq = _ve_vseq_v();"
+        >>" /* XXX _ve_lvl(VLEN)) */ ;"
+        >>"const __vr vzeros = _vel_vbrds_vsl(0.0f, VLEN); // lower 32-bits are zero bits, so same as _vel_pvbrdl_vsl(0UL, VLEN)"
+        >>"const __vr vrseq = _vel_vseq_vl(VLEN);"
         >>"const int64_t sw_x_VLEN = strideWidth * VLEN;"
         >>"int64_t const vl_x_init = outWidth /*- x0=0*/ < VLEN ? outWidth /*- x0=0*/ : VLEN ;"
         >>"int64_t vl = vl_x_init;"
-        >>"_ve_lvl(vl);"
-        >>"__vr const vrj_init = _ve_vaddsl_vsv(-padWidth,  _ve_vmulsl_vsv(strideWidth, vrseq));"
+        >>" /* XXX _ve_lvl(vl)) */ ;"
+        >>"__vr const vrj_init = _vel_vaddsl_vsvl(-padWidth,  _vel_vmulsl_vsvl(strideWidth, vrseq, vl), vl);"
         ;
 
     CBLOCK_SCOPE(loop_n,"for(int64_t n=0; n<batch; ++n)",pr,fn);
@@ -994,13 +994,13 @@ string cjitConvolutionForward00( int const verbosity=0 /*struct param const* con
         >>"}"
         >>""
         >>"int64_t vl = vl_x_init;"
-        >>"_ve_lvl(vl);"
+        >>" /* XXX _ve_lvl(vl)) */ ;"
         >>"__vr vrj = vrj_init;"
           ;
     CBLOCK_SCOPE(loop_x0,"for(int64_t x0=0 ; x0<outWidth; x0+=VLEN)",pr,loop_y);
     loop_x0
             >>"const int64_t vl = outWidth - x0 < VLEN ? outWidth - x0: VLEN;"
-            >>"_ve_lvl(vl);"
+            >>" /* XXX _ve_lvl(vl)) */ ;"
             >>"__vr vrsum = vzeros;"
             ;
     CBLOCK_SCOPE(loop_r,"for (int64_t r = kh_beg; r < kh_end; ++r)",pr,loop_x0);
@@ -1009,25 +1009,25 @@ string cjitConvolutionForward00( int const verbosity=0 /*struct param const* con
     loop_s.def("LOOP_S_FOO","LOOP_S_BAR"); // demo the scoped #define function (NEW)
     loop_s[".."]>>"vrw = vrj"; // current pos loop_r/body/loop_s CODE, **before** loop_s/beg opens the loop
     loop_s["last"]             // into loop_s/body/last, just before loop_s/end exits the loop
-        >>"vrw = _ve_vaddsl_vsv(dilationWidth,  vrw) ; // <--- vector induced"
+        >>"vrw = _vel_vaddsl_vsvl(dilationWidth,  vrw, vl) ; // <--- vector induced"
         ;
     loop_s[".."]["last"]>>"//loop_s has just exited!";
     loop_s
-        >>"__vm256 vm2 = _ve_vfmkl_mcv(VECC_GE, vrw);        // condition(0 <= w)"
-        >>"__vm256 vm3 = _ve_vfmkl_mcv(VECC_IG, _ve_vcmpsl_vsv(inWidth,vrw));  // condition(w < inWidth)"
-        >>"__vm256 vm23  = _ve_andm_mmm(vm2, vm3);"
+        >>"__vm256 vm2 =  _vel_vfmklge_mvl(vrw, vl);        // condition(0 <= w)"
+        >>"__vm256 vm3 =  _vel_vfmklgt_mvl(_vel_vcmpsl_vsvl(inWidth,vrw, vl), vl);  // condition(w < inWidth)"
+        >>"__vm256 vm23  = _vel_andm_mmm(vm2, vm3);"
         ;
     CBLOCK_SCOPE(loop_c,"for (int64_t c = 0; c < inChannelGroup; ++c)",pr,loop_s);
     loop_c
         >>"const float *pIn = pIn_0 + c*inHW + (i+r*dilationHeight)*inWidth"
         >>"                 + x0*strideWidth-padWidth + s*dilationWidth;"
         >>"const float *pKerValue = pKern_gk + c*kernHW + r*kernWidth +s;"
-        >>"__vr vrin = _ve_vldu_vss(4*strideWidth,pIn) ;"
-        >>"vrin = _ve_vmrg_vvvm(vzeros, vrin, vm23) ;"
-        >>"vrsum = _ve_vfmads_vvsv(vrsum, *pKerValue, vrin) ;"
+        >>"__vr vrin = _vel_vldu_vssl(4*strideWidth,pIn, vl) ;"
+        >>"vrin = _vel_vmrg_vvvml(vzeros, vrin, vm23, vl) ;"
+        >>"vrsum = _vel_vfmads_vvsvl(vrsum, *pKerValue, vrin, vl) ;"
         ;
     //loop_s["induce vrw"]// BEFORE the '}' of loops_s (embedded blanks OK, but harder to read
-    //    >>"vrw = _ve_vaddsl_vsv(dilationWidth,  vrw) ; // <--- vector induced"
+    //    >>"vrw = _vel_vaddsl_vsvl(dilationWidth,  vrw, vl) ; // <--- vector induced"
     //    ;
     // loop_r path: .../loop_x0/body/loop_r/body
     //loop_r[".."] // too early (add to loop_x0/body; before loop_r even begins)
@@ -1036,8 +1036,8 @@ string cjitConvolutionForward00( int const verbosity=0 /*struct param const* con
     //loop_r["../end"]      // OK, adds to /**loop_x0/body/loop_r/end
     //loop_r[".."]["done"]  // OK, adds to append-tree /**/loop_x0/body/loop_r/done
     loop_x0["induce+store"]       // OK, adds to /**/loop_x0/body/induce+store
-        >>"_ve_vstu_vss(vrsum, 4, pOut) ;"
-        >>"vrj = _ve_vaddsl_vsv(sw_x_VLEN,vrj); // induce to avoid full recalc"
+        >>"_vel_vstu_vssl(vrsum, 4, pOut, vl) ;"
+        >>"vrj = _vel_vaddsl_vsvl(sw_x_VLEN,vrj, vl); // induce to avoid full recalc"
         >>"pOut += vl; // visible speedup cf. outIndex+=vl"
         ;
     fn["exit"]>>"return VEDNN_SUCCESS;" ;
@@ -1102,14 +1102,14 @@ vednnConvolutionForward_direct_default3(
   const int64_t outHW = outHeight * outWidth;
 
 
-  _ve_lvl(VLEN) ; // <----- VERY VERY VERY IMPORTANT to remember this init !!! 1.
-  const __vr vzeros = _ve_vbrdu_vs_f32(0.0f) ; // lower 32-bits are zero bits, so same as _ve_pvbrd_vs_i64(0UL)
-  const __vr vrseq = _ve_vseq_v();
+   /* XXX _ve_lvl(VLEN)) */  ; // <----- VERY VERY VERY IMPORTANT to remember this init !!! 1.
+  const __vr vzeros = _vel_vbrds_vsl(0.0f, VLEN) ; // lower 32-bits are zero bits, so same as _vel_pvbrdl_vsl(0UL, VLEN)
+  const __vr vrseq = _vel_vseq_vl(VLEN);
   const int64_t sw_x_VLEN = strideWidth * VLEN;
   int64_t const vl_x_init = outWidth /*- x0=0*/ < VLEN ? outWidth /*- x0=0*/ : VLEN ;
   int64_t vl = vl_x_init;
-  _ve_lvl(vl) ;
-  __vr const vrj_init = _ve_vaddsl_vsv(-padWidth,  _ve_vmulsl_vsv(strideWidth, vrseq));
+   /* XXX _ve_lvl(vl)) */  ;
+  __vr const vrj_init = _vel_vaddsl_vsvl(-padWidth,  _vel_vmulsl_vsvl(strideWidth, vrseq, vl), vl);
 
   //int64_t const kByMax = 1;
   //int64_t const zero = 0;
@@ -1138,15 +1138,15 @@ vednnConvolutionForward_direct_default3(
           }
 
           int64_t vl = vl_x_init;
-          _ve_lvl(vl) ;
+           /* XXX _ve_lvl(vl)) */  ;
           __vr vrj = vrj_init;
           for ( int64_t x0=0; x0<outWidth; x0+=VLEN )
           {
             const int64_t vl = outWidth - x0 < VLEN ? outWidth - x0 : VLEN ;
-            _ve_lvl(vl) ;
+             /* XXX _ve_lvl(vl)) */  ;
             __vr vrsum = vzeros;
             // slower:
-            //    any use ov _ve_lvs_svs_u64/f32
+            //    any use of ve lvs_svs_u64/f32
             //    any type of blocking 'c' loop (many ways tried)
             //    clang prefetch will not compile
             //    precalc offset expressions (cannnot distribute scalar calc better than clang)
@@ -1154,25 +1154,25 @@ vednnConvolutionForward_direct_default3(
               //const int64_t h = i + r * dilationHeight; // kh_beg,kh_end guarantee h in [0,outHeight)
               __vr vrw = vrj;
               for (int64_t s = 0; s < kernWidth; s++) {
-                __vm256 vm2 = _ve_vfmkl_mcv(VECC_GE, vrw) ;        // condition(0 <= w)
-                __vm256 vm3 = _ve_vfmkl_mcv(VECC_IG, _ve_vcmpsl_vsv(inWidth,vrw)) ;  // condition(w < inWidth)
-                __vm256 vm23  = _ve_andm_mmm(vm2, vm3) ;
+                __vm256 vm2 =  _vel_vfmklge_mvl(vrw, vl) ;        // condition(0 <= w)
+                __vm256 vm3 =  _vel_vfmklgt_mvl(_vel_vcmpsl_vsvl(inWidth,vrw, vl), vl) ;  // condition(w < inWidth)
+                __vm256 vm23  = _vel_andm_mmm(vm2, vm3) ;
                 for (int64_t c = 0; c < inChannelGroup; ++c)
                 {
                   const float *pIn = pIn_0 + c*inHW + (i+r*dilationHeight)*inWidth + x0*strideWidth-padWidth + s*dilationWidth;
 
                   const float *pKerValue = pKern_gk + c*kernHW + r*kernWidth +s;
-                  __vr vrin = _ve_vldu_vss(4*strideWidth,pIn) ;
-                  vrin = _ve_vmrg_vvvm(vzeros, vrin, vm23) ;
-                  vrsum = _ve_vfmads_vvsv(vrsum, *pKerValue, vrin) ;
+                  __vr vrin = _vel_vldu_vssl(4*strideWidth,pIn, vl) ;
+                  vrin = _vel_vmrg_vvvml(vzeros, vrin, vm23, vl) ;
+                  vrsum = _vel_vfmads_vvsvl(vrsum, *pKerValue, vrin, vl) ;
                 } // inChannel
 
-                vrw = _ve_vaddsl_vsv(dilationWidth,  vrw) ; // <--- vector induced (not fully calc)
+                vrw = _vel_vaddsl_vsvl(dilationWidth,  vrw, vl) ; // <--- vector induced (not fully calc)
               } // s .. kernWidth
             } // r .. kernHeight
-            //_ve_vstu_vss(vrsum, 4, pOut+outIndex) ;
-            _ve_vstu_vss(vrsum, 4, pOut) ;
-            vrj = _ve_vaddsl_vsv(sw_x_VLEN,vrj); // induce to avoid full recalc
+            //_vel_vstu_vssl(vrsum, 4, pOut+outIndex, vl) ;
+            _vel_vstu_vssl(vrsum, 4, pOut, vl) ;
+            vrj = _vel_vaddsl_vsvl(sw_x_VLEN,vrj, vl); // induce to avoid full recalc
             //outIndex += vl ; /* MUST always execute (before break) */
             pOut += vl; // visible speedup
           } // x

@@ -56,7 +56,7 @@ int mk_FASTDIV(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi/*=0*/,
                 mul = OSSFMT("fastdiv_"<<jj<<"_MUL");
                 cb["..*/first"]>>OSSFMT("uint64_t const "<<mul<<" = "<<jithex(jj_M)<<";");
             }
-            mac = OSSFMT("_ve_vmulul_vsv("<<mul<<",V)");
+            mac = OSSFMT("_vel_vmulul_vsvl("<<mul<<",V, VL)");
 
             string shr;
             if(define_FASTDIV_SHR){
@@ -68,8 +68,8 @@ int mk_FASTDIV(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi/*=0*/,
             }else{
                 shr = jitdec(FASTDIV_C);
             }
-            //mac = OSSFMT("_ve_vsrl_vvs("<<mac<<","<<shr<<")/*OK over [0,"<<vIn_hi<<")*/");
-            mac = OSSFMT("_ve_vsrl_vvs("<<mac<<","<<shr<<")/*OK over [0,2^"<<FASTDIV_C/2<<")*/");
+            //mac = OSSFMT("_vel_vsrl_vvsl("<<mac<<","<<shr<<", None)/*OK over [0,"<<vIn_hi<<")*/");
+            mac = OSSFMT("_vel_vsrl_vvsl("<<mac<<","<<shr<<", VL)/*OK over [0,2^"<<FASTDIV_C/2<<")*/");
 
             fastdiv_macro = mac;
             ret = 2;
@@ -93,7 +93,7 @@ int mk_FASTDIV(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi/*=0*/,
                     mul = OSSFMT("fastdiv_"<<jj<<"_MUL");
                     cb["..*/first"]>>"uint64_t const "<<mul<<" = "<<jithex(jj_fastdiv.mul)<<";";
                 }
-                mac=OSSFMT("_ve_vmulul_vsv("<<mul<<",V)");
+                mac=OSSFMT("_vel_vmulul_vsvl("<<mul<<",V, VL)");
             }else{
                 mac="V";
             }
@@ -106,7 +106,7 @@ int mk_FASTDIV(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi/*=0*/,
                     add = OSSFMT("fastdiv_"<<jj<<"_ADD");
                     cb>>OSSFMT("uint64_t const "<<add<<" = "<<jitdec(jj_fastdiv.add)<<";");
                 }
-                mac=OSSFMT("_ve_vaddul_vsv("<<add<<","<<mac<<")");
+                mac=OSSFMT("_vel_vaddul_vsvl("<<add<<","<<mac<<", VL)");
             }
             if(jj_fastdiv.shift != 0){
                 string shr;
@@ -119,7 +119,7 @@ int mk_FASTDIV(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi/*=0*/,
                 }else{
                     shr = jitdec(jj_fastdiv.shift);
                 }
-                mac=OSSFMT("_ve_vsrl_vvs("<<mac<<","<<shr<<")");
+                mac=OSSFMT("_vel_vsrl_vvsl("<<mac<<","<<shr<<", VL)");
             }
             fastdiv_macro = mac;
             ret = fastdiv_ops;
@@ -133,7 +133,7 @@ int mk_FASTDIV(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi/*=0*/,
             }
 
         }
-        scope.define(OSSFMT("FASTDIV_"<<jj<<"(V)"),fastdiv_macro);
+        scope.define(OSSFMT("FASTDIV_"<<jj<<"(V,VL)"),fastdiv_macro);
     }
     return ret;
 }
@@ -155,22 +155,22 @@ int mk_DIVMOD(Cblock& cb, uint32_t const jj, uint32_t const vIn_hi/*=0*/,
         scope[tag].setType("TAG"); // create the tag block "we were here before"
         if(v>0) cout<<"DIVMOD_"<<jj<<" new macro"<<endl;
         int nops = mk_FASTDIV(cb,jj,vIn_hi,v);
-        string mac = OSSFMT(" \\\n          VDIV = FASTDIV_"<<jj<<"(V); \\\n");
+        string mac = OSSFMT(" \\\n          VDIV = FASTDIV_"<<jj<<"(V,VL); \\\n");
         if(nops==1){
             assert(positivePow2(jj));
             if(v>1) cout<<("MASK WITH jj-1 for modulus");
-            mac = OSSFMT(mac<<"          VMOD = _ve_vand_vsv("<<jithex(jj-1)<<",V)");
+            mac = OSSFMT(mac<<"          VMOD = _vel_vand_vsvl("<<jithex(jj-1)<<",V,VL)");
             ++nops;
         }else{
             // VE does not have FMA ops for any integer type.
             //     so for 12/24-bit floats could consdier exact-floating calcs,
             //     but conversion ops probably kill this idea (not tried).
             if(v>1) cout<<("MUL-SUB modulus");
-            mac = OSSFMT(mac<<"          VMOD = _ve_vsubul_vvv(V,_ve_vmulul_vsv("<<jj<<",VDIV))");
+            mac = OSSFMT(mac<<"          VMOD = _vel_vsubul_vvvl(V,_vel_vmulul_vsvl("<<jj<<",VDIV,VL),VL)");
             if(!isIval(jj)) mac.append(" /*is non-Ival in register?*/");
             nops+=2;
         }
-        scope.define(OSSFMT("DIVMOD_"<<jj<<"(V,VDIV,VMOD)"),mac);
+        scope.define(OSSFMT("DIVMOD_"<<jj<<"(V,VL,VDIV,VMOD) /*VL multiple eval*/ "),mac);
     }
     return nops;
 }
