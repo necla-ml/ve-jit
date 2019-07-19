@@ -1,7 +1,7 @@
 /* Copyright (c) 2019 by NEC Corporation
  * This file is part of ve-jit */
 /** \file
- * fl6 is a code cleanup of cf5
+ * fl7 ports fl6 to _vel_* intrinsics (branch vel)
  *
  * quick test:
  * ```
