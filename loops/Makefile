@@ -1,5 +1,6 @@
 SHELL=/bin/bash	
-NCXX:=nc++-2.1.28
+#NCXX:=nc++-2.1.28
+NCXX:=nc++
 # on Aurora hosts, gcc is extremely old version, with incomplete <regex> impl
 GCXX:=clang++
 # however, clang++ seems still to have ABI bugs.
@@ -831,6 +832,10 @@ tdivmod: tdivmod.cpp ../timer.h ../intutil.h
 tdivmod-ve: tdivmod.cpp ../timer.h ../intutil.h
 	clang++ ${CXXLANG_FLAGS} -Wall -std=c++11 -I.. -O3 -S $< -o $@.s
 	$(NCXX) $(CFLAGS) $@.s -o $@
+tdivmod-ncc: tdivmod.cpp ../timer.h ../intutil.h
+	$(NCXX) -Wall -std=gnu++11 -I.. -O3 -E $< -o $@.i
+	$(NCXX) -Wall -std=gnu++11 -I.. -O3 -S $< -o $@.s
+	$(NCXX) -Wall -std=gnu++11 -I.. -O3 $< -o $@
 cfuse: cfuse.cpp ../libjit1-x86.a
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 cfuse2: cfuse2.cpp ../libjit1-x86.a ../fuseloop.hpp ../cblock.hpp ../vechash.hpp ./exechash.hpp
