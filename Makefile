@@ -69,11 +69,11 @@ TARGETS=libjit1.a libjit1-x86.a asmfmt-ve\
 #CXX:=nc++-1.5.2
 #CC:=ncc-1.6.0
 #CXX:=nc++-1.6.0
-CC:=ncc-2.1.28
-CXX:=nc++-2.1.28
+#CC:=ncc-2.1.28
+#CXX:=nc++-2.1.28
 
-#CC:=ncc
-#CXX:=nc++
+CC:=ncc
+CXX:=nc++
 CFLAGS:=-O2 -g2
 CFLAGS+=-Wall -Werror
 #CXXFLAGS:=$(CFLAGS) -std=c++11 # does not allow extended asm -- need 'gnu' extensions...
@@ -258,18 +258,19 @@ fuseloop-ve.o: fuseloop.cpp fuseloop.hpp
 	$(CXX) $(CXXFLAGS) -Wall -Werror -c $< -o $@
 ve_divmod-ve.o: ve_divmod.cpp
 	$(CXX) $(CXXFLAGS) -Wall -Werror -c $< -o $@
-libjit1.so: jitpage.lo intutil.lo bin.mk-ve.lo \
-	asmfmt.lo asmblock-ve.lo cblock-ve.lo dllbuild-ve.lo fuseloop-ve.lo ve_divmod-ve.lo # C++ things
+libjit1.so: jitpage-ve.lo intutil-ve.lo bin.mk-ve.lo \
+	asmfmt-ve.lo asmblock-ve.lo cblock-ve.lo dllbuild-ve.lo fuseloop-ve.lo \
+	ve_divmod-ve.lo vechash-ve.lo
 	$(CXX) -o $@ -shared -Wl,-trace -wL,-verbose $^ #-ldl #-lnc++
 	$(READELF) -h $@
 	$(READELF) -d $@
-intutil.lo: intutil.c intutil.h
+intutil-ve.lo: intutil.c intutil.h
 	$(CC) ${CFLAGS} -fPIC -O2 -c $< -o $@
-jitpage.lo: jitpage.c jitpage.h
+jitpage-ve.lo: jitpage.c jitpage.h
 	$(CXX) $(CXXFLAGS) -fPIC -O2 -c $< -o $@ -ldl
-asmfmt.lo: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
+asmfmt-ve.lo: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
 	$(CXX) ${CXXFLAGS} -fPIC -O2 -c asmfmt.cpp -o $@
-vechash.lo: vechash.cpp vechash.hpp throw.hpp vfor.h
+vechash-ve.lo: vechash.cpp vechash.hpp throw.hpp vfor.h
 	$(CXX) ${CXXFLAGS} -fPIC -O2 -c vechash.cpp -o $@
 cblock-ve.lo: cblock.cpp cblock.hpp
 	$(CXX) ${CXXFLAGS} -fPIC -c $< -o $@
@@ -547,13 +548,13 @@ bin.mk-ve.lo: bin.mk ftostring
 #	# because the symbols are missing info (and my linker does no have --add-symbol or such)
 #	# use portable 'ftostring.c' and compile (uggh)
 
-.PHONY: dllbuild dllbuild-clean dllbuild-do dllbuild.log dllvebug.log
+.PHONY: dllbuild dllbuild-clean dllbuild-do dllbuild.log dllveok.log
 dllbuild: dllbuild-clean dllbuild-do
 dllbuild-clean:
 	rm -rf tmp-dllbuild
 	rm -f dllbuild-{x86,x86b,ve,veb} *.o *.lo
 	#rm -f libjit1{,-x86}.{a,so}
-dllbuild-do: dllbuild.log dllvebug.log
+dllbuild-do: dllbuild.log dllveok.log
 dllbuild.log:
 	# It is important to demo bin.mk basic correctness for the different build methods
 	# So now dllbuild puts multiple named builds into tmpdllbuild/ ,
@@ -573,14 +574,14 @@ dllbuild.log:
 		echo ""; echo "TEST dllbuild ve clang++"; ./dllbuild-ve 7 -clang.cpp; \
 		} ; } >& dllbuild.log && echo "dllbuild.log seems OK" || echo "dllbuild.log Huh?"
 	# NOTE -clang.cpp expected to fail becase clang++ does not understand "-std=c++11"
-dllvebug.log:
+dllveok.log: # c++ and shared objects now work (used to be called dllvebug.log)
 	{ $(MAKE) VERBOSE=1 dllbuild-veb && { \
 		echo ""; echo "TEST dllbuild ve dll ncc";     ./dllbuild-veb 7; \
 		echo ""; echo "TEST dllbuild ve dll clang";   ./dllbuild-veb 7 -clang.c; \
 		echo ""; echo "TEST dllbuild ve dll nc++";    ./dllbuild-veb 7 -ncc.cpp; \
 		echo ""; echo "TEST dllbuild ve dll clang++"; ./dllbuild-veb 7 -clang.cpp; \
 		echo ""; echo "TEST dllbuild ve dll clang C+intrinsics"; ./dllbuild-veb 7 -vi.c; \
-		} ; } >& dllvebug.log && echo "dllvebug.log seems OK" || echo "dllvebug.log Huh?"
+		} ; } >& dllveok.log && echo "dllveok.log seems OK" || echo "dllveok.log Huh?"
 	# NOTE **all** above fail because dllbuild-veb is linked with a shared C++ library.
 dllbuild-x86: dllbuild.cpp libjit1-x86.a
 	g++ -o $@ $(CXXFLAGS) -Wall -Werror -DDLLBUILD_MAIN $< -L. libjit1-x86.a -ldl
