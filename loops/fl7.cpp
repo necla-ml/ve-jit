@@ -119,7 +119,7 @@ uint64_t constexpr cnt_loops(uint64_t const vl,
     return (ii*jj+vl-1U)/vl;
 }
 
-void cf5_help_msg(){
+void fl7_help_msg(){
     cout<<" cf5 -[h|t|a]* [-kSTR] [-oFILE] VLEN I J"
         <<"\n Function:"
         <<"\n double loop --> loop over vector registers a[VLEN], b[VLEN]"
@@ -159,7 +159,7 @@ int main(int argc,char**argv){
             char *c = &argv[a+1][1];
             cout<<" arg : "<<c<<endl;
             for( ; *c != '\0'; ++c){
-                if(*c=='h'){ cf5_help_msg(); opt_h = 1;
+                if(*c=='h'){ fl7_help_msg(); opt_h = 1;
                 }else if(*c=='v'){ ++verbosity;
                 }else if(*c=='t'){ opt_t=2;
                 }else if(*c=='a'){ opt_t=3;

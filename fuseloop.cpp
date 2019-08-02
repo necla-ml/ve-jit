@@ -72,7 +72,7 @@ int64_t ve_vlen_suggest_equ(int64_t const nitems){
             //x0_check_vl = false;
         }else{ // redistribute...
             // we need some remainder, set up a "nice" main vector length
-            // DO NOT use rem as loop entry value, only as last-time-through value.
+            // Use rem as a last-time-through-loop value.
             // [ vector inductions REQUIRE last-loop vlen <= main vlen ]
             int64_t vleq = (nitems+nLoops-1) / nLoops;
             //

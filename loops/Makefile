@@ -951,6 +951,13 @@ fl7-run: # u~unroll a~alt-VL
 
 cfuse3: cfuse3.cpp ../libjit1-x86.a
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+genBlock0: genBlock0.cpp ../stringutil.hpp ../fuseloop.hpp ../libjit1-x86.so
+	g++ -std=c++11 -fPIC $^ ../libjit1-x86.so -ldl -o $@
+genBlock-kernels.hpp: ../cblock.hpp
+genBlock-kernels.o: genBlock-kernels.cpp genBlock-kernels.hpp ../stringutil.hpp ../vechash.hpp ../fuseloop.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} -c $< -o $@
+genBlock: genBlock.cpp genBlock-kernels.o ../stringutil.hpp ../fuseloop.hpp ../cblock.hpp ../libjit1-x86.so
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 %: %.cpp
 	$(GCXX) -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
 	$(GCXX) -Wall -std=c++11 -I.. -O3 $< -o $@

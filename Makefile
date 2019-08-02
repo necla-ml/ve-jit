@@ -261,7 +261,7 @@ ve_divmod-ve.o: ve_divmod.cpp
 libjit1.so: jitpage-ve.lo intutil-ve.lo bin.mk-ve.lo \
 	asmfmt-ve.lo asmblock-ve.lo cblock-ve.lo dllbuild-ve.lo fuseloop-ve.lo \
 	ve_divmod-ve.lo vechash-ve.lo
-	$(CXX) -o $@ -shared -Wl,-trace -wL,-verbose $^ #-ldl #-lnc++
+	$(CXX) -o $@ -shared -Wl,-trace -Wl,-verbose $^ #-ldl #-lnc++
 	$(READELF) -h $@
 	$(READELF) -d $@
 intutil-ve.lo: intutil.c intutil.h

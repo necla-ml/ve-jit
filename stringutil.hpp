@@ -9,6 +9,7 @@
 #include <vector>
 #include <cstdio>   // tmpnam, tempnam?
 #include <unistd.h> // close
+#include <sstream>
 #include <iomanip>
 #include <algorithm>    // std::find?
 

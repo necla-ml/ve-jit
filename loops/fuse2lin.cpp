@@ -10,6 +10,18 @@
  * save ops.
  *
  * So linear comb can be an option in fuse2, after all.
+ *
+ * for(ilo..ihi)for(jlo..jhi) --> vi, vj (by vl as sq[]=0,1,2,...)
+ *   jR=jhi-jlo;
+ *   vi = ilo + sq/jR;
+ *   vj = jlo + sq%jR;
+ *   but really want lin comb lci = vi*Ai+Bi and lcj = vj*Aj+Bj
+ *   lci = ilo*Ai+Bi + (sq/jR)*Ai
+ *         ---i00---
+ *   lcj = jlo*Aj+Bj + (sq%jR)*Aj
+ *         ---j00---
+ * for convolutions, Ai ~ stride, Bi ~ pad
+ *
  */
 #include <vector>
 #include <iostream>
@@ -651,3 +663,4 @@ int main(int argc,char**argv){
     cout<<"\nGoodbye"<<endl;
     return 0;
 }
+// vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
