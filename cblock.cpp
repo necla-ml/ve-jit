@@ -473,13 +473,11 @@ std::ostream& Cblock::write(std::ostream& os, bool chkWrite)
     }
     std::string& in = _root->indent;
     // very-verbose mode blocks commented with fullpath
-    if(_root->v >= 2 || _code.size()==0){
-        if(_root->v >= 2 && _code.size()) os<<in<<"//\n";
-        if(_root->v >= 1){
-            os<<in<<"// Cblock : "<<this->fullpath()<<" : "<<_type;
-            if(_code.empty()) os<<" (empty)";
-            os<<"\n";
-        }
+    if(_root->v >= 2){ // TODO add verbose level to show (empty) blocks?
+        if(_code.size()) os<<in<<"//\n";
+        os<<in<<"// Cblock : "<<this->fullpath()<<" : "<<_type;
+        if(_code.empty()) os<<" (empty)";
+        os<<"\n";
     }
     if(_premanip) os << *_premanip;
     if(!_code.empty()){

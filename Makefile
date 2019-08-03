@@ -5,6 +5,14 @@ SHELL:=/bin/bash
 # major clean and rebuild tests:
 #   dllbuild
 
+# on Aurora hosts, gcc is extremely old version, with incomplete <regex> impl
+GCXX:=g++
+#GCXX:=clang++
+X86FLAGS?=
+LDFLAGS?=
+X86LIBS?=
+X86LIBS+=-ldl
+
 UNAME_S:=$(shell uname -s)
 OS:=$(patsubst(CYGWIN%,Cygwin,$(UNAME_S))
 ifeq ($(OS),Cygwin)
@@ -602,6 +610,10 @@ dllbuild-veb: dllbuild.cpp
 dllbuild-vec: dllbuild.cpp libjit1.so
 	$(CXX) -o $@ $(CXXFLAGS) -fPIC -pthread -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1.so
 	nreadelf -d $@
+cjitDemo: cjitDemo.cpp cblock.hpp dllbuild.hpp jitpipe.hpp libjit1-x86.so
+	@# hello world multiple function dllbuild example (cblock,dllbuild,jitpipe)
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+
 # next test show how to dynamically *compile* and load a dll given
 # a std::string containing 'C' code.
 clean:

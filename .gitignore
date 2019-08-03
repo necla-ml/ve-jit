@@ -137,3 +137,4 @@ cblock-*
 libjit1-cxx.cpp
 html
 tmpfl*
+cjitDemo

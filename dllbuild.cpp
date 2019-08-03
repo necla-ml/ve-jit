@@ -103,7 +103,12 @@ std::vector<std::string> DllFile::obj(std::string fname){
     std::vector<char const*> alts;
     cout<<" Dllfile::obj(\""<<fname<<"\")..."<<endl; cout.flush();
     if((p=fname.rfind('-'))!= std::string::npos){
+        string objsuffix("-ve.o");
         if(0){ ;
+        }else if((p=fname.rfind("-x86.c"))==fname.size()-6){
+            pp=p; objsuffix="-x86.o";
+        }else if((p=fname.rfind("-x86.cpp"))==fname.size()-8){
+            pp=p; objsuffix="-x86.o";
         }else if((p=fname.rfind("-vi.c"))==fname.size()-5){
             pp=p;
             // need a better way to disable unrolled compiles XXX
@@ -117,13 +122,15 @@ std::vector<std::string> DllFile::obj(std::string fname){
         }else if((p=fname.rfind("-clang.cpp"))==fname.size()-10){ pp=p;
         }
         if(pp){ // all make fname[0:pp)+"-ve.o", and perhaps some alts
-            ret.push_back(fname.substr(0,pp).append("-ve.o"));
+            ret.push_back(fname.substr(0,pp).append(objsuffix));
             for(auto const& suffix: alts){
                 ret.push_back(fname.substr(0,pp).append(suffix));
             }
         }
     }
     if(ret.empty()){
+        // if we still haven't recognized the source file assume Aurora
+        // [maybe get rid of this dubious assumption?]
         auto last_dot = fname.find_last_of('.');
         if(last_dot != std::string::npos){
             std::string ftype = fname.substr(last_dot+1);
@@ -135,7 +142,7 @@ std::vector<std::string> DllFile::obj(std::string fname){
         }
     }
     if(ret.empty()) THROW("DllFile::obj("<<fname
-            <<") must match %[-vi|-ncc|-clang].{c|cpp} or %.{s|S} (see bin.mk rules)");
+            <<") must match %[-vi|-ncc|-clang|-x86].{c|cpp} or %.{s|S} (see bin.mk rules)");
     return ret;
 }
 /** \b new: if file exists and "same", don't rewrite it */
@@ -716,9 +723,10 @@ std::unique_ptr<DllOpen> DllBuild::dllopen(){
 
     // TODO test dlopen machine architecture match
 #if !defined(__ve)
-    cout<<" DllBuild::dllopen cut short -- not running on VE "<<endl;
-    pRet.reset(nullptr);
-    return pRet;
+    //cout<<" DllBuild::dllopen cut short -- not running on VE "<<endl;
+    //pRet.reset(nullptr);
+    //return pRet;
+    cout<<" DllBuild::dllopen [NEW] trying to handle x86 library"<<endl;
 #endif
 
     if(v>1){cout<<"now dlopen..."<<endl; cout.flush();}
@@ -1027,6 +1035,7 @@ int main(int argc,char**argv){
     if( !pLib ){
 #if !defined(__ve)
         cout<<" STOPPING EARLY: we are an x86 executable and should not load a VE .so"<<endl;
+        //cout<<" Warning: DllBuild for x86 is a new feature..."<<endl;
 #else
         THROW(" dllopen failed");
 #endif

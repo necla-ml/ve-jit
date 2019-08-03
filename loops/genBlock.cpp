@@ -315,6 +315,7 @@ int main(int argc, char**argv){
     //
     cout<<"\n BlockingMain scaffold:"<<endl;
     BlockingMain bt(KRNBLK3_NONE, 1/*verbose*/);
+    cout<<"Tree:\n"; bt.pr.dump(cout); cout<<endl; // might be long?
     cout<<bt.pr.str()<<endl;
     ofstream ofs("tmpScaffold.c");
     ofs<<bt.pr.str()<<endl;
