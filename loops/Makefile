@@ -958,12 +958,21 @@ genBlock-kernels.o: genBlock-kernels.cpp genBlock-kernels.hpp ../stringutil.hpp 
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} -c $< -o $@
 genBlock: genBlock.cpp genBlock-kernels.o ../stringutil.hpp ../fuseloop.hpp ../cblock.hpp ../libjit1-x86.so
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+tmpScaffold.c: genBlock
+	./genBlock 13 13 13 >& x.log
+tmpScaffold: tmpScaffold.c
+	@# using g++ implies c11 standard
+	@# rm -f tmpScaffold; { make VERBOSE=1 tmpScaffold; } >& x.log
+	g++ -O3 $^ -L.. -Wl,-rpath=.. -ljit1-x86 -ldl -o $@
+	./$@
 %: %.cpp
 	$(GCXX) -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
 	$(GCXX) -Wall -std=c++11 -I.. -O3 $< -o $@
 clean:
 	rm -f *.i *.o *.gch a.out fuse2 fuse2lin fuse2-ve fuse3 fuse3-ve repro \
-		cfuse2 tdivmod tdivmod-ve cf3 cf3u cf3*.o
+		cfuse2 tdivmod tdivmod-ve cf3 cf3u cf3*.o \
+	       	genBlock tmpScaffold tmpScaffold.* \
+		cf5 fl6 fl7 tdivmod-ncc tmp-vi
 	rm -f a.s  cblock cfuse libgcc_lucky.so
 	rm -f *.exe *.exe.stackdump
 realclean: clean	

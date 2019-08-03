@@ -13,9 +13,31 @@
 #include "../fuseloop.hpp"
 #include "../cblock.hpp"
 #include <limits>
+#include <fstream>
 using namespace std;
 using namespace loop;
 using namespace cprog;
+
+#define INSCMT(BLK,INS,CMT) do{ \
+    auto ins=(INS); \
+    auto cmt=(CMT); \
+    (BLK)>>OSSFMT(left<<setw(40)<<ins<<" // "<<cmt); \
+} while(0)
+
+#if 1
+/** false if cb[sub] exists, else true, and create empty cb[sub] TAG node. */
+static bool tag_once(Cblock &cb, std::string const& sub){
+    Cblock *found = cb.find(sub);
+    if(!found) cb[sub].setType("TAG");
+    return found==nullptr;
+}
+#endif
+
+/** emit code only once. \c sub is a simple string (not a fancy relative path). */
+static void set_once(Cblock &cb, std::string const& sub, std::string const& code){
+    if(!cb.find(sub)) cb[sub]>>code;
+}
+
 template<typename T> inline constexpr T divup(T const n, T const d) {return (n+d-1)/d;}
 /** Split 3 loops into 3 outer + 3 inner SIMD loops by \em blocking.
  * Begin with 3 loops, unblocked:
@@ -95,6 +117,16 @@ std::vector<std::vector<Triples<T>>> refTriples(
         T const iv, T const jv, T const kv);    // vectorization lengths
 template<typename T>
 std::vector<std::vector<Triples<T>>> refTriples( BlockingPlan const& p );
+
+/** inject timing utilities, globals, init and teardown code [just once] */
+void timeit_prep(Cblock& utils, Cblock& main);
+
+/** inject a `timeit_foo` function for your \c foo.
+ * \return inner Cblock in `timeit_`foo where your kernel goes.
+ * - timeit_foo goes to a subblock fns[foo]
+ * - invoke/print ------> subblock call[foo]
+ */
+Cblock& timeit_foo(char const* const foo, Cblock& fns, Cblock& call, int const reps);
 
 /**
  * - NEVER simdize across the exit of [all 3] inner loops
@@ -201,7 +233,7 @@ struct BlockingBase{
             int const which
             , std::string name=""
             , int const v=0/*verbose*/)
-        : pr((name.empty()?std::string{"BlockingTest"}:name), "C", v),
+        : pr((name.empty()?std::string{"BlockingBase"}:name), "C", v),
         outer_(nullptr), inner_(nullptr), krn_(nullptr)
         {/*not yet usable*/}
     ~BlockingBase() {if(krn_){ delete krn_; krn_=nullptr;}};
@@ -215,8 +247,8 @@ struct BlockingBase{
     KrnBlk3* krn_;  ///< owned, references *outer_ and *inner_
 };
 
-struct BlockingTest final : public BlockingBase {
-    BlockingTest(int const krn, int const v=0/*verbose*/);
+struct BlockingMain final : public BlockingBase {
+    BlockingMain(int const krn, int const v=0/*verbose*/);
 };
 
 int main(int argc, char**argv){
@@ -275,25 +307,114 @@ int main(int argc, char**argv){
         }
     }
 
-    cout<<"\n BlockingTest scaffold:"<<endl;
-    BlockingTest bt(KRNBLK3_NONE, 1/*verbose*/);
+    //
+    // remind myself how to generate a dll of routines [and invoke them]
+    //
+    // Begin with producing a compilable 'tmpScaffold.c`
+    // with one [or more] `timeit` routines.
+    //
+    cout<<"\n BlockingMain scaffold:"<<endl;
+    BlockingMain bt(KRNBLK3_NONE, 1/*verbose*/);
     cout<<bt.pr.str()<<endl;
+    ofstream ofs("tmpScaffold.c");
+    ofs<<bt.pr.str()<<endl;
+    ofs.close();
+    //
+    //  now produce a library of timeit_foo functions,
+    //  load the dll, and invoke each of them in turn (right away)
+    //  TODO use dllbuild.hpp functionality
+    //
 
     cout<<"\nGoobye"<<endl;
 }
 
-BlockingTest::BlockingTest(int const krn, int const v/*=0,verbose*/)
+/** inject timing utility, init and teardown code. */
+void timeit_prep(Cblock& utils, Cblock& main)
+{    
+    if(tag_once(utils,"timeit")){
+        Cblock& tmit = utils["timeit"];
+        tmit>>"static double cyc2ns = 1.0; // really cycle2ns()";
+        main["first"]["+timeit"]
+            >>"cyc2ns = cycle2ns();"
+            >>"printf(\" cyc2ns = %f\\n\", cyc2ns);"
+            ;
+        tmit
+            >>"static inline uint64_t clock_ns() {"
+            >>"    return (uint64_t)(__cycle()*cyc2ns+0.5);"
+            >>"}"
+            >>"static inline unsigned long long to_ns(double avg_cyc){"
+            >>"    return (unsigned long long)( avg_cyc * cyc2ns );"
+            >>"}"
+            >>"static inline double to_ns_f(double avg_cyc){"
+            >>"    return ( avg_cyc * cyc2ns );"
+            >>"}"
+            ;
+        tmit>>"static uint64_t bogus=0;";
+        main["last"]["-timeit"]>>"printf(\"bogus=%llu\\n\", (unsigned long long)bogus);";
+    }
+}
+
+Cblock& timeit_foo(char const* const foo, Cblock& fns, Cblock& call, int const reps)
+{
+    //auto timeit = [&](char const* foo) -> Cblock&
+    //
+    // under Cblock 'fns', add a timing subroutine called 'timeit_foo'
+    // leaving an empty Cblock (our return value) where a kernel can be put.
+    //
+    Cunit& pr = fns.getRoot();
+    CBLOCK_SCOPE(fn_foo,OSSFMT("uint64_t timeit_"<<foo<<"( int const reps )"),pr,fns);
+    fn_foo["first"].setType("FUNCTION")
+        >>"static uint64_t state=12345ULL; // minimal PCG32 impl, inc=rep|1"
+        >>"uint64_t t=0;"
+        ;
+    CBLOCK_SCOPE(tloop,"for(uint64_t rep=0; rep<(uint64_t)reps; ++rep)",pr,fn_foo);
+    tloop["init"]
+        >>"uint64_t oldstate = state;"
+        >>"state = state * 6364136223846793005ULL + ((uint64_t)rep|1ULL);"
+        >>"oldstate =  oldstate^(oldstate >> 18u);"
+        >>"uint64_t const rot = oldstate>>59u;"
+        >>"uint64_t const seed = (oldstate>>rot) | (oldstate<<(64-rot)); // seed ~ a PCG random sequence"
+        >>"uint64_t const t0 = __cycle(); // NOT careful. e.g. no cpuid op HERE for x86"
+        >>"// --- kernel "<<foo<<" "<<string(40,'-')
+        ;
+    Cblock& kern = tloop[foo];      // MUST modify 'bogus' unpredicatably
+    tloop["time"]
+        >>"// --- kernel "<<foo<<" "<<string(40,'-')
+        >>"uint64_t const t1 = __cycle();"
+        >>"t += t1 - t0;"
+        ;
+    tloop["last"];
+    fn_foo["ret"]>>"return (double)t / reps ; // return avg cycle count of 1 'kern'";
+    //
+    // under Cblock 'call', inject a call to `timeit_foo` and print the time
+    //
+    CBLOCK_SCOPE(callfoo,"if(1)",pr,call);
+    callfoo
+        >>OSSFMT("int const foo_reps = "<<reps<<";")
+        >>OSSFMT("double "<<foo<<"_cycles = timeit_"<<foo<<"( foo_reps );")
+        >>OSSFMT("uint64_t "<<foo<<"_ns = to_ns("<<foo<<"_cycles);")
+        >>OSSFMT("printf(\" %s{%llu reps avg %llu cycles = %llu ns}\\n\", \""<<foo<<"\",")
+        >>"        (unsigned long long)foo_reps,"
+        >>OSSFMT("        (unsigned long long)"<<foo<<"_cycles,")
+        >>OSSFMT("        (unsigned long long)"<<foo<<"_ns);")
+        ;
+    return kern;
+};
+BlockingMain::BlockingMain(int const krn, int const v/*=0,verbose*/)
 : BlockingBase(krn, "KrnBlk3", v) // pr set up, other ptrs still NULL
 {
     // upper-level tree structure, above the fused-loop.
     pr.root["first"];                           // reserve room for preamble, comments
+    pr.root["features"]
+        >>"#define _POSIX_C_SOURCE 200809L";
     auto& inc = pr.root["includes"];
-    inc["velintrin.h"]>>"#include \"veintrin.h\"";
-    inc["velintrin.h"]>>"#include \"velintrin.h\"";
+    //inc["velintrin.h"]>>"#include \"veintrin.h\"";
+    //inc["velintrin.h"]>>"#include \"velintrin.h\"";
     inc["stdint.h"]>>"#include <stdint.h>";
     inc["stdio.h"]>>"#include <stdio.h>";
 
     // create a somewhat generic tree
+    auto& utils = pr.root["utils"];
     auto& fns = pr.root["fns"];
     fns["first"]; // reserve a node for optional function definitions
     CBLOCK_SCOPE(main,"int main(int argc,char**argv)",pr,fns);
@@ -301,33 +422,57 @@ BlockingTest::BlockingTest(int const krn, int const v/*=0,verbose*/)
     //      will require extending the find string to match tag!
     main.setType("FUNCTION");
     // outer path root.at("**/main/body")
+    set_once(inc,"timer", "#include \"../timer.h\"");
+    timeit_prep(utils,main); // inject timing function helper code
 
-    // example 'outer loops'
-    main>>"int const nrep = 3;";
-    CBLOCK_FOR(loop1,-1,"for(int iloop1=0; iloop1<nrep; ++iloop1)",main);
-    CBLOCK_FOR(loop2,-1,"for(int iloop2=0; iloop2<1; ++iloop2)",loop1);
-
-    if(v){
-        main["first"]>>"printf(\"BlockingTest outer loop\\n\");";
-        loop2  >>"printf(\"BlockingTest inner loop @ (%d,%d)\\n\",iloop1,iloop2);";
+    { // **HERE** is a test kernel, injected into a `timeit_foo` function.
+        // - `timeit(foo)`:
+        //   1. emit boilerplate 'timeit_foo' function too utils[foo]
+        //   2. call it and print avg time in main[foo]
+        auto& krnBlk = timeit_foo("foo",utils,main,1000);
+        //
+        // - to avoid compiler over-optimization,
+        //   - kernel MUST [finally] modify `bogus`,
+        //   - and CAN use 'seed' to help avoid compiler optimization
+        // - `bogus` can be modified \em inside timing block ( \c timeit("foo") )
+        //   - or \em outside ( \c timeit("foo")["../last"] )
+        //
+        krnBlk
+            >>"uint64_t fooOut = seed;"
+            >>"for(int j=0; j<1000; ++j) fooOut ^= fooOut*23456789ULL+j;"
+            ;
+        // timing = ADD,MUL,ADD,XOR + loop overhead (INCR, BRANCH)
+        // the loop overhead IS timed, but the `bogus` update need not be timed
+        krnBlk["../last"]>>"bogus ^= fooOut; // somehow update bogus using fooOut [,seed,...]";
+        //
+        // End example kernel 'foo'
+        //
     }
 
-    loop2["first"]; // --> 'fd' inner setup code used by all splits
+    main["init"]>>"uint64_t const nrep = 1000;";
+    //CBLOCK_FOR(loop1,-1,"for(int iloop1=0; iloop1<nrep; ++iloop1)",main);
+    //CBLOCK_FOR(loop2,-1,"for(int iloop2=0; iloop2<1; ++iloop2)",loop1);
+    //if(v){
+    //    main["first"]>>"printf(\"BlockingMain outer loop\\n\");";
+    //    loop2  >>"printf(\"BlockingMain inner loop @ (%d,%d)\\n\",iloop1,iloop2);";
+    //}
 
-    if(v>1){
-        cout<<"\nScaffold";
-        cout<<pr.tree()<<endl;
-    }
+    //loop2["first"]; // --> 'fd' inner setup code used by all splits
 
-    this->outer_ = &main;  // outer @ root.at("**/main/body")
-    this->inner_ = &loop2;    // inner @ outer.at("**/loop2/body")
+    //if(v>1){
+    //    cout<<"\nScaffold";
+    //    cout<<pr.tree()<<endl;
+    //}
 
-    if(v>2){
-        cout<<" outer @ "<<outer_->fullpath()<<endl;
-        cout<<" inner @ "<<inner_->fullpath()<<endl;
-    }
+    //this->outer_ = &main;  // outer @ root.at("**/main/body")
+    //this->inner_ = &loop2;    // inner @ outer.at("**/loop2/body")
 
-    this->krn_ = mkBlockingTestKernel(krn,*outer_,*inner_ /*, defaults?*/ );
+    //if(v>2){
+    //    cout<<" outer @ "<<outer_->fullpath()<<endl;
+    //    cout<<" inner @ "<<inner_->fullpath()<<endl;
+    //}
+
+    //this->krn_ = mkBlockingTestKernel(krn,*outer_,*inner_ /*, defaults?*/ );
 }
 std::string BlockingPlan::str() const {
     oss.clear(); oss.str("");
