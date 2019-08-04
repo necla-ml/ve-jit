@@ -38,6 +38,38 @@ extern int bin_mk_size;
 #endif
 }//extern "C"
 
+// When inlined from cblock.hpp I got linker errors (std::string::size
+// multiple defn of Cblock::append or so !!!!!)
+static std::ostream& prefix_lines(std::ostream& os, std::string code,
+        std::string prefix, std::string sep=std::string("\n")){
+    if( prefix.empty() ){
+        os << code;
+    }else if( !code.empty()){
+        size_t nLoc = 0, nLocEnd;
+        while ((nLocEnd = code.find_first_of(sep, nLoc)) != std::string::npos) {
+            //std::cout<<" line["<<nLoc<<"..."<<nLocEnd<<"] = <"<<code.substr(nLoc,nLocEnd)<<">\n";
+            // line is nLoc..nLocEnd, including the last sep char
+            auto const first_nb = code.find_first_not_of(" \r\n\t",nLoc); // first non blank
+            if( first_nb < nLocEnd ){                     // if not a blank line
+                if( code[first_nb] != '#' ) os << prefix; // never indent cpp directives
+                os << code.substr(nLoc,nLocEnd-nLoc) << "\n"; // code string + newline)
+            }
+            nLoc = nLocEnd+1;
+        }
+        //std::cout<<" nLoc="<<nLoc<<" code.size()="<<code.size();
+        if(nLoc < code.size()){
+            //std::cout<<" line["<<nLoc<<"...end] = <"<<code.substr(nLoc)<<">\n";
+            // line is nLoc..nLocEnd, including the last sep char
+            auto const first_nb = code.find_first_not_of(" \r\n\t",nLoc);
+            if( first_nb < nLocEnd ){
+                if( code[first_nb] != '#' ) os << prefix;
+                os << code.substr(nLoc,nLocEnd-nLoc);
+                //os << "\n"; // NO newline
+            }
+        }
+    }
+    return os;
+}
 static std::string bin_mk_file_to_string(){
     //system("ls -l bin.mk");
     //cout<<" binary_bin_mk_start @ "<<(void*)&_binary_bin_mk_start<<endl;
@@ -256,6 +288,35 @@ FileLocn writeFile(std::string const& code, std::string const& basename,
 std::string const & DllBuild::getLibName() const {
     if(!prepped) THROW("getLibName requires DllBuild::prep(basename,dir)");
     return this->libname;
+}
+
+/** debug: show some state */
+void DllBuild::dump(std::ostream& os){
+    if(this->empty()){
+        os<<"\nDllBuild has no symbols set up yet";
+    }else{
+        os<<"\nDllBuild expects symbols...\n";
+        for(auto const& df: *this){
+            os<<"   File: "<<df.basename<<df.suffix<<" :"<<endl;
+            for(auto const& sym: df.syms){
+                os<<"      "<<sym.symbol<<endl;
+                if(!sym.comment.empty()){prefix_lines(os, sym.comment, "        // ");os<<endl;}
+                if(!sym.fwddecl.empty()){prefix_lines(os, sym.fwddecl, "        ");os<<endl;}
+            }
+        }
+    }
+    if(prepped){
+        os<<"DllBuild::prep (or skip_prep) has been called."<<endl;
+        os<<"          subdir   "<<dir.subdir<<endl;
+        os<<"          basename "<<basename<<endl;
+        os<<"          libname  "<<libname<<endl;
+        os<<"          mkfname  "<<mkfname<<endl;
+        os<<"          fullpath "<<fullpath<<endl;
+        os<<"          target library "<<getLibName()<<endl; // might throw
+    }
+    if(made){
+        os<<"DllBuild::make() has been called (makefiles should exist)."<<endl;
+    }
 }
 
 /** Generating the Makefile
@@ -649,37 +710,6 @@ DllOpen::~DllOpen() {
     if(v){cout<<" back from dlclose\n"; cout.flush();}
     //files.clear();
 }
-// When inlined from cblock.hpp I got linker errors (std::string::size multiple defn of Cblock::append or so !!!!!)
-static std::ostream& prefix_lines(std::ostream& os, std::string code,
-        std::string prefix, std::string sep=std::string("\n")){
-    if( prefix.empty() ){
-        os << code;
-    }else if( !code.empty()){
-        size_t nLoc = 0, nLocEnd;
-        while ((nLocEnd = code.find_first_of(sep, nLoc)) != std::string::npos) {
-            //std::cout<<" line["<<nLoc<<"..."<<nLocEnd<<"] = <"<<code.substr(nLoc,nLocEnd)<<">\n";
-            // line is nLoc..nLocEnd, including the last sep char
-            auto const first_nb = code.find_first_not_of(" \r\n\t",nLoc); // first non blank
-            if( first_nb < nLocEnd ){                     // if not a blank line
-                if( code[first_nb] != '#' ) os << prefix; // never indent cpp directives
-                os << code.substr(nLoc,nLocEnd-nLoc) << "\n"; // code string + newline)
-            }
-            nLoc = nLocEnd+1;
-        }
-        //std::cout<<" nLoc="<<nLoc<<" code.size()="<<code.size();
-        if(nLoc < code.size()){
-            //std::cout<<" line["<<nLoc<<"...end] = <"<<code.substr(nLoc)<<">\n";
-            // line is nLoc..nLocEnd, including the last sep char
-            auto const first_nb = code.find_first_not_of(" \r\n\t",nLoc);
-            if( first_nb < nLocEnd ){
-                if( code[first_nb] != '#' ) os << prefix;
-                os << code.substr(nLoc,nLocEnd-nLoc);
-                //os << "\n"; // NO newline
-            }
-        }
-    }
-    return os;
-}
 std::unique_ptr<DllOpen> DllBuild::dllopen(){
     int const v = 1;
     //using cprog::prefix_lines;
@@ -777,6 +807,52 @@ std::unique_ptr<DllOpen> DllBuild::dllopen(){
     if(v){cout<<"*** DllBuild::dllopen() DONE : nerr="<<nerr<<endl; cout.flush();}
     if(nerr) THROW(nerr<<" symbol load errors from "<<libname);
     return pRet;
+}
+
+/** debug: create, but on error dump and throw.
+ * \post return value evaluates as \c true.  */
+std::unique_ptr<DllOpen> DllBuild::safe_create(
+        std::string basename,
+        std::string dir /*="."*/,
+        std::string env /*="" */)
+{
+    // ORIGINALLY we just threw whenever...
+    //if(!prepped){prep(basename,dir); prepped=true;}
+    //if(!made){make(); made=true;}
+    //return dllopen();
+    // NOW we catch (with nicer debug) and and rethrow
+    unique_ptr<DllOpen> plib;
+    int err=0;
+    try{ // dllbuild will throw on errors. provide some debug info if so
+        // call individual steps, if necessary
+        if(!prepped){
+            this->prep(basename,dir);
+            // Note: doesn't allow skip_prep
+            prepped = true;
+        }
+        if(!made){
+            this->make();
+            made=true;
+        }
+        // before actual 'create', print what we expect to find
+        //cout<<"Library: "<<this->getLibName()<<endl;
+        plib = dllopen();
+        assert(plib);
+    }
+    catch(exception& e){ cout<<"DllBuild exception: "<<e.what()<<endl; ++err; }
+    catch(std::string& e){ cout<<"DllBuild exception: "<<e<<endl; ++err; }
+    catch(char const* e){ cout<<"DllBuild exception: "<<e<<endl; ++err; }
+    catch(...){ cout<<"DllBuild threw(?)"<<endl; ++err; }
+    if(err){
+        cout<<"Tried DllBuild::safe_create(basename,dir,env)\n"
+            <<" with basename = basename\n"
+            <<"      dir      = "<<this->dir.subdir<<"\n"
+            <<"      env      = "<<env /* not used ? !!! */
+            <<endl;
+        dump(cout);
+        THROW("error: DllBuild failed");
+    }
+    return plib;
 }
 
 #if 0

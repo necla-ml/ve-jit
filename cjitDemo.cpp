@@ -203,55 +203,35 @@ int main(int argc,char**argv){
         mkConsistent( &pParams[i] );
     }
 
-    int nerr = 0;
     DllBuild dllbuild;
     for(int i=0; i<nParams; ++i){
         struct param const& pConv = pParams[i];
         DllFile df = numberGuesserSrc(&pConv);
         dllbuild.push_back(df);
     }
+    unique_ptr<DllOpen> plib;
+    {
 #if defined(__ve)
 #define TMP_CJIT_LIB_DIR "tmp_cjitDemo"
 #else
 #define TMP_CJIT_LIB_DIR "tmp_cjitDemo-x86"
 #endif
-    dllbuild.prep("cjitDemo",TMP_CJIT_LIB_DIR);
-
-    std::string mkEnv;
-    {
-        std::ostringstream oss;
-        // see bin.mk  --  for x86, C86FLAGS and CXX86FLAGS etc.
-        //oss<<"CFLAGS=-I'" CSTR(VEDNNX_DIR) "'"
-        //     " CXXFLAGS=-I'" CSTR(VEDNNX_DIR) "'"
-        //     " LDFLAGS='-L" CSTR(VEDNNX_DIR) "/lib -Wl,-rpath," CSTR(VEDNNX_DIR) "/lib'"
-        //     ;
-        mkEnv=oss.str();
-    }
-    cout<<" mkEnv:\n\t"<<mkEnv<<endl;
-    dllbuild.make();
-    if(1){
-        cout<<"\nDllBuild expects symbols...\n";
-        cout<<"Library: "<<dllbuild.getLibName()<<endl;
-        for(auto const& df: dllbuild){
-            cout<<"   File: "<<df.basename<<df.suffix<<" :"<<endl;
-            for(auto const& sym: df.syms){
-                cout<<"      "<<sym.symbol<<endl;
-                if(!sym.comment.empty()){prefix_lines(cout, sym.comment, "        // ");cout<<endl;}
-                if(!sym.fwddecl.empty()){prefix_lines(cout, sym.fwddecl, "        ");cout<<endl;}
-            }
+        std::string mkEnv;
+        {
+            //std::ostringstream oss;
+            // see bin.mk  --  for x86, C86FLAGS and CXX86FLAGS etc.
+            //oss<<"CFLAGS=-I'" CSTR(VEDNNX_DIR) "'"
+            //     " CXXFLAGS=-I'" CSTR(VEDNNX_DIR) "'"
+            //     " LDFLAGS='-L" CSTR(VEDNNX_DIR) "/lib -Wl,-rpath," CSTR(VEDNNX_DIR) "/lib'"
+            //     ;
+            //mkEnv=oss.str();
         }
-    }
-    auto plib = dllbuild.create(); // unique_ptr<DllOpen>
-    if(nerr){
-        cerr<<" Encountered "<<nerr<<" errors during C-file and dll file creation."<<endl;
-        exit(2);
-    }
-    if(!plib){
-#if !defined(__ve)
-        cout<<" Warning: DllBuild for x86 is a new feature..."<<endl;
-#else
-        THROW(" dllopen failed");
-#endif
+        // Usually you can just do a single call
+        plib = dllbuild.safe_create( "cjitDemo", TMP_CJIT_LIB_DIR, mkEnv );
+        // which either returns a valid pointer, or throws (with debug info)
+        // `safe_create` postcondition:
+        assert(plib);
+        cout<<" dllbuild --> library "<<dllbuild.getLibName()<<endl;
     }
 #if 1
     DllOpen& lib = *plib;
