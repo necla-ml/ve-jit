@@ -194,29 +194,11 @@ int main(int argc,char**argv){
     printf(" setting params...\n"); fflush(stdout);
     struct param *pParams ;
     int nParams = readParamFile( &pParams, pParamPath );
-#if 0
-    if( nParams <= 0 ) {
-        printf(" Trying as a parameter string...\n"); fflush(stdout);
-        nParams = readParamString( &pParams, pParamPath );
-        printf(" readParamstring --> %d\n",nParams); fflush(stdout);
-        if( nParams <= 0 ) {
-            printf("Bad params from %s\n", pParamPath); fflush(stdout);
-            exit(1);
-        }
-    }
-#endif
     printf(" got %d sets of parameters\n", nParams); fflush(stdout);
 
     for(int i=0; i<nParams; ++i){
-        // Convolution tests don't handle some illegal cases well
-        //    (segfault or bus error)
-        // Some acceptable configs report bad DIFF and also get massaged
-        // to "exact-sized" output height and width.
-        //
-        // This allows you to use randomly-edited parameter files and
-        // at least avoid segfaults/bus errors/GEMM illegal value messages.
-        // (exact output height width can be tricky to guess correctly).
-        //
+        // sometimes parameters are difficult to set correctly,
+        // and to avoid segfault etc and still test something...
         printf("mkConsistent..%d\n",i);
         mkConsistent( &pParams[i] );
     }
@@ -238,10 +220,11 @@ int main(int argc,char**argv){
     std::string mkEnv;
     {
         std::ostringstream oss;
-        oss<<"CFLAGS=-I'" CSTR(VEDNNX_DIR) "'"
-             " CXXFLAGS=-I'" CSTR(VEDNNX_DIR) "'"
-             " LDFLAGS='-L" CSTR(VEDNNX_DIR) "/lib -Wl,-rpath," CSTR(VEDNNX_DIR) "/lib'"
-             ;
+        // see bin.mk  --  for x86, C86FLAGS and CXX86FLAGS etc.
+        //oss<<"CFLAGS=-I'" CSTR(VEDNNX_DIR) "'"
+        //     " CXXFLAGS=-I'" CSTR(VEDNNX_DIR) "'"
+        //     " LDFLAGS='-L" CSTR(VEDNNX_DIR) "/lib -Wl,-rpath," CSTR(VEDNNX_DIR) "/lib'"
+        //     ;
         mkEnv=oss.str();
     }
     cout<<" mkEnv:\n\t"<<mkEnv<<endl;
@@ -273,7 +256,7 @@ int main(int argc,char**argv){
 #if 1
     DllOpen& lib = *plib;
     for(size_t i=0U; i<lib.nSrc(); ++i){
-        cout<<" src file #"<<i<<" syms";
+        cout<<"\nsrc file #"<<i<<" syms";
         auto symnames = lib[i];
         for(auto s: symnames) cout<<" "<<s;
         cout<<endl;
@@ -284,6 +267,7 @@ int main(int argc,char**argv){
         typedef demoError_t (*JitFn)();
         JitFn jitfn = (JitFn)symaddr;
         // invoke the test function (it takes no parameters)
+        cout<<" jit "<<symnames[0]<<"() ..."<<endl;
         jitfn();
     }
 #endif
