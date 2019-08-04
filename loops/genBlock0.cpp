@@ -340,7 +340,7 @@ int main(int argc, char**argv){
 
         int const ijkB = p.iB*p.jB*p.kB;
         if(ijkB%p.kVl){
-            cout<<"      vl = min(vl, sq[0]+vl - "<<ijkB%p.kVl<");\n";
+            cout<<"      vl = min(vl, sq[0]+vl - "<<ijkB%p.kVl<<");\n";
         }
         cout<<"      prtijk(i,j,k);\n";
         cout<<"      prt(a); prt(ta); prt(b); prt(c);\n";

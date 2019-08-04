@@ -956,15 +956,17 @@ genBlock0: genBlock0.cpp ../stringutil.hpp ../fuseloop.hpp ../libjit1-x86.so
 genBlock-kernels.hpp: ../cblock.hpp
 genBlock-kernels.o: genBlock-kernels.cpp genBlock-kernels.hpp ../stringutil.hpp ../vechash.hpp ../fuseloop.hpp
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} -c $< -o $@
-genBlock: genBlock.cpp genBlock-kernels.o ../stringutil.hpp ../fuseloop.hpp ../cblock.hpp ../libjit1-x86.so
+genBlock1: genBlock1.cpp genBlock-kernels.o ../stringutil.hpp ../fuseloop.hpp ../cblock.hpp ../libjit1-x86.so
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
-tmpScaffold.c: genBlock
-	./genBlock 13 13 13 >& x.log
+tmpScaffold.c: genBlock1
+	./genBlock1 13 13 13 >& x.log
 tmpScaffold: tmpScaffold.c
 	@# using g++ implies c11 standard
 	@# rm -f tmpScaffold; { make VERBOSE=1 tmpScaffold; } >& x.log
 	g++ -O3 $^ -L.. -Wl,-rpath=.. -ljit1-x86 -ldl -o $@
 	./$@
+genBlock: genBlock.cpp genBlock-kernels.o ../stringutil.hpp ../fuseloop.hpp ../cblock.hpp ../libjit1-x86.so
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 %: %.cpp
 	$(GCXX) -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
 	$(GCXX) -Wall -std=c++11 -I.. -O3 $< -o $@
