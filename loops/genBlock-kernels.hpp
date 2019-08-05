@@ -20,6 +20,7 @@
 /** what kernel is default? */
 #define WHICH_KERNEL KRNBLK3_CHECK
 
+#if 0
 extern "C" {
 	/** bool flags indicating kernel requests for certain defined variables.
 	 * Variable existence is flagged with tags in the Cblock tree in a 'definitions'
@@ -158,6 +159,7 @@ inline void KrnBlk3_vars::vars( KRNBLK3_ARGS ){
  * Return flags telling optimizer about input data this kernel desires.
  * \sa FusedLoopKernel
  */
+#endif
 
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
 #endif // GENBLOCK_KERNELS_HPP

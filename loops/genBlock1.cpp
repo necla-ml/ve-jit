@@ -1,7 +1,11 @@
 /* Copyright (c) 2019 by NEC Corporation
  * This file is part of ve-jit */
 /** \file
- * loop blocking strategy for Aurora.
+ * loop blocking plan + Ref output + jit with NO loop-blocking kernel.
+ *
+ * This file runs generates a file with a single test in very simple fashion.
+ * There is NO real loop-blocking kernel.
+ *
  * Nicer JIT version of triple loop blocking.
  * 3 original loops --> 6 loops [9 for vectorization]
  *
@@ -11,6 +15,7 @@
  * 1. TODO
  * - add "real" kernels to genBlock-kernels
  * - execute jit code (see cjitDemo.cpp)
+ *
  */
 #include "genBlock-kernels.hpp"
 #include "../stringutil.hpp"
@@ -234,21 +239,20 @@ static ostringstream oss;
 
 struct BlockingBase{
     BlockingBase(
-            int const which
+            int const krn
             , std::string name=""
             , int const v=0/*verbose*/)
         : pr((name.empty()?std::string{"BlockingBase"}:name), "C", v),
-        outer_(nullptr), inner_(nullptr), krn_(nullptr)
+        outer_(nullptr), inner_(nullptr), krn_(krn)
         {/*not yet usable*/}
-    ~BlockingBase() {if(krn_){ delete krn_; krn_=nullptr;}};
+    ~BlockingBase() {} //{if(krn_){ delete krn_; krn_=nullptr;}};
     cprog::Cblock& outer();     ///< outside outer loops, often func scope
     cprog::Cblock& inner();     ///< where the fused-loop goes
-    KrnBlk3& krn();
     cprog::Cunit pr;
   protected:
     cprog::Cblock* outer_;       ///< outside outer loops, often top-level function scope
     cprog::Cblock* inner_;       ///< where the fused-loop goes
-    KrnBlk3* krn_;  ///< owned, references *outer_ and *inner_
+    int const krn_;
 };
 
 struct BlockingMain final : public BlockingBase {

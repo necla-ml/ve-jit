@@ -1,16 +1,20 @@
 /* Copyright (c) 2019 by NEC Corporation
  * This file is part of ve-jit */
 /** \file
- * loop blocking strategy for Aurora.
- * Nicer JIT version of triple loop blocking.
+ * loop blocking plan + Ref output + jit with kernel 'none' and 'print'.
+ *
+ * Here we emit a single JIT file with multiple 'C' tests
+ * as opposed to libvednn strategy where every test is a separate file.
+ *
  * 3 original loops --> 6 loops [9 for vectorization]
  *
+ * The loop blocking strategy is very simplistic
  * We mostly try for easy cases, where vector length is 1 (scalar)
  * or has a simple relation to the inner loop lengths.
  *
  * 1. TODO
- * - add "real" kernels to genBlock-kernels
- * - execute jit code (see cjitDemo.cpp)
+ * - add more "real" kernels: CHECK, and HASH impls should be supported
+ * - execute jit code "right away" (using dllbuild techniques, see cjitDemo.cpp)
  */
 #include "genBlock-kernels.hpp"
 #include "../stringutil.hpp"
@@ -273,12 +277,10 @@ struct BlockingBase{
     ~BlockingBase() {}
     cprog::Cblock& fns() const; ///< test routines go here
     cprog::Cblock& run() const; ///< init() function (possibly `main`)
-    //KrnBlk3& krn() const;
     cprog::Cunit pr;
   protected:
     cprog::Cblock* fns_;        ///< outside outer loops, often top-level function scope
     cprog::Cblock* run_;        ///< where the fused-loop goes
-    //KrnBlk3* krn_;              ///< owned, references *fns_ and *run_
     int const krn_;
 };
 inline cprog::Cblock& BlockingBase::fns() const { assert(fns_); return *fns_; }
