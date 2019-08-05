@@ -45,7 +45,7 @@ inline int mkConsistent( struct param* p ){
 typedef int demoError_t;
 
 /** based on a very short (slow) direct_default3.c */
-DllFile numberGuesserSrc( struct param const* const p )
+DllFile srcCodeNumberGuesser( struct param const* const p )
 {
     DllFile df; // return value
     std::string parmstr;
@@ -205,8 +205,19 @@ int main(int argc,char**argv){
 
     DllBuild dllbuild;
     for(int i=0; i<nParams; ++i){
-        struct param const& pConv = pParams[i];
-        DllFile df = numberGuesserSrc(&pConv);
+        struct param const& jitAlgParms = pParams[i];
+        //
+        // - Given `param` describing one algorithm,
+        //   1. GENERATE CODE for one source file, and
+        //   2. record its PUBLIC SYMBOLS
+        //      - often a single testing/timing subroutine (no 'main')
+        //
+        DllFile df = srcCodeNumberGuesser( &jitAlgParms );
+        //
+        // - Not shown:
+        //   - generate private headers (once, independent of param)
+        //   - generate private sources (once, no public symbols)
+        //
         dllbuild.push_back(df);
     }
     unique_ptr<DllOpen> plib;

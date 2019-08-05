@@ -204,7 +204,7 @@ std::vector<std::vector<Triples<T>>> refTriples(
                             // Simdization of inner loops creates a virtual set
                             // of three loops with following CONVENTION:
                             if(v>=2){ sloops(); cout<<endl; }
-                            for(is=i; is<i+min(i+iv,ii); ++is){       // iv*jv*kv is normal
+                            for(is=i; is<min(i+iv,ii); ++is){       // iv*jv*kv is normal
                                 for(js=j; js<min(j+jv,jj); ++js){     // vector length
                                     for(ks=k; ks<min(k+kv,kk); ++ks){ // s for simd
                                         ix.push_back({is,js,ks});
@@ -314,14 +314,14 @@ int main(int argc, char**argv){
     //
     // remind myself how to generate a dll of routines [and invoke them]
     //
-    // Begin with producing a compilable 'tmpScaffold.c`
+    // Begin with producing a compilable 'tmpScaffold1.c`
     // with one [or more] `timeit` routines.
     //
     cout<<"\n BlockingMain scaffold:"<<endl;
     BlockingMain bt(KRNBLK3_NONE, 1/*verbose*/);
     cout<<"Tree:\n"; bt.pr.dump(cout); cout<<endl; // might be long?
     cout<<bt.pr.str()<<endl;
-    ofstream ofs("tmpScaffold.c");
+    ofstream ofs("tmpScaffold1.c");
     ofs<<bt.pr.str()<<endl;
     ofs.close();
     //

@@ -1,8 +1,106 @@
+#if 0
 #include "genBlock-kernels.hpp"
 #include "../stringutil.hpp"
 #include "../vechash.hpp"
 using namespace std;
 using namespace cprog;
+
+//
+// Local objects ------------------------------
+//
+/** empty kernel - OK for browsing the generating JIT code. */
+struct KrnBlk3_none final : public KrnBlk3
+{
+    KrnBlk3_none(cprog::Cblock& bOuter, cprog::Cblock& bInner,
+            KRNBLK3_CONSTRUCTOR_ARGS )
+        : KrnBlk3(bOuter,bInner,vA,vB,vSEQ0,sVL,vSQIJ)
+    {/*std::cout<<"+NONE";*/}
+    ~KrnBlk3_none() override {} // possible check proper tree state?
+    char const* name() const override { return "NONE"; }
+    struct KernelNeeds needs() const override;
+    void emit(cprog::Cblock& bDef,
+            cprog::Cblock& bKrn, cprog::Cblock& bOut,
+            int64_t const ilo, int64_t const ii,
+            int64_t const jlo, int64_t const jj,
+            int64_t const klo, int64_t const kk,
+            int64_t const vl, std::string extraComment, int const v=0/*verbose*/
+            ) const override;
+};
+/** kernel that calculates a "correctness hash" of a[],b[] fused-loop index vectors. */
+struct KrnBlk3_hash final : public KrnBlk3
+{
+    KrnBlk3_hash(cprog::Cblock& bOuter, cprog::Cblock& bInner,
+            KRNBLK3_CONSTRUCTOR_ARGS )
+        : KrnBlk3(bOuter,bInner,vA,vB,vSEQ0,sVL,vSQIJ)
+    {/*std::cout<<"+HASH"*/;}
+    ~KrnBlk3_hash() override {} // possible check proper tree state?
+    char const* name() const override { return "HASH"; }
+    struct KernelNeeds needs() const override;
+    void emit(cprog::Cblock& bDef,
+            cprog::Cblock& bKrn, cprog::Cblock& bOut,
+            int64_t const ilo, int64_t const ii,
+            int64_t const jlo, int64_t const jj,
+            int64_t const klo, int64_t const kk,
+            int64_t const vl, std::string extraComment, int const v=0/*verbose*/
+            ) const override;
+};
+/** kernel the prints the a[], b[] fused-loop index vectors. */
+struct KrnBlk3_print final : public KrnBlk3
+{
+    KrnBlk3_print(cprog::Cblock& bOuter, cprog::Cblock& bInner,
+            KRNBLK3_CONSTRUCTOR_ARGS )
+        : KrnBlk3(bOuter,bInner,vA,vB,vSEQ0,sVL,vSQIJ)
+    {std::cout<<"+PRINT";}
+    ~KrnBlk3_print() override {} // possible check proper tree state?
+    char const* name() const override { return "PRINT"; }
+    struct KernelNeeds needs() const override;
+    void emit(cprog::Cblock& bDef,
+            cprog::Cblock& bKrn, cprog::Cblock& bOut,
+            int64_t const ilo, int64_t const ii,
+            int64_t const jlo, int64_t const jj,
+            int64_t const klo, int64_t const kk,
+            int64_t const vl, std::string extraComment, int const v=0/*verbose*/
+            ) const override;
+};
+/** kernel that executes a correctness check of a[], b[] fused-loop index vectors. */
+struct KrnBlk3_check final : public KrnBlk3
+{
+    KrnBlk3_check(cprog::Cblock& bOuter, cprog::Cblock& bInner,
+            KRNBLK3_CONSTRUCTOR_ARGS )
+        : KrnBlk3(bOuter,bInner,vA,vB,vSEQ0,sVL,vSQIJ)
+    {/*std::cout<<"+CHECK";*/}
+    ~KrnBlk3_check() override {} // possible check proper tree state?
+    char const* name() const override { return "CHECK"; }
+    struct KernelNeeds needs() const override;
+    void emit(cprog::Cblock& bDef,
+            cprog::Cblock& bKrn, cprog::Cblock& bOut,
+            int64_t const ilo, int64_t const ii,
+            int64_t const jlo, int64_t const jj,
+            int64_t const klo, int64_t const kk,
+            int64_t const vl, std::string extraComment, int const v=0/*verbose*/
+            ) const override;
+};
+/** dummy kernel that wants \c KernelNeeds an sqij input vector. */
+struct KrnBlk3_sqij final : public KrnBlk3
+{
+    KrnBlk3_sqij(cprog::Cblock& bOuter, cprog::Cblock& bInner,
+            KRNBLK3_CONSTRUCTOR_ARGS )
+        : KrnBlk3(bOuter,bInner,vA,vB,vSEQ0,sVL,vSQIJ)
+    {/*std::cout<<"+SQIJ";*/}
+    ~KrnBlk3_sqij() override {} // possible check proper tree state?
+    char const* name() const override { return "SQIJ"; }
+    struct KernelNeeds needs() const override;
+    void emit(cprog::Cblock& bDef,
+            cprog::Cblock& bKrn, cprog::Cblock& bOut,
+            int64_t const ilo, int64_t const ii,
+            int64_t const jlo, int64_t const jj,
+            int64_t const klo, int64_t const kk,
+            int64_t const vl, std::string extraComment, int const v=0/*verbose*/
+            ) const override;
+};
+//
+// Local objects END ------------------------------
+//
 
 static char const* krnblk3_names_default[] = {
     "NONE","HASH","PRINT","CHECK" };
@@ -226,4 +324,5 @@ void KrnBlk3_sqij::emit(Cblock& bDef,
     bKrn["prt"]>>"__vr const x = STORE(0, _ve_addul_vsv(ptr,_ve_vmulul_vsv(stride,sqij)));";
     if(!extraComment.empty()) bKrn["prt"]<<" // "<<extraComment;
 }
+#endif
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break

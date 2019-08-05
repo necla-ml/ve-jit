@@ -2,7 +2,7 @@
 /* Copyright (c) 2019 by NEC Corporation
  * This file is part of ve-jit */
 /** \file
- * Fused-loop JIT kernel abstraction and default instances.
+ * Fused-triple-loop JIT kernel abstraction and default instances.
  */
 #define GENBLOCK_KERNELS_HPP
 #include "../cblock.hpp"
@@ -133,101 +133,11 @@ struct KrnBlk3: public KrnBlk3Abs, public KrnBlk3_vars
     cprog::Cblock& outer;
     cprog::Cblock& inner;
 };
+
 /** factory */
 KrnBlk3* mkBlockingTestKernel(int const which,
         cprog::Cblock& outer, cprog::Cblock& inner,
         KRNBLK3_CONSTRUCTOR_ARGS);
-
-/** empty kernel - OK for browsing the generating JIT code. */
-struct KrnBlk3_none final : public KrnBlk3
-{
-    KrnBlk3_none(cprog::Cblock& bOuter, cprog::Cblock& bInner,
-            KRNBLK3_CONSTRUCTOR_ARGS )
-        : KrnBlk3(bOuter,bInner,vA,vB,vSEQ0,sVL,vSQIJ)
-    {/*std::cout<<"+NONE";*/}
-    ~KrnBlk3_none() override {} // possible check proper tree state?
-    char const* name() const override { return "NONE"; }
-    struct KernelNeeds needs() const override;
-    void emit(cprog::Cblock& bDef,
-            cprog::Cblock& bKrn, cprog::Cblock& bOut,
-            int64_t const ilo, int64_t const ii,
-            int64_t const jlo, int64_t const jj,
-            int64_t const klo, int64_t const kk,
-            int64_t const vl, std::string extraComment, int const v=0/*verbose*/
-            ) const override;
-};
-/** kernel that calculates a "correctness hash" of a[],b[] fused-loop index vectors. */
-struct KrnBlk3_hash final : public KrnBlk3
-{
-    KrnBlk3_hash(cprog::Cblock& bOuter, cprog::Cblock& bInner,
-            KRNBLK3_CONSTRUCTOR_ARGS )
-        : KrnBlk3(bOuter,bInner,vA,vB,vSEQ0,sVL,vSQIJ)
-    {/*std::cout<<"+HASH"*/;}
-    ~KrnBlk3_hash() override {} // possible check proper tree state?
-    char const* name() const override { return "HASH"; }
-    struct KernelNeeds needs() const override;
-    void emit(cprog::Cblock& bDef,
-            cprog::Cblock& bKrn, cprog::Cblock& bOut,
-            int64_t const ilo, int64_t const ii,
-            int64_t const jlo, int64_t const jj,
-            int64_t const klo, int64_t const kk,
-            int64_t const vl, std::string extraComment, int const v=0/*verbose*/
-            ) const override;
-};
-/** kernel the prints the a[], b[] fused-loop index vectors. */
-struct KrnBlk3_print final : public KrnBlk3
-{
-    KrnBlk3_print(cprog::Cblock& bOuter, cprog::Cblock& bInner,
-            KRNBLK3_CONSTRUCTOR_ARGS )
-        : KrnBlk3(bOuter,bInner,vA,vB,vSEQ0,sVL,vSQIJ)
-    {std::cout<<"+PRINT";}
-    ~KrnBlk3_print() override {} // possible check proper tree state?
-    char const* name() const override { return "PRINT"; }
-    struct KernelNeeds needs() const override;
-    void emit(cprog::Cblock& bDef,
-            cprog::Cblock& bKrn, cprog::Cblock& bOut,
-            int64_t const ilo, int64_t const ii,
-            int64_t const jlo, int64_t const jj,
-            int64_t const klo, int64_t const kk,
-            int64_t const vl, std::string extraComment, int const v=0/*verbose*/
-            ) const override;
-};
-/** kernel that executes a correctness check of a[], b[] fused-loop index vectors. */
-struct KrnBlk3_check final : public KrnBlk3
-{
-    KrnBlk3_check(cprog::Cblock& bOuter, cprog::Cblock& bInner,
-            KRNBLK3_CONSTRUCTOR_ARGS )
-        : KrnBlk3(bOuter,bInner,vA,vB,vSEQ0,sVL,vSQIJ)
-    {/*std::cout<<"+CHECK";*/}
-    ~KrnBlk3_check() override {} // possible check proper tree state?
-    char const* name() const override { return "CHECK"; }
-    struct KernelNeeds needs() const override;
-    void emit(cprog::Cblock& bDef,
-            cprog::Cblock& bKrn, cprog::Cblock& bOut,
-            int64_t const ilo, int64_t const ii,
-            int64_t const jlo, int64_t const jj,
-            int64_t const klo, int64_t const kk,
-            int64_t const vl, std::string extraComment, int const v=0/*verbose*/
-            ) const override;
-};
-/** dummy kernel that wants \c KernelNeeds an sqij input vector. */
-struct KrnBlk3_sqij final : public KrnBlk3
-{
-    KrnBlk3_sqij(cprog::Cblock& bOuter, cprog::Cblock& bInner,
-            KRNBLK3_CONSTRUCTOR_ARGS )
-        : KrnBlk3(bOuter,bInner,vA,vB,vSEQ0,sVL,vSQIJ)
-    {/*std::cout<<"+SQIJ";*/}
-    ~KrnBlk3_sqij() override {} // possible check proper tree state?
-    char const* name() const override { return "SQIJ"; }
-    struct KernelNeeds needs() const override;
-    void emit(cprog::Cblock& bDef,
-            cprog::Cblock& bKrn, cprog::Cblock& bOut,
-            int64_t const ilo, int64_t const ii,
-            int64_t const jlo, int64_t const jj,
-            int64_t const klo, int64_t const kk,
-            int64_t const vl, std::string extraComment, int const v=0/*verbose*/
-            ) const override;
-};
 
 //
 // inlines .........................................

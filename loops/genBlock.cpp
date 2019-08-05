@@ -89,25 +89,30 @@ template<typename T> inline constexpr T divup(T const n, T const d) {return (n+d
  *     - we'll use the loops exactly as above to ease testing
  */
 struct BlockingPlan{
+    /// \group primary settings
+    //@{
     int ii, jj, kk;
     int iB, jB, kB;
-    int iVl, jVl, kVl;      // these increase (bounded by MVL)
+    int iVl, jVl, kVl;      // these increase (bounded by MVL), equiv to {iv(),jv(),kv()}
+    //@}
+    /// \group secondary variables
+    //@{
     int iLpo, jLpo, kLpo;
     int iLp, jLp, kLp;
     float iCost, jCost, kCost;
+    //@}
     int ijkOuter() const {return iLpo*jLpo*kLpo;}
     int ijkInner() const {return iLp*jLp*kLp;}
     int kerns() const {return ijkOuter() * ijkInner();}
     // Need a better cost model.
     double ijkCost() const {return iCost+jCost+kCost;}
-    // per-loop simd lengths
+    // per-loop simd lengths.   kVl == iv()*jv()*kv()
     int iv() const {return iVl;}
     int jv() const {return jVl/iVl;}
     int kv() const {return kVl/jVl;}
     std::string str() const;
-    void prt() const {
-        cout<<"// "<<str()<<endl;
-    }
+    void prt(std::ostream& os) const { os<<"// "<<str()<<endl; }
+    std::string suffix() const; ///< a canonical function-name suffix
 };
 
 template<typename T> struct Triples { T i, j, k; };
@@ -130,8 +135,15 @@ void timeit_prep(Cblock& utils, Cblock& main);
  * - timeit_foo goes to a subblock fns[foo]
  * - invoke/print ------> subblock call[foo]
  */
-Cblock& timeit_foo(char const* const foo, Cblock& fns, Cblock& call, int const reps);
+Cblock& timeit_foo(std::string const& foo, Cblock& fns, Cblock& call, int const reps);
 
+/** generate semi-correct loop blocking code.
+ * only a few simple cases OK, as in genBlock0.cpp. */
+std::string code(BlockingPlan const& p);
+
+void prtCode(BlockingPlan const& p){
+    cout<<code(p)<<endl;
+}
 /**
  * - NEVER simdize across the exit of [all 3] inner loops
  *   - Now scalar outer loops can easily by assigned to threads.
@@ -180,7 +192,7 @@ std::vector<std::vector<Triples<T>>> refTriples(
         <<"}";
     };
     auto sloops=[&](){
-        cout<<" ijk={"<<i<<","<<j<<","<<k<<"}simd"
+        cout<<" ijk={"<<i<<","<<j<<","<<k<<"} simd-vl["<<iv<<","<<jv<<","<<kv<<"]"
         <<"{"<<i<<"To"<<min(i+iv,ii)<<(i>=min(i+iv,ii)?"XXX":"")
         <<","<<j<<"To"<<min(j+jv,jj)<<(j>=min(j+jv,jj)?"XXX":"")
         <<","<<k<<"To"<<min(k+kv,kk)<<(k>=min(k+kv,kk)?"XXX":"")
@@ -193,7 +205,6 @@ std::vector<std::vector<Triples<T>>> refTriples(
                 // Note: vectorization might want to change loop order
                 //       here.  Ex. i and k vectorized, j not is strange.
                 // Perhaps handle by filtering "difficult" BlockingPlans
-                ix.clear();
                 if(v>=2) iloops();
                 for(i=io; i<min(io+iB,ii); i+=iv){           // inner loop vectorizations
                     for(j=jo; j<min(jo+jB,jj); j+=jv){       // with iv,jv,kv --> vectors
@@ -203,16 +214,35 @@ std::vector<std::vector<Triples<T>>> refTriples(
                             //
                             // Simdization of inner loops creates a virtual set
                             // of three loops with following CONVENTION:
+                            ix.clear();
                             if(v>=2){ sloops(); cout<<endl; }
-                            for(is=i; is<i+min(i+iv,ii); ++is){       // iv*jv*kv is normal
+                            assert(ix.size()==0);
+                            //size_t pushes=0U;
+                            for(is=i; is<min(i+iv,ii); ++is){       // iv*jv*kv is normal
                                 for(js=j; js<min(j+jv,jj); ++js){     // vector length
                                     for(ks=k; ks<min(k+kv,kk); ++ks){ // s for simd
+                                        //cout<<"    simd {"<<is<<","<<js<<","<<ks<<"}"<<endl;
                                         ix.push_back({is,js,ks});
+                                        //++pushes;
                                     }}}
-                            if(v>=3) ixout("ref: ");
+                            if(v>=3){
+                                cout<<"ref["<<ix.size()<<"] : "; //cout<<" pushes<<" pushes ";
+                                if(!ix.empty()){
+                                    size_t l=0U;
+                                    cout<<"{"<<ix[l].i<<","<<ix[l].j<<","<<ix[l].k<<"} ... ";
+                                    l=ix.size()-1U;
+                                    cout<<"{"<<ix[l].i<<","<<ix[l].j<<","<<ix[l].k<<"}"<<endl;
+                                }
+                            }
+                            if(v>=4) ixout("ref: ");
                             // when some iloops execute "past end", inner loops
                             // can execute zero times (ix may be empty)
-                            if(!ix.empty()){ ret.push_back(ix); ix.clear(); }
+                            if(!ix.empty()){
+                                if(v>=4) cout<<" save ix["<<ix.size()<<"] and clear.  ret.size()="<<ret.size()<<endl;
+                                ret.push_back(ix);
+                                ix.clear();
+                                assert(ix.size()==0);
+                            }
                         }}}
             }}}
     if(v>=2) cout<<"ref END ["<<ret.size()<<" SIMD inner kernels]"<<endl;
@@ -234,26 +264,62 @@ static ostringstream oss;
 
 struct BlockingBase{
     BlockingBase(
-            int const which
+            int const krn
             , std::string name=""
             , int const v=0/*verbose*/)
         : pr((name.empty()?std::string{"BlockingBase"}:name), "C", v),
-        outer_(nullptr), inner_(nullptr), krn_(nullptr)
+        fns_(nullptr), run_(nullptr), krn_(krn)
         {/*not yet usable*/}
-    ~BlockingBase() {if(krn_){ delete krn_; krn_=nullptr;}};
-    cprog::Cblock& outer();     ///< outside outer loops, often func scope
-    cprog::Cblock& inner();     ///< where the fused-loop goes
-    KrnBlk3& krn();
+    ~BlockingBase() {}
+    cprog::Cblock& fns() const; ///< test routines go here
+    cprog::Cblock& run() const; ///< init() function (possibly `main`)
+    //KrnBlk3& krn() const;
     cprog::Cunit pr;
   protected:
-    cprog::Cblock* outer_;       ///< outside outer loops, often top-level function scope
-    cprog::Cblock* inner_;       ///< where the fused-loop goes
-    KrnBlk3* krn_;  ///< owned, references *outer_ and *inner_
+    cprog::Cblock* fns_;        ///< outside outer loops, often top-level function scope
+    cprog::Cblock* run_;        ///< where the fused-loop goes
+    //KrnBlk3* krn_;              ///< owned, references *fns_ and *run_
+    int const krn_;
 };
+inline cprog::Cblock& BlockingBase::fns() const { assert(fns_); return *fns_; }
+inline cprog::Cblock& BlockingBase::run() const { assert(run_); return *run_; }
 
+//inline KrnBlk3&       BlockingBase::krn() const { assert(krn_); return *krn_; }
+/** a single [timing-test] subroutine */
 struct BlockingMain final : public BlockingBase {
     BlockingMain(int const krn, int const v=0/*verbose*/);
+    void add(BlockingPlan const& p);
+  private:
+    void add_none(BlockingPlan const& p);
+    void add_print(BlockingPlan const& p);
+    void add_check(BlockingPlan const& p);
+    void add_hash(BlockingPlan const& p);
+
+    /** emit a[],b[],c[] calculation loops.
+     * \return innermost block which should do something with a,b,c. */
+    static cprog::Cblock& emit_loops(BlockingPlan const& p, Cblock& krnBlk);
+
+    /** Fill in innermost a,b,c block according to \c krn.
+     * \c after should point to after the timing loop (not part of reported time).
+     * Ex. after=krnBlk["..* /tloop/"]
+     */
+    void emit_print(cprog::Cblock& abc, cprog::Cblock& after);
 };
+
+#if 1==2
+#include "../dllbuild.hpp"
+    // following 2 (code and public symbol[s]) must coordinate
+    void add_test(BlockingTests &bt, BlockingPlan const& p);
+    void add_syms(DllFile &df, BlockingPlan const& p);
+/** create a single source file with multiple symbols */
+struct BlockingSubroutine : public BlockingBase {
+    DllFile df; ///< test subroutine names go into \c vector<SymbolDecl> \c df.syms
+};
+struct BlockingTests : public BlockingBase {
+    BlockingTests(int const krn, int const v=0/*verbose*/);
+    cprog::Cblock& fns() const {assert(fns_); return *fns_;}
+};
+#endif
 
 int main(int argc, char**argv){
     int ii=20, jj=3, kk=96;
@@ -314,35 +380,89 @@ int main(int argc, char**argv){
     //
     // remind myself how to generate a dll of routines [and invoke them]
     //
-    // Begin with producing a compilable 'tmpScaffold.c`
+    // Begin with producing a compilable 'tmpScaffold.cpp`
     // with one [or more] `timeit` routines.
     //
     cout<<"\n BlockingMain scaffold:"<<endl;
-    BlockingMain bt(KRNBLK3_NONE, 1/*verbose*/);
-    cout<<"Tree:\n"; bt.pr.dump(cout); cout<<endl; // might be long?
-    cout<<bt.pr.str()<<endl;
-    ofstream ofs("tmpScaffold.c");
-    ofs<<bt.pr.str()<<endl;
+    //BlockingMain bm(KRNBLK3_NONE, 1/*verbose*/);
+    BlockingMain bm(KRNBLK3_PRINT, 1/*verbose*/);
+    cout<<"Tree:\n"; bm.pr.dump(cout); cout<<endl; // might be long?
+    cout<<bm.pr.str()<<endl;
+
+    for(int i=0; i<min(bps.size(),size_t{5}); ++i){
+        cout<<"----- BlockPlan #"<<i<<" "<<string(70,'-')<<endl;
+        bm.add(bps[i]);
+    }
+    cout<<"Final Tree:\n"; bm.pr.dump(cout); cout<<endl; // might be long?
+
+    ofstream ofs("tmpScaffold.cpp");
+    ofs<<bm.pr.str()<<endl;
     ofs.close();
     //
     //  now produce a library of timeit_foo functions,
     //  load the dll, and invoke each of them in turn (right away)
     //  TODO use dllbuild.hpp functionality
     //
+#if 1==2
+    DllBuild dllbuild;
+    {
+        BlockingTests bt(KRNBLK3_NONE, 1/*verbose*/); // scaffold for tests (includes,support fns)
+        cout<<"Tree:\n"; bt.pr.dump(cout); cout<<endl;
+        cout<<bt.pr.str()<<endl;
+
+        DllFile df;                     // source file[s] and public symbols
+        df.basename = "genBlock";
+        df.suffix = "-x86.cpp";
+        for(int i=0; i<min(bps.size(),size_t{5}); ++i){
+            cout<<"----- BlockPlan #"<<i<<" "<<string(70,'-')<<endl;
+            add_test( bt, bps[i] );   // test subroutine --> BlockingTests
+            add_symbol( df, bps[i] ); // public symbol of add_test --> DllFile
+        }
+
+        cout<<"Tree:\n"; bt.pr.dump(cout); cout<<endl;
+        cout<<bt.pr.str()<<endl;
+        df.code = bt.pr.str(); // BlockingTests --> single source file (finally)
+
+        dllbuild.push_back(df); // sourcefile + syms --> DllBuild
+    }
+
+    // build dll, open it, read syms
+    char const* subdir="tmp_genBlock";
+    std::string mkEnv; // not used?
+    unique_ptr<DllOpen> plib = dllbuild.safe_create(
+            "genBlock", subdir, mkEnv );
+    DllOpen& lib = *plib;
+
+    // for all files, for all test symbols (in lib), call them
+    for(size_t i=0U; i<lib.nSrc(); ++i){ // here, only one source file
+        cout<<"\nsrc file #"<<i<<" syms";
+        auto symnames = lib[i];
+        for(auto s: symnames) cout<<" "<<s;
+        cout<<endl;
+
+        assert( symnames.size() >= 1 );
+        for(auto s: symnames){
+            void* symaddr = lib[s];
+            // TODO: adapt next section
+            // coerce to proper test function type
+            typedef demoError_t (*JitFn)();
+            JitFn jitfn = (JitFn)symaddr;
+            // invoke the test function (it takes no parameters)
+            cout<<" jit "<<symnames[0]<<"() ..."<<endl;
+            jitfn();
+        }
+    }
+#endif
 
     cout<<"\nGoobye"<<endl;
 }
 
 /** inject timing utility, init and teardown code. */
 void timeit_prep(Cblock& utils, Cblock& main)
-{    
+{
     if(tag_once(utils,"timeit")){
         Cblock& tmit = utils["timeit"];
         tmit>>"static double cyc2ns = 1.0; // really cycle2ns()";
-        main["first"]["+timeit"]
-            >>"cyc2ns = cycle2ns();"
-            >>"printf(\" cyc2ns = %f\\n\", cyc2ns);"
-            ;
         tmit
             >>"static inline uint64_t clock_ns() {"
             >>"    return (uint64_t)(__cycle()*cyc2ns+0.5);"
@@ -355,12 +475,34 @@ void timeit_prep(Cblock& utils, Cblock& main)
             >>"}"
             ;
         tmit>>"static uint64_t bogus=0;";
+
+        main["first"]["+timeit"]
+            >>"cyc2ns = cycle2ns();"
+            >>"printf(\" cyc2ns = %f\\n\", cyc2ns);"
+            ;
+        //main["init"]>>OSSFMT("uint64_t const nrep = "<<nrep<<";");
         main["last"]["-timeit"]>>"printf(\"bogus=%llu\\n\", (unsigned long long)bogus);";
+
+        utils["oss"]>>"static ostringstream oss;";
+        set_once(utils.getRoot()["includes"],"iomanip","#include <iomanip>");
+        utils["vecprt"]
+            >>"template<typename T>"
+            >>"std::string vecprt(int const n, int const wide, T* v, int const vl){"
+            >>"    std::ostringstream oss;"
+            >>"    for(int i=0; i<vl; ++i){"
+            >>"        if( i < n ){ oss<<\" \"<<std::setw(wide)<<v[i]; }"
+            >>"        if( i == n && i < vl-n ){ oss<<\" ... \"; }"
+            >>"        if( i >= n && i >= vl-n ){ oss<<\" \"<<std::setw(wide)<< v[i]; }"
+            >>"    }"
+            >>"    return oss.str();"
+            >>"}"
+            ;
     }
 }
 
-Cblock& timeit_foo(char const* const foo, Cblock& fns, Cblock& call, int const reps)
+Cblock& timeit_foo(std::string const& foo, Cblock& fns, Cblock& call, int const reps)
 {
+    cout<<" timeit_foo( foo="<<foo<<", fns, call, reps="<<reps<<" );"<<endl;
     //auto timeit = [&](char const* foo) -> Cblock&
     //
     // under Cblock 'fns', add a timing subroutine called 'timeit_foo'
@@ -381,6 +523,7 @@ Cblock& timeit_foo(char const* const foo, Cblock& fns, Cblock& call, int const r
         >>"uint64_t const seed = (oldstate>>rot) | (oldstate<<(64-rot)); // seed ~ a PCG random sequence"
         >>"uint64_t const t0 = __cycle(); // NOT careful. e.g. no cpuid op HERE for x86"
         >>"// --- kernel "<<foo<<" "<<string(40,'-')
+        //>>"// "<<p.str(); // oh, do not have original blocking plan available
         ;
     Cblock& kern = tloop[foo];      // MUST modify 'bogus' unpredicatably
     tloop["time"]
@@ -395,18 +538,20 @@ Cblock& timeit_foo(char const* const foo, Cblock& fns, Cblock& call, int const r
     //
     CBLOCK_SCOPE(callfoo,"if(1)",pr,call);
     callfoo
-        >>OSSFMT("int const foo_reps = "<<reps<<";")
-        >>OSSFMT("double "<<foo<<"_cycles = timeit_"<<foo<<"( foo_reps );")
-        >>OSSFMT("uint64_t "<<foo<<"_ns = to_ns("<<foo<<"_cycles);")
-        >>OSSFMT("printf(\" %s{%llu reps avg %llu cycles = %llu ns}\\n\", \""<<foo<<"\",")
+        >>OSSFMT("int      const foo_reps = "<<reps<<";")
+        >>OSSFMT("double   const foo_cycles")
+        >>OSSFMT("    = timeit_"<<foo<<"( foo_reps );")
+        >>OSSFMT("uint64_t const foo_ns = to_ns(foo_cycles);")
+        >>OSSFMT("printf(\" %s{%llu reps avg %llu cycles = %llu ns}\\n\",")
+        >>OSSFMT("        \""<<foo<<"\",")
         >>"        (unsigned long long)foo_reps,"
-        >>OSSFMT("        (unsigned long long)"<<foo<<"_cycles,")
-        >>OSSFMT("        (unsigned long long)"<<foo<<"_ns);")
+        >>"        (unsigned long long)foo_cycles,"
+        >>"        (unsigned long long)foo_ns );"
         ;
     return kern;
 };
 BlockingMain::BlockingMain(int const krn, int const v/*=0,verbose*/)
-: BlockingBase(krn, "KrnBlk3", v) // pr set up, other ptrs still NULL
+: BlockingBase(krn, "blk", v) // pr set up, other ptrs still NULL
 {
     // upper-level tree structure, above the fused-loop.
     pr.root["first"];                           // reserve room for preamble, comments
@@ -419,42 +564,17 @@ BlockingMain::BlockingMain(int const krn, int const v/*=0,verbose*/)
     inc["stdio.h"]>>"#include <stdio.h>";
 
     // create a somewhat generic tree
-    auto& utils = pr.root["utils"];
-    auto& fns = pr.root["fns"];
-    fns["first"]; // reserve a node for optional function definitions
-    CBLOCK_SCOPE(main,"int main(int argc,char**argv)",pr,fns);
+    fns_ = &pr.root["fns"];
+    (*fns_)["first"]; // reserve a node
+    CBLOCK_SCOPE(run,"int main(int argc,char**argv)",pr,pr.root["main"]);
     // NEW: use tag function scope, for upward-find operations
     //      will require extending the find string to match tag!
-    main.setType("FUNCTION");
+    run.setType("FUNCTION");
+    run_ = &run;
+    run["first"]; // reserve a node
     // outer path root.at("**/main/body")
-    set_once(inc,"timer", "#include \"../timer.h\"");
-    timeit_prep(utils,main); // inject timing function helper code
 
-    { // **HERE** is a test kernel, injected into a `timeit_foo` function.
-        // - `timeit(foo)`:
-        //   1. emit boilerplate 'timeit_foo' function too utils[foo]
-        //   2. call it and print avg time in main[foo]
-        auto& krnBlk = timeit_foo("foo",utils,main,1000);
-        //
-        // - to avoid compiler over-optimization,
-        //   - kernel MUST [finally] modify `bogus`,
-        //   - and CAN use 'seed' to help avoid compiler optimization
-        // - `bogus` can be modified \em inside timing block ( \c timeit("foo") )
-        //   - or \em outside ( \c timeit("foo")["../last"] )
-        //
-        krnBlk
-            >>"uint64_t fooOut = seed;"
-            >>"for(int j=0; j<1000; ++j) fooOut ^= fooOut*23456789ULL+j;"
-            ;
-        // timing = ADD,MUL,ADD,XOR + loop overhead (INCR, BRANCH)
-        // the loop overhead IS timed, but the `bogus` update need not be timed
-        krnBlk["../last"]>>"bogus ^= fooOut; // somehow update bogus using fooOut [,seed,...]";
-        //
-        // End example kernel 'foo'
-        //
-    }
-
-    main["init"]>>"uint64_t const nrep = 1000;";
+#if 0
     //CBLOCK_FOR(loop1,-1,"for(int iloop1=0; iloop1<nrep; ++iloop1)",main);
     //CBLOCK_FOR(loop2,-1,"for(int iloop2=0; iloop2<1; ++iloop2)",loop1);
     //if(v){
@@ -478,26 +598,219 @@ BlockingMain::BlockingMain(int const krn, int const v/*=0,verbose*/)
     //}
 
     //this->krn_ = mkBlockingTestKernel(krn,*outer_,*inner_ /*, defaults?*/ );
+#endif
 }
+
+void BlockingMain::add(BlockingPlan const& p){
+    switch(krn_){
+      case(KRNBLK3_NONE): add_none(p); break;
+      case(KRNBLK3_HASH): add_hash(p); break;
+      case(KRNBLK3_PRINT): add_print(p); break;
+      case(KRNBLK3_CHECK): add_check(p); break;
+      default: THROW(OSSFMT("Unsupported kernel, krn_ = "<<krn_));
+    }
+}
+void BlockingMain::add_none(BlockingPlan const& p){
+    set_once(pr["includes"],"timer.h", "#include \"../timer.h\"");
+    timeit_prep(fns(),run()); // inject timing function helper code
+    // - `timeit(foo)`:
+    //   1. emit boilerplate 'timeit_foo' function to 'utils[foo]'
+    //   2. call it and print avg time in 'main[foo]'
+    auto subroutine = pr.name+p.suffix();
+    auto& krnBlk = timeit_foo(subroutine, fns(), run(), 1000);
+    cout<<"timeit_foo --> krnBlock @ "<<krnBlk.fullpath()<<endl;
+    //
+    // - to avoid compiler over-optimization,
+    //   - kernel MUST [finally] modify `bogus`,
+    //   - and CAN use 'seed' to help avoid compiler optimization
+    // - `bogus` can be modified \em inside timing block ( \c timeit("foo") )
+    //   - or \em outside ( \c timeit("foo")["../last"] )
+    //
+    krnBlk
+        >>"uint64_t fooOut = seed;"
+        >>"for(int j=0; j<1000; ++j) fooOut ^= fooOut*23456789ULL+j;"
+        ;
+    // timing = ADD,MUL,ADD,XOR + loop overhead (INCR, BRANCH)
+    // the loop overhead IS timed, but the `bogus` update need not be timed
+    krnBlk["../last"]>>"bogus ^= fooOut; // somehow update bogus using fooOut [,seed,...]";
+}
+void BlockingMain::add_hash(BlockingPlan const& p){
+}
+
+void BlockingMain::add_print(BlockingPlan const& p){
+    set_once(pr["includes"],"timer.h", "#include \"../timer.h\"");
+    timeit_prep(fns(),run()); // inject timing function helper code
+    auto subroutine = pr.name+p.suffix();
+
+    set_once(pr["includes"],"sstream", "#include <sstream>");
+    set_once(pr["includes"],"iostream", "#include <iostream>");
+    set_once(pr["includes"]["last"],"std","using namespace std;");
+
+    auto& krnBlk = timeit_foo(subroutine, fns(), run(), 1);
+    string descr = p.str();
+    krnBlk["..*/tloop/.."] // before timing loop
+        >>OSSFMT("cout<<\"BlockingPlan\\n "<<descr<<"\"<<endl;")
+        ;
+    krnBlk>>"uint64_t fooOut = seed;";
+
+    //auto s = code(p);   // vectorized a[], b[], c[] outputs
+    //krnBlk>>s;
+
+    auto& abc = emit_loops(p, krnBlk);                  // kernel code for a[],b[],c[] 
+    auto& untimed = abc["..*/tloop"]["last"];           // after timing loop
+    cout<<" EMIT_PRINT !"<<endl;
+    emit_print(abc, untimed);
+
+    // this is still in timing loop:
+    krnBlk["../last"]>>"bogus ^= fooOut; // somehow update bogus using fooOut [,seed,...]";
+}
+
+cprog::Cblock& BlockingMain::emit_loops(BlockingPlan const& p, Cblock& krnBlk){
+    auto& pr = krnBlk.getRoot();
+    // all of krnBlk points into some "tloop/body" of timeit_foo
+    //auto& kf = krnBlk["../last"];
+    CBLOCK_SCOPE(k,"",pr,krnBlk);
+    // k["first"] ?
+    auto& kabc = k["abc"];              // <-- our return value (innermost loop)
+    auto& kz = k[".."]["last"];
+
+    string descr = p.str();
+    k>>OSSFMT("// "<<descr);
+    int const &ii=p.ii, &jj=p.jj, &kk=p.kk;
+    k>>CSTR(#define FOR(I,VL) for(int I=0;I<VL;++I)\n);
+    k>>OSSFMT("int vl="<<p.kVl<<";\n");
+    k>>OSSFMT("typedef int vr["<<p.kVl<<"];\n");
+    k>>"vr a, b, c, sq, tmp, ta, tb, tc;\n";
+    k>>OSSFMT("// outer loops: "<<p.iLpo<<" "<<p.jLpo<<" "<<p.kLpo<<"\n");
+    if(p.iLpo>1){
+        k>>OSSFMT("for(int io=0; io<"<<ii<<"; io+="<<p.iB<<"){ //"<<(ii%p.iB==0?" norem":" rem")<<"\n");
+    }else{
+        k>>"{int const io=0;\n";
+    }
+    if(p.jLpo>1){
+        k>>OSSFMT(" for(int jo=0; jo<"<<jj<<"; jo+="<<p.jB<<"){ //"<<(jj%p.jB==0?" norem":" rem")<<"\n");
+    }else{
+        k>>" {int const jo=0;\n";
+    }
+    if(p.kLpo>1){
+        k>>OSSFMT("  for(int ko=0; ko<"<<kk<<"; ko+="<<p.kB<<"){ //"<<(kk%p.kB==0?" norem":" rem")<<" "<<p.ijkOuter()<<" outer\n");
+    }else{
+        k>>"  {int const ko=0;\n";
+    }
+    k>>"   FOR(n,vl) a[n] = b[n] = c[n] = ta[n] = 0;\n";
+#if 0 // nosimd
+    if(p.iB>1){
+        k>>"  for(int i=io; i<io+"<<p.iB<<"; ++i){ // iv="<<p.iv()<<"\n";
+        k>>"   FOR(n,vl) a[n] = ko + n%"<<p.jB*p.kB<<"; // ?\n";
+    }else{
+        k>>"   for(int i=io; i==io; ++i){ // iv="<<p.iv()<<"\n";
+        k>>"    FOR(n,vl) a[n] = ko;\n";
+    }
+    if(p.jB>1){
+        k>>"    for(int j=jo; j<jo+"<<p.jB<<"; ++j){ // jv="<<p.jv()<<"\n";
+        k>>"     FOR(n,vl) b[n] = ji + n%"<<p.kB<<"; // ?\n";
+    }else{
+        k>>"   for(int j=jo; j==jo; ++j){ // jv="<<p.jv()<<"\n";
+        k>>"    FOR(n,vl) a[n] = ko;\n";
+    }
+    k>>"     for(int k=ko; k<ko+"<<p.kB<<"; ++k){ // kv="<<p.kv()<<" vl="<<p.kVl<<"\n";
+    k>>"      prtijk(i,j,k);\n";
+#endif
+    k>>OSSFMT("   FOR(n,vl) sq[n] = n;\n");
+    k>>OSSFMT("   // inner loops: "<<p.iLp <<" "<<p.jLp <<" "<<p.kLp <<"\n");
+    k>>OSSFMT("   // inner vls  : "<<p.iv()<<" "<<p.jv()<<" "<<p.kv()<<"\n");
+    k>>OSSFMT("   // inner block: "<<p.iB  <<" "<<p.jB  <<" "<<p.kB  <<"\n");
+    if(p.iB>1){
+        k>>OSSFMT("   for(int i=io; i<io+"<<p.iB<<"; i+="<<p.iv()<<"){    // A iB="<<p.iB<<" iv="<<p.iv()<<"\n");
+        k>>OSSFMT("    FOR(n,vl) a[n] = ko + sq[n]/"<<p.jB*p.kB<<";    // divmod by jB*kB="<<p.jB<<"*"<<p.kB<<"\n");
+        k>>OSSFMT("    FOR(n,vl) ta[n] = sq[n]%"<<p.jB*p.kB<<";\n");
+    }else{
+        //k>>"  for(int i=io; i==io; ++i){ // iv="<<p.iv()<<"\n";
+        k>>"   {int const i=io;\n";
+        k>>"    FOR(n,vl) a[n] = i;\n";
+    }
+
+    if(p.iB>1 && p.jB>1){
+        k>>OSSFMT("    for(int j=jo; j<jo+"<<p.jB<<"; j+="<<p.jv()<<"){    // a jB="<<p.jB<<" jv="<<p.jv()<<"\n");
+        k>>OSSFMT("     FOR(n,vl) b[n] = jo + ta[n]/"<<p.jv()<<";\n");
+    }else if(p.jB>1){
+        k>>OSSFMT("    for(int j=jo; j<jo+"<<p.jB<<"; j+="<<p.jv()<<"){    // b jB="<<p.jB<<" jv="<<p.jv()<<"\n");
+        k>>OSSFMT("     FOR(n,vl) b[n] = jo + sq[n]/"<<p.kv()<<";        // kB="<<p.kB<<" kv="<<p.kv()<<"\n");
+    }else{
+        k>>"    {int const j=jo;\n";
+        k>>"    FOR(n,vl) b[n] = jo;\n";
+    }
+
+    if(p.kB>1){
+        k>>OSSFMT("     for(int k=ko; k<ko+"<<p.kB<<"; k+="<<p.kv()<<"){    // kv="<<p.kv()<<" vl="<<p.kVl<<"\n");
+        k>>OSSFMT("      FOR(n,vl) c[n] = ko + sq[n]%"<<p.kv()<<"; // mod by kB="<<p.kB<<" [kv="<<p.kv()<<"] shortcut\n");
+    }else{
+        k>>"     {int const k=ko;\n";
+        k>>"      FOR(n,vl) c[n] = ko;\n";
+    }
+
+    int const ijkB = p.iB*p.jB*p.kB;
+    if(ijkB%p.kVl){
+        k>>OSSFMT("      vl = min(vl, sq[0]+vl - "<<ijkB%p.kVl<<");\n");
+    }
+    kz>>"      FOR(n,vl) sq[n] += vl;\n";
+    kz>>"}}}}}}";
+    kz>>"#undef FOR\n";
+
+    //kf>>"cout<<oss.str()<<endl;\n";        // should go to "../last" to avoid timing it
+
+    return kabc;
+}
+
+void BlockingMain::emit_print(cprog::Cblock& abc, cprog::Cblock& untimed){
+    abc>>CSTR(#define prtijk(i,j,k) do{oss<<" {"<<i<<","<<j<<","<<k<<"}"<<endl;}while(0)\n);
+    abc>>"      prtijk(i,j,k);\n";
+    abc>>"#undef prtijk\n";
+#if 0 // self-contained
+    oss<<CSTR(#define prt(a) do{oss<<#a<<": ";for(int u=0;u<vl;++u)oss<<' '<<a[u]; oss<<endl;}while(0)\n);
+#else // if genBlock is already using vecprt, the jit routine can use it too (?)
+    abc<<CSTR(#define prt(a) do{oss<<#a<<"["<<setw(3)<<vl<<"]: "<<vecprt(8,2, a, vl)<<endl;}while(0)\n);
+#endif
+    abc >>"      prt(a);"
+        >>"      //prt(ta);"
+        >>"      prt(b);"
+        >>"      prt(c);";
+    abc>>"#undef prt\n";
+
+    abc>>"fooOut += a[0]+b[0]+c[0];";
+
+    untimed>>"cout<<oss.str()<<endl;";
+    untimed>>"oss.clear(); oss.str(\"\");";
+}
+
+void BlockingMain::add_check(BlockingPlan const& p){
+}
+
 std::string BlockingPlan::str() const {
     oss.clear(); oss.str("");
-    auto prtOuter=[](int const nloop, int const to, int const by, char const* By="By"){
+    auto prtOuter=[](int const nloop, int const to, int const by){
         oss <<" ";
-        if(nloop==1) oss <<"once";
-        else{
-            oss <<nloop<<"*(To"<<to;
-            if(by!=1) oss <<By<<by;
-            oss <<")";
+        if(nloop==1){
+            assert(to==by);
+            oss <<"once";
+        }else if(by==1){
+            assert(nloop==to);
+            oss<<to<<"*";
+        }else{
+            oss <<nloop<<"*To"<<to;
+            if(by!=1) oss <<"By"<<by;
         }
     };
-    auto prtInner=[](int const nloop, int const to, int const by, char const* By="By"){
+    // inner loop stride IS the vector length for that loop
+    auto prtInner=[](int const nloop, int const to, int const vl){
         oss <<" "<<nloop<<"*";
+        assert(vl>0);
         if(to > 1){
-            oss <<"(To"<<to;
-            if(by!=1) oss <<By<<by;
-            oss <<")";
-        }else{
-            assert(by>0);
+            oss <<"To"<<to;
+            if(vl!=1){
+                oss<<"v";
+                if(vl!=to) oss<<vl;
+            }
         }
     };
     prtOuter(iLpo,ii,iB);
@@ -505,9 +818,9 @@ std::string BlockingPlan::str() const {
     prtOuter(kLpo,kk,kB);
     auto outer = oss.str();
     oss.str("");
-    prtInner(iLp,iB,iv(),"Vl");
-    prtInner(jLp,jB,jv(),"Vl");
-    prtInner(kLp,kB,kv(),"Vl");
+    prtInner(iLp,iB,iv());
+    prtInner(jLp,jB,jv());
+    prtInner(kLp,kB,kv());
     auto inner = oss.str();
     oss.str("");
     oss <<left<<setw(30)<<outer<<setw(30)<<inner;
@@ -519,6 +832,28 @@ std::string BlockingPlan::str() const {
     oss.clear(); oss.str("");
     return ret;
 }
+std::string BlockingPlan::suffix() const{
+    oss.clear(); oss.str("");
+    oss<<"_vl"<<kVl;
+    auto prt=[](int const to, int const by, int const vl){
+        int const nloopOuter = (to+by-1)/by;
+        oss<<to;
+        if(nloopOuter==1){
+            assert(by==to);
+        }else{
+            if(by!=1) oss<<"By"<<by;
+        }
+        if(by>1 && vl==by) oss<<"v";
+        else if(vl!=1) oss<<"v"<<vl;
+    };
+    oss<<"_i"; prt(ii,iB,iv());
+    oss<<"_j"; prt(jj,jB,jv());
+    oss<<"_k"; prt(kk,kB,kv());
+    auto ret=oss.str();
+    oss.clear(); oss.str("");
+    return ret;
+}
+
 /**
  * \todo use set of costs, to correctly do "all else equal" logic
  *
@@ -734,191 +1069,100 @@ std::vector<BlockingPlan> mkBlockingPlans(int const ii, int const jj, int const 
     return vBp;
 }
 
-/** print code loop blocking (only a few simple tests, as in genBlock0.cpp). */
-void prtCode(BlockingPlan const& p){
-    p.prt();
+std::string code(BlockingPlan const& p)
+{
+    ostringstream oss;
+    p.prt(oss);
     int const &ii=p.ii, &jj=p.jj, &kk=p.kk;
-    cout<<"int vl="<<p.kVl<<";\n";
-    cout<<"typedef int vr["<<p.kVl<<"];\n";
-    cout<<"vr a, b, c, sq, tmp, ta, tb, tc;\n";
-    cout<<"// outer loops: "<<p.iLpo<<" "<<p.jLpo<<" "<<p.kLpo<<"\n";
+    oss<<CSTR(#define prt(a) do{oss<<#a<<": ";for(int u=0;u<vl;++u)oss<<' '<<a[u]; oss<<endl;}while(0)\n);
+    oss<<CSTR(#define prtijk(i,j,k) do{oss<<" {"<<i<<","<<j<<","<<k<<"}"<<endl;}while(0)\n);
+    oss<<CSTR(#define FOR(I,VL) for(int I=0;I<VL;++I)\n);
+    oss<<"int vl="<<p.kVl<<";\n";
+    oss<<"typedef int vr["<<p.kVl<<"];\n";
+    oss<<"vr a, b, c, sq, tmp, ta, tb, tc;\n";
+    oss<<"// outer loops: "<<p.iLpo<<" "<<p.jLpo<<" "<<p.kLpo<<"\n";
     if(p.iLpo>1){
-        cout<<"for(int io=0; io<"<<ii<<"; io+="<<p.iB<<"){ //"<<(ii%p.iB==0?" norem":" rem")<<"\n";
+        oss<<"for(int io=0; io<"<<ii<<"; io+="<<p.iB<<"){ //"<<(ii%p.iB==0?" norem":" rem")<<"\n";
     }else{
-        cout<<"{int const io=0;\n";
+        oss<<"{int const io=0;\n";
     }
     if(p.jLpo>1){
-        cout<<" for(int jo=0; jo<"<<jj<<"; jo+="<<p.jB<<"){ //"<<(jj%p.jB==0?" norem":" rem")<<"\n";
+        oss<<" for(int jo=0; jo<"<<jj<<"; jo+="<<p.jB<<"){ //"<<(jj%p.jB==0?" norem":" rem")<<"\n";
     }else{
-        cout<<" {int const jo=0;\n";
+        oss<<" {int const jo=0;\n";
     }
     if(p.kLpo>1){
-        cout<<"  for(int ko=0; ko<"<<kk<<"; ko+="<<p.kB<<"){ //"<<(kk%p.kB==0?" norem":" rem")<<" "<<p.ijkOuter()<<" outer\n";
+        oss<<"  for(int ko=0; ko<"<<kk<<"; ko+="<<p.kB<<"){ //"<<(kk%p.kB==0?" norem":" rem")<<" "<<p.ijkOuter()<<" outer\n";
     }else{
-        cout<<"  {int const ko=0;\n";
+        oss<<"  {int const ko=0;\n";
     }
-    cout<<"   FOR(n,vl) a[n] = b[n] = c[n] = ta[n] = 0;\n";
+    oss<<"   FOR(n,vl) a[n] = b[n] = c[n] = ta[n] = 0;\n";
 #if 0 // nosimd
     if(p.iB>1){
-        cout<<"  for(int i=io; i<io+"<<p.iB<<"; ++i){ // iv="<<p.iv()<<"\n";
-        cout<<"   FOR(n,vl) a[n] = ko + n%"<<p.jB*p.kB<<"; // ?\n";
+        oss<<"  for(int i=io; i<io+"<<p.iB<<"; ++i){ // iv="<<p.iv()<<"\n";
+        oss<<"   FOR(n,vl) a[n] = ko + n%"<<p.jB*p.kB<<"; // ?\n";
     }else{
-        cout<<"   for(int i=io; i==io; ++i){ // iv="<<p.iv()<<"\n";
-        cout<<"    FOR(n,vl) a[n] = ko;\n";
+        oss<<"   for(int i=io; i==io; ++i){ // iv="<<p.iv()<<"\n";
+        oss<<"    FOR(n,vl) a[n] = ko;\n";
     }
     if(p.jB>1){
-        cout<<"    for(int j=jo; j<jo+"<<p.jB<<"; ++j){ // jv="<<p.jv()<<"\n";
-        cout<<"     FOR(n,vl) b[n] = ji + n%"<<p.kB<<"; // ?\n";
+        oss<<"    for(int j=jo; j<jo+"<<p.jB<<"; ++j){ // jv="<<p.jv()<<"\n";
+        oss<<"     FOR(n,vl) b[n] = ji + n%"<<p.kB<<"; // ?\n";
     }else{
-        cout<<"   for(int j=jo; j==jo; ++j){ // jv="<<p.jv()<<"\n";
-        cout<<"    FOR(n,vl) a[n] = ko;\n";
+        oss<<"   for(int j=jo; j==jo; ++j){ // jv="<<p.jv()<<"\n";
+        oss<<"    FOR(n,vl) a[n] = ko;\n";
     }
-    cout<<"     for(int k=ko; k<ko+"<<p.kB<<"; ++k){ // kv="<<p.kv()<<" vl="<<p.kVl<<"\n";
-    cout<<"      prtijk(i,j,k);\n";
+    oss<<"     for(int k=ko; k<ko+"<<p.kB<<"; ++k){ // kv="<<p.kv()<<" vl="<<p.kVl<<"\n";
+    oss<<"      prtijk(i,j,k);\n";
 #else // simd 'c'
-    cout<<"   FOR(n,vl) sq[n] = n;\n";
-    cout<<"   // inner loops: "<<p.iLp <<" "<<p.jLp <<" "<<p.kLp <<"\n";
-    cout<<"   // inner vls  : "<<p.iv()<<" "<<p.jv()<<" "<<p.kv()<<"\n";
-    cout<<"   // inner block: "<<p.iB  <<" "<<p.jB  <<" "<<p.kB  <<"\n";
+    oss<<"   FOR(n,vl) sq[n] = n;\n";
+    oss<<"   // inner loops: "<<p.iLp <<" "<<p.jLp <<" "<<p.kLp <<"\n";
+    oss<<"   // inner vls  : "<<p.iv()<<" "<<p.jv()<<" "<<p.kv()<<"\n";
+    oss<<"   // inner block: "<<p.iB  <<" "<<p.jB  <<" "<<p.kB  <<"\n";
     if(p.iB>1){
-        cout<<"   for(int i=io; i<io+"<<p.iB<<"; i+="<<p.iv()<<"){    // A iB="<<p.iB<<" iv="<<p.iv()<<"\n";
-        cout<<"    FOR(n,vl) a[n] = ko + sq[n]/"<<p.jB*p.kB<<";    // divmod by jB*kB="<<p.jB<<"*"<<p.kB<<"\n";
-        cout<<"    FOR(n,vl) ta[n] = sq[n]%"<<p.jB*p.kB<<";\n";
+        oss<<"   for(int i=io; i<io+"<<p.iB<<"; i+="<<p.iv()<<"){    // A iB="<<p.iB<<" iv="<<p.iv()<<"\n";
+        oss<<"    FOR(n,vl) a[n] = ko + sq[n]/"<<p.jB*p.kB<<";    // divmod by jB*kB="<<p.jB<<"*"<<p.kB<<"\n";
+        oss<<"    FOR(n,vl) ta[n] = sq[n]%"<<p.jB*p.kB<<";\n";
     }else{
-        //cout<<"  for(int i=io; i==io; ++i){ // iv="<<p.iv()<<"\n";
-        cout<<"   {int const i=io;\n";
-        cout<<"    FOR(n,vl) a[n] = i;\n";
+        //oss<<"  for(int i=io; i==io; ++i){ // iv="<<p.iv()<<"\n";
+        oss<<"   {int const i=io;\n";
+        oss<<"    FOR(n,vl) a[n] = i;\n";
     }
 
     if(p.iB>1 && p.jB>1){
-        cout<<"    for(int j=jo; j<jo+"<<p.jB<<"; j+="<<p.jv()<<"){    // a jB="<<p.jB<<" jv="<<p.jv()<<"\n";
-        cout<<"     FOR(n,vl) b[n] = jo + ta[n]/"<<p.jv()<<";\n";
+        oss<<"    for(int j=jo; j<jo+"<<p.jB<<"; j+="<<p.jv()<<"){    // a jB="<<p.jB<<" jv="<<p.jv()<<"\n";
+        oss<<"     FOR(n,vl) b[n] = jo + ta[n]/"<<p.jv()<<";\n";
     }else if(p.jB>1){
-        cout<<"    for(int j=jo; j<jo+"<<p.jB<<"; j+="<<p.jv()<<"){    // b jB="<<p.jB<<" jv="<<p.jv()<<"\n";
-        cout<<"     FOR(n,vl) b[n] = jo + sq[n]/"<<p.kv()<<";        // kB="<<p.kB<<" kv="<<p.kv()<<"\n";
+        oss<<"    for(int j=jo; j<jo+"<<p.jB<<"; j+="<<p.jv()<<"){    // b jB="<<p.jB<<" jv="<<p.jv()<<"\n";
+        oss<<"     FOR(n,vl) b[n] = jo + sq[n]/"<<p.kv()<<";        // kB="<<p.kB<<" kv="<<p.kv()<<"\n";
     }else{
-        cout<<"    {int const j=jo;\n";
-        cout<<"    FOR(n,vl) b[n] = jo;\n";
+        oss<<"    {int const j=jo;\n";
+        oss<<"    FOR(n,vl) b[n] = jo;\n";
     }
 
     if(p.kB>1){
-        cout<<"     for(int k=ko; k<ko+"<<p.kB<<"; k+="<<p.kv()<<"){    // kv="<<p.kv()<<" vl="<<p.kVl<<"\n";
-        cout<<"      FOR(n,vl) c[n] = ko + sq[n]%"<<p.kv()<<"; // mod by kB="<<p.kB<<" [kv="<<p.kv()<<"] shortcut\n";
+        oss<<"     for(int k=ko; k<ko+"<<p.kB<<"; k+="<<p.kv()<<"){    // kv="<<p.kv()<<" vl="<<p.kVl<<"\n";
+        oss<<"      FOR(n,vl) c[n] = ko + sq[n]%"<<p.kv()<<"; // mod by kB="<<p.kB<<" [kv="<<p.kv()<<"] shortcut\n";
     }else{
-        cout<<"     {int const k=ko;\n";
-        cout<<"      FOR(n,vl) c[n] = ko;\n";
+        oss<<"     {int const k=ko;\n";
+        oss<<"      FOR(n,vl) c[n] = ko;\n";
     }
 
     int const ijkB = p.iB*p.jB*p.kB;
     if(ijkB%p.kVl){
-        cout<<"      vl = min(vl, sq[0]+vl - "<<ijkB%p.kVl<<");\n";
+        oss<<"      vl = min(vl, sq[0]+vl - "<<ijkB%p.kVl<<");\n";
     }
-    cout<<"      prtijk(i,j,k);\n";
-    cout<<"      prt(a); prt(ta); prt(b); prt(c);\n";
-    cout<<"      FOR(n,vl) sq[n] += vl;\n";
+    oss<<"      prtijk(i,j,k);\n";
+    oss<<"      prt(a); prt(ta); prt(b); prt(c);\n";
+    oss<<"      FOR(n,vl) sq[n] += vl;\n";
 #endif
-#if 0
-    cout<<"   for(int il=0; il<"<<p.iLp<<"; il+="<<p.iv()/p.iLp<<"){\n";
-    cout<<"    FOR(n,vl) a[n]  = io + (il*"<<p.iv()<<"+n)/"<<p.jB*p.kB<<";\n";
-    cout<<"    for(int j=jo; j<jo+"<<p.jB<<"; ++j){ // jv="<<p.jv()<<"\n";
-    cout<<"     FOR(n,vl) b[n]  = jo + n/"<<p.kB<<";\n";
-    if(1 || p.kB>1){
-        cout<<"     for(int k=ko; k<ko+"<<p.kB<<"; ++k){ // kv="<<p.kv()<<" vl="<<p.kVl<<"\n";
-        //cout<<"      FOR(n,vl) c[n]  = ko + n%"<<p.kB<<";\n";
-    }else{
-        cout<<"     { // kv="<<p.kv()<<" vl="<<p.kVl<<"\n";
-        //cout<<"      FOR(n,vl) c[n]  = ko;\n";
-    }
-    //cout<<"      FOR(n,vl) c[n]  = ko + n%"<<p.kB<<";\n";           // ko + 012301230123 (kB=4)
-    //cout<<"      FOR(n,vl) tmp[n]= n/"<<p.kB<<";\n";                //      000011112222...
-    //cout<<"      FOR(n,vl) b[n]  = jo + tmp[n]%"<<p.jB<<";\n";      // jo + 000011110000 (jB=2)
-    //cout<<"      FOR(n,vl) tmp[n]= tmp[n]/"<<p.iB<<";\n";           //      000000001111111122222222
-    //cout<<"      FOR(n,vl) a[n]  = io + tmp[n];\n";                 // io + --"--
-    cout<<"      prt(a); prt(b); prt(c);\n";
-#endif
-    cout<<"}}}}}}"<<endl;
-#if 0
-    // Here are some sample loops, from genBlock0.cpp
-#define FOR(VAR,VL) for(int VAR=0; VAR<(VL); ++VAR)
-#define prt(a) do{cout<<#a<<": ";for(int u=0;u<vl;++u)cout<<' '<<a[u]; cout<<endl;}while(0)
-#define prtijk(i,j,k) do{cout<<" {"<<i<<","<<j<<","<<k<<"}"<<endl;}while(0)
-    if(1){
-        // 1*To3,3:1@vl3 1*To3,3:1@vl9 1*To3,3:1@vl27  {o1*i1 1 kerns $0+$0.5+$0.7 =$1.2}
-        int vl=27;
-        typedef int vr[27];
-        vr a, b, c, sq, ta;
-        // outer loops: 1 1 1
-        {int const io=0;
-            {int const jo=0;
-                {int const ko=0;
-                    FOR(n,vl) a[n] = b[n] = c[n] = ta[n] = 0;
-                    FOR(n,vl) sq[n] = n;
-                    // inner loops: 1 1 1
-                    // inner vls  : 3 3 3
-                    // inner block: 3 3 3
-                    for(int i=io; i<io+3; i+=3){    // A iB=3 iv=3
-                        FOR(n,vl) a[n] = ko + sq[n]/9;    // divmod by jB*kB=3*3
-                        FOR(n,vl) ta[n] = sq[n]%9;
-                        for(int j=jo; j<jo+3; j+=3){    // 0 jB=3 jv=3
-                            FOR(n,vl) b[n] = jo + ta[n]/3;
-                            for(int k=ko; k<ko+3; k+=3){    // kv=3 vl=27
-                                FOR(n,vl) c[n] = ko + sq[n]%3; // mod by kB=3 [kv=3] shortcut
-                                prtijk(i,j,k);
-                                prt(a); prt(ta); prt(b); prt(c);
-                                FOR(n,vl) sq[n] += vl;
-                            }}}}}}
-    }
-    if(1){
-        // 1*To1,1:1@vl1 1*To3,3:1@vl3 1*To3,3:1@vl9  {o1*i1 1 kerns $0+$0+$0.7 =$0.7}
-        int vl=9;
-        typedef int vr[9];
-        vr a, b, c, sq, tmp, ta, tb, tc;
-        // outer loops: 1 1 1
-        {int const io=0;
-            {int const jo=0;
-                {int const ko=0;
-                    FOR(n,vl) a[n] = b[n] = c[n] = ta[n] = 0;
-                    FOR(n,vl) sq[n] = n;
-                    // inner loops: 1 1 1
-                    // inner vls  : 1 3 3
-                    // inner block: 1 3 3
-                    {int const i=io;
-                        FOR(n,vl) a[n] = i;
-                        for(int j=jo; j<jo+3; j+=3){    // 1 jB=3 jv=3
-                            FOR(n,vl) b[n] = jo + sq[n]/3/*kB*/; // 
-                            for(int k=ko; k<ko+3; k+=3){    // kv=3 vl=9
-                                FOR(n,vl) c[n] = ko + sq[n]%3; // mod by kB=3 [kv=3] shortcut
-                                prtijk(i,j,k);
-                                prt(a); prt(ta); prt(b); prt(c);
-                                FOR(n,vl) sq[n] += vl;
-                            }}}}}}
-    }
-    if(1){
-        // 1*To1,1:1@vl1 1*To3,3:1@vl3 1*To3,3:1@vl9  {o1*i1 1 kerns $0+$0+$0.7 =$0.7}
-        int vl=9;
-        typedef int vr[9];
-        vr a, b, c, sq, tmp, ta, tb, tc;
-        // outer loops: 1 1 1
-        {int const io=0;
-            {int const jo=0;
-                {int const ko=0;
-                    FOR(n,vl) a[n] = b[n] = c[n] = ta[n] = 0;
-                    FOR(n,vl) sq[n] = n;
-                    // inner loops: 1 1 1
-                    // inner vls  : 1 3 3
-                    // inner block: 1 3 3
-                    {int const i=io;
-                        FOR(n,vl) a[n] = i;
-                        for(int j=jo; j<jo+3; j+=3){    // b jB=3 jv=3
-                            FOR(n,vl) b[n] = jo + sq[n]/3;        // kB=3 kv=3
-                            for(int k=ko; k<ko+3; k+=3){    // kv=3 vl=9
-                                FOR(n,vl) c[n] = ko + sq[n]%3; // mod by kB=3 [kv=3] shortcut
-                                prtijk(i,j,k);
-                                prt(a); prt(ta); prt(b); prt(c);
-                                FOR(n,vl) sq[n] += vl;
-                            }}}}}}
-    }
-#endif
+    oss<<"}}}}}}"<<endl;
+    oss<<"#undef FOR\n";
+    oss<<"#undef prtijk\n";
+    oss<<"#undef prt\n";
+    oss<<"cout<<oss.str()<<endl;\n";        // should go to "../last"
+
+    return oss.str();
 }
 
 
