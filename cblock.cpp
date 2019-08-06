@@ -264,7 +264,7 @@ Cblock& mk_scope(Cunit& cunit, std::string name, std::string beg /*=""*/, std::s
         block["first"];
         if(!beg.empty()) block["beg"]<<beg<<"\n";
         block["body"];    // empty
-        //block["cleanup"]; // empty
+        //block["last"]; // empty
         if(!end.empty()) block["end"]<<end<<"\n";
         block["end"]<<"// END "<<name<<PreIndent(-cunit.shiftwidth);
     }

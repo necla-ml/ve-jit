@@ -26,12 +26,6 @@ using namespace std;
 using namespace loop;
 using namespace cprog;
 
-#define INSCMT(BLK,INS,CMT) do{ \
-    auto ins=(INS); \
-    auto cmt=(CMT); \
-    (BLK)>>OSSFMT(left<<setw(40)<<ins<<" // "<<cmt); \
-} while(0)
-
 #if 1
 /** false if cb[sub] exists, else true, and create empty cb[sub] TAG node. */
 static bool tag_once(Cblock &cb, std::string const& sub){
@@ -131,6 +125,8 @@ std::vector<std::vector<Triples<T>>> refTriples(
 template<typename T>
 std::vector<std::vector<Triples<T>>> refTriples( BlockingPlan const& p );
 
+void prtCode(BlockingPlan const& p);
+
 /** inject timing utilities, globals, init and teardown code [just once] */
 void timeit_prep(Cblock& utils, Cblock& main);
 
@@ -141,13 +137,6 @@ void timeit_prep(Cblock& utils, Cblock& main);
  */
 Cblock& timeit_foo(std::string const& foo, Cblock& fns, Cblock& call, int const reps);
 
-/** generate semi-correct loop blocking code.
- * only a few simple cases OK, as in genBlock0.cpp. */
-std::string code(BlockingPlan const& p);
-
-void prtCode(BlockingPlan const& p){
-    cout<<code(p)<<endl;
-}
 /**
  * - NEVER simdize across the exit of [all 3] inner loops
  *   - Now scalar outer loops can easily by assigned to threads.
@@ -262,7 +251,6 @@ std::vector<std::vector<Triples<T>>> refTriples( BlockingPlan const& p )
 /** make triple-loop blocking plans and analyze their cost.
  * \return sorted list of BlockingPlan, best first. */
 std::vector<BlockingPlan> mkBlockingPlans(int const ii, int const jj, int const kk);
-void prtCode(BlockingPlan const& p);
 
 static ostringstream oss;
 
@@ -290,16 +278,23 @@ inline cprog::Cblock& BlockingBase::run() const { assert(run_); return *run_; }
 /** a single [timing-test] subroutine */
 struct BlockingMain final : public BlockingBase {
     BlockingMain(int const krn, int const v=0/*verbose*/);
+
+    /** adds function and a call to it from 'main' */
     void add(BlockingPlan const& p);
+
+    /** emit a[],b[],c[] calculation loops.
+     * \return \b innermost block which should do something with a,b,c. */
+    // some kernels might need "precalc" outer_ and inner_ blocks
+    //this->krn_ = mkBlockingTestKernel(krn,*outer_,*inner_ /*, defaults?*/ );
+    // perhaps return a tuple of Cblock, when that is needed.
+    static cprog::Cblock& emit_loops(BlockingPlan const& p, Cblock& krnBlk);
+
   private:
     void add_none(BlockingPlan const& p);
     void add_print(BlockingPlan const& p);
     void add_check(BlockingPlan const& p);
     void add_hash(BlockingPlan const& p);
 
-    /** emit a[],b[],c[] calculation loops.
-     * \return innermost block which should do something with a,b,c. */
-    static cprog::Cblock& emit_loops(BlockingPlan const& p, Cblock& krnBlk);
 
     /** Fill in innermost a,b,c block according to \c krn.
      * \c after should point to after the timing loop (not part of reported time).
@@ -307,6 +302,12 @@ struct BlockingMain final : public BlockingBase {
      */
     void emit_print(cprog::Cblock& abc, cprog::Cblock& after);
 };
+
+void prtCode(BlockingPlan const& p){
+    Cunit pr("dummy","C",0);
+    BlockingMain::emit_loops(p, pr.root);
+    cout<<pr.str()<<endl;
+}
 
 #if 1==2
 #include "../dllbuild.hpp"
@@ -326,17 +327,28 @@ struct BlockingTests : public BlockingBase {
 int main(int argc, char**argv){
     int ii=20, jj=3, kk=96;
     int a=0, opt_h=0;
+    int which = KRNBLK3_NONE;
     if(argc > 1){
         if (argv[1][0]=='-'){
             char *c = &argv[1][1];
             if (*c=='h'){
-                cout<<" genBlock II JJ KK"<<endl;
+                cout<<" genBlock [-h] [-kKERN] II JJ KK"<<endl;
                 cout<<"   MVL = max vector length = 256 (fixed)"<<endl;
                 cout<<"   II    = 1st loop a=0..II-1"<<endl;
                 cout<<"   JJ    = 2nd loop b=0..JJ-1"<<endl;
                 cout<<"   KK    = 3rd loop c=0..KK-1"<<endl;
+                cout<<" -kKERN  Choose KERN from [NONE],PRINT,CHECK,HASH"<<endl;
                 cout<<" triple loop --> loop over vector registers a[VLEN], b[VLEN] c[VLEN]"<<endl;
                 opt_h = 1;
+            }else if(*c=='k'){
+                std::string kern=string(++c);
+                if(kern=="NONE") which=KRNBLK3_NONE;
+                else if(kern=="HASH") which=KRNBLK3_HASH;
+                else if(kern=="PRINT") which=KRNBLK3_PRINT;
+                else if(kern=="CHECK") which=KRNBLK3_CHECK;
+                else{
+                    cout<<"-kKERN "<<c<<" not supported (stays at "<<krnblk3_name(which)<<")"<<endl;
+                }
             }
             ++a; // one extra arg was used up
         }
@@ -386,8 +398,7 @@ int main(int argc, char**argv){
     // with one [or more] `timeit` routines.
     //
     cout<<"\n BlockingMain scaffold:"<<endl;
-    //BlockingMain bm(KRNBLK3_NONE, 1/*verbose*/);
-    BlockingMain bm(KRNBLK3_PRINT, 1/*verbose*/);
+    BlockingMain bm(which, 1/*verbose*/);
     cout<<"Tree:\n"; bm.pr.dump(cout); cout<<endl; // might be long?
     cout<<bm.pr.str()<<endl;
 
@@ -460,9 +471,10 @@ int main(int argc, char**argv){
 }
 
 /** inject timing utility, init and teardown code. */
-void timeit_prep(Cblock& utils, Cblock& main)
+void timeit_prep(Cblock& includes, Cblock& utils, Cblock& main)
 {
     if(tag_once(utils,"timeit")){
+        set_once(includes,"timer.h", "#include \"../timer.h\"");
         Cblock& tmit = utils["timeit"];
         tmit>>"static double cyc2ns = 1.0; // really cycle2ns()";
         tmit
@@ -486,7 +498,8 @@ void timeit_prep(Cblock& utils, Cblock& main)
         main["last"]["-timeit"]>>"printf(\"bogus=%llu\\n\", (unsigned long long)bogus);";
 
         utils["oss"]>>"static ostringstream oss;";
-        set_once(utils.getRoot()["includes"],"iomanip","#include <iomanip>");
+        set_once(includes,"iomanip", "#include <iomanip>");
+        set_once(includes,"sstream", "#include <sstream>");
         utils["vecprt"]
             >>"template<typename T>"
             >>"std::string vecprt(int const n, int const wide, T* v, int const vl){"
@@ -499,6 +512,7 @@ void timeit_prep(Cblock& utils, Cblock& main)
             >>"    return oss.str();"
             >>"}"
             ;
+        set_once(includes["last"],"std","using namespace std;");
     }
 }
 
@@ -559,6 +573,7 @@ BlockingMain::BlockingMain(int const krn, int const v/*=0,verbose*/)
     pr.root["first"];                           // reserve room for preamble, comments
     pr.root["features"]
         >>"#define _POSIX_C_SOURCE 200809L";
+
     auto& inc = pr.root["includes"];
     //inc["velintrin.h"]>>"#include \"veintrin.h\"";
     //inc["velintrin.h"]>>"#include \"velintrin.h\"";
@@ -568,39 +583,11 @@ BlockingMain::BlockingMain(int const krn, int const v/*=0,verbose*/)
     // create a somewhat generic tree
     fns_ = &pr.root["fns"];
     (*fns_)["first"]; // reserve a node
+
     CBLOCK_SCOPE(run,"int main(int argc,char**argv)",pr,pr.root["main"]);
-    // NEW: use tag function scope, for upward-find operations
-    //      will require extending the find string to match tag!
     run.setType("FUNCTION");
     run_ = &run;
     run["first"]; // reserve a node
-    // outer path root.at("**/main/body")
-
-#if 0
-    //CBLOCK_FOR(loop1,-1,"for(int iloop1=0; iloop1<nrep; ++iloop1)",main);
-    //CBLOCK_FOR(loop2,-1,"for(int iloop2=0; iloop2<1; ++iloop2)",loop1);
-    //if(v){
-    //    main["first"]>>"printf(\"BlockingMain outer loop\\n\");";
-    //    loop2  >>"printf(\"BlockingMain inner loop @ (%d,%d)\\n\",iloop1,iloop2);";
-    //}
-
-    //loop2["first"]; // --> 'fd' inner setup code used by all splits
-
-    //if(v>1){
-    //    cout<<"\nScaffold";
-    //    cout<<pr.tree()<<endl;
-    //}
-
-    //this->outer_ = &main;  // outer @ root.at("**/main/body")
-    //this->inner_ = &loop2;    // inner @ outer.at("**/loop2/body")
-
-    //if(v>2){
-    //    cout<<" outer @ "<<outer_->fullpath()<<endl;
-    //    cout<<" inner @ "<<inner_->fullpath()<<endl;
-    //}
-
-    //this->krn_ = mkBlockingTestKernel(krn,*outer_,*inner_ /*, defaults?*/ );
-#endif
 }
 
 void BlockingMain::add(BlockingPlan const& p){
@@ -613,8 +600,7 @@ void BlockingMain::add(BlockingPlan const& p){
     }
 }
 void BlockingMain::add_none(BlockingPlan const& p){
-    set_once(pr["includes"],"timer.h", "#include \"../timer.h\"");
-    timeit_prep(fns(),run()); // inject timing function helper code
+    timeit_prep(pr["includes"],fns(),run()); // inject timing function helper code
     // - `timeit(foo)`:
     //   1. emit boilerplate 'timeit_foo' function to 'utils[foo]'
     //   2. call it and print avg time in 'main[foo]'
@@ -640,23 +626,16 @@ void BlockingMain::add_hash(BlockingPlan const& p){
 }
 
 void BlockingMain::add_print(BlockingPlan const& p){
-    set_once(pr["includes"],"timer.h", "#include \"../timer.h\"");
-    timeit_prep(fns(),run()); // inject timing function helper code
-    auto subroutine = pr.name+p.suffix();
-
-    set_once(pr["includes"],"sstream", "#include <sstream>");
+    timeit_prep(pr["includes"],fns(),run()); // inject timing function helper code
     set_once(pr["includes"],"iostream", "#include <iostream>");
-    set_once(pr["includes"]["last"],"std","using namespace std;");
 
+    auto subroutine = pr.name+p.suffix();
     auto& krnBlk = timeit_foo(subroutine, fns(), run(), 1);
     string descr = p.str();
     krnBlk["..*/tloop/.."] // before timing loop
         >>OSSFMT("cout<<\"BlockingPlan\\n "<<descr<<"\"<<endl;")
         ;
     krnBlk>>"uint64_t fooOut = seed;";
-
-    //auto s = code(p);   // vectorized a[], b[], c[] outputs
-    //krnBlk>>s;
 
     auto& abc = emit_loops(p, krnBlk);                  // kernel code for a[],b[],c[] 
     auto& untimed = abc["..*/tloop"]["last"];           // after timing loop
@@ -671,117 +650,183 @@ cprog::Cblock& BlockingMain::emit_loops(BlockingPlan const& p, Cblock& krnBlk){
     auto& pr = krnBlk.getRoot();
     // all of krnBlk points into some "tloop/body" of timeit_foo
     //auto& kf = krnBlk["../last"];
-    CBLOCK_SCOPE(k,"",pr,krnBlk);
+    CBLOCK_SCOPE(blockingScope,"",pr,krnBlk);
     // k["first"] ?
-    auto& kabc = k["abc"];              // <-- our return value (innermost loop)
-    auto& kz = k[".."]["last"];
+    int const &ii=p.ii, &jj=p.jj, &kk=p.kk;
 
     string descr = p.str();
-    k>>OSSFMT("// "<<descr);
-    int const &ii=p.ii, &jj=p.jj, &kk=p.kk;
-    k>>CSTR(#define FOR(I,VL) for(int I=0;I<VL;++I)\n);
-    k>>OSSFMT("int vl="<<p.kVl<<";\n");
-    k>>OSSFMT("typedef int vr["<<p.kVl<<"];\n");
-    k>>"vr a, b, c, sq, tmp, ta, tb, tc;\n";
-    k>>OSSFMT("// outer loops: "<<p.iLpo<<" "<<p.jLpo<<" "<<p.kLpo<<"\n");
-    if(p.iLpo>1){
-        k>>OSSFMT("for(int io=0; io<"<<ii<<"; io+="<<p.iB<<"){ //"<<(ii%p.iB==0?" norem":" rem")<<"\n");
-    }else{
-        k>>"{int const io=0;\n";
-    }
-    if(p.jLpo>1){
-        k>>OSSFMT(" for(int jo=0; jo<"<<jj<<"; jo+="<<p.jB<<"){ //"<<(jj%p.jB==0?" norem":" rem")<<"\n");
-    }else{
-        k>>" {int const jo=0;\n";
-    }
-    if(p.kLpo>1){
-        k>>OSSFMT("  for(int ko=0; ko<"<<kk<<"; ko+="<<p.kB<<"){ //"<<(kk%p.kB==0?" norem":" rem")<<" "<<p.ijkOuter()<<" outer\n");
-    }else{
-        k>>"  {int const ko=0;\n";
-    }
-    k>>"   FOR(n,vl) a[n] = b[n] = c[n] = ta[n] = 0;\n";
+    blockingScope
+        >>OSSFMT("// "<<descr)
+        >>CSTR(#define FOR(I,VL) for(int I=0;I<VL;++I))
+        ;
+    auto& decl = blockingScope["decl"]
+        >>OSSFMT("typedef int vr["<<p.kVl<<"];")
+        >>"vr a, b, c;"
+        ;
+    decl["vl"]
+        >>OSSFMT("int const vl="<<p.kVl<<";")
+        // reset to nonconst if we ever have 'last loop' issues
+        ;
+    auto& precalc = blockingScope["precalc"]
+        >>"// [opt] precalc"
+        ;
+    auto use_sqij = [&decl,&precalc](){
+        if(tag_once(decl,"sqij")){
+            decl["sqij"]>>"vr sqij;";
+            precalc>>"FOR(n,vl) sqij[n] = n;";
+        }
+    };
+    auto use_cnt = [&decl](){
+        if(tag_once(decl,"sqij")){
+            decl["cnt"]>>"uint64_t cnt=0U;";
+        }
+    };
+
+    blockingScope["outerloops"]
+        >>OSSFMT("// outer loop blocking factors: "<<p.iLpo<<" "<<p.jLpo<<" "<<p.kLpo);
+
+    auto outerComment = [](Cblock& cb, int iLpo, int ii, int iB){
+        char const* cmt = (iLpo<=1? " once, unblocked"
+            : ii%iB==0? " norem": " rem");
+        auto const sz=cb.code_str().size();
+        if(sz<40) cb<<string(40-sz,' ');
+        cb<<cmt;
+    };
+    auto ioFor = (p.iLpo>1? OSSFMT("for(int io=0; io<"<<ii<<"; io+="<<p.iB<<")")
+            : "int const io=0;");
+    CBLOCK_SCOPE(io,ioFor,pr,blockingScope);
+    outerComment(io["../beg"], p.iLpo, ii, p.iB);
+
+    auto joFor = (p.jLpo>1? OSSFMT("for(int jo=0; jo<"<<jj<<"; jo+="<<p.jB<<")")
+            : "int const jo=0;");
+    CBLOCK_SCOPE(jo,joFor,pr,io);
+    outerComment(jo["../beg"], p.jLpo, jj, p.jB);
+
+    auto koFor = (p.kLpo>1? OSSFMT("for(int ko=0; ko<"<<kk<<"; ko+="<<p.kB<<")")
+            : "int const ko=0;");
+    CBLOCK_SCOPE(ko,koFor,pr,jo);
+    outerComment(ko["../beg"], p.kLpo, kk, p.kB);
+
 #if 0 // nosimd
     if(p.iB>1){
-        k>>"  for(int i=io; i<io+"<<p.iB<<"; ++i){ // iv="<<p.iv()<<"\n";
-        k>>"   FOR(n,vl) a[n] = ko + n%"<<p.jB*p.kB<<"; // ?\n";
+        k>>"  for(int i=io; i<io+"<<p.iB<<"; ++i){ // iv="<<p.iv();
+        k>>"   FOR(n,vl) a[n] = ko + n%"<<p.jB*p.kB<<"; // ?";
     }else{
-        k>>"   for(int i=io; i==io; ++i){ // iv="<<p.iv()<<"\n";
-        k>>"    FOR(n,vl) a[n] = ko;\n";
+        k>>"   for(int i=io; i==io; ++i){ // iv="<<p.iv();
+        k>>"    FOR(n,vl) a[n] = ko;";
     }
     if(p.jB>1){
-        k>>"    for(int j=jo; j<jo+"<<p.jB<<"; ++j){ // jv="<<p.jv()<<"\n";
-        k>>"     FOR(n,vl) b[n] = ji + n%"<<p.kB<<"; // ?\n";
+        k>>"    for(int j=jo; j<jo+"<<p.jB<<"; ++j){ // jv="<<p.jv();
+        k>>"     FOR(n,vl) b[n] = ji + n%"<<p.kB<<"; // ?";
     }else{
-        k>>"   for(int j=jo; j==jo; ++j){ // jv="<<p.jv()<<"\n";
-        k>>"    FOR(n,vl) a[n] = ko;\n";
+        k>>"   for(int j=jo; j==jo; ++j){ // jv="<<p.jv();
+        k>>"    FOR(n,vl) a[n] = ko;";
     }
-    k>>"     for(int k=ko; k<ko+"<<p.kB<<"; ++k){ // kv="<<p.kv()<<" vl="<<p.kVl<<"\n";
-    k>>"      prtijk(i,j,k);\n";
+    k>>"     for(int k=ko; k<ko+"<<p.kB<<"; ++k){ // kv="<<p.kv()<<" vl="<<p.kVl;
+    k>>"      prtijk(i,j,k);";
 #endif
-    k>>OSSFMT("   FOR(n,vl) sq[n] = n;\n");
-    k>>OSSFMT("   // inner loops: "<<p.iLp <<" "<<p.jLp <<" "<<p.kLp <<"\n");
-    k>>OSSFMT("   // inner vls  : "<<p.iv()<<" "<<p.jv()<<" "<<p.kv()<<"\n");
-    k>>OSSFMT("   // inner block: "<<p.iB  <<" "<<p.jB  <<" "<<p.kB  <<"\n");
-    if(p.iB>1){
-        k>>OSSFMT("   for(int i=io; i<io+"<<p.iB<<"; i+="<<p.iv()<<"){    // A iB="<<p.iB<<" iv="<<p.iv()<<"\n");
-        k>>OSSFMT("    FOR(n,vl) a[n] = ko + sq[n]/"<<p.jB*p.kB<<";    // divmod by jB*kB="<<p.jB<<"*"<<p.kB<<"\n");
-        k>>OSSFMT("    FOR(n,vl) ta[n] = sq[n]%"<<p.jB*p.kB<<";\n");
-    }else{
-        //k>>"  for(int i=io; i==io; ++i){ // iv="<<p.iv()<<"\n";
-        k>>"   {int const i=io;\n";
-        k>>"    FOR(n,vl) a[n] = i;\n";
-    }
+    ko  //>>"FOR(n,vl) a[n] = b[n] = c[n] = ta[n] = 0;"
+        //>>"FOR(n,vl) sqij[n] = n; // move up?"
+        >>OSSFMT("// inner loops: "<<p.iLp <<" "<<p.jLp <<" "<<p.kLp )
+        >>OSSFMT("// inner vls  : "<<p.iv()<<" "<<p.jv()<<" "<<p.kv())
+        >>OSSFMT("// inner block: "<<p.iB  <<" "<<p.jB  <<" "<<p.kB  )
+        ;
+    auto& beforeInnerLoops = ko["last"];
 
+    auto iFor = (p.iB<=1? string("int const i=io;")
+            : OSSFMT("for(int i=io; i<io+"<<p.iB<<"; i+="<<p.iv()<<")"));
+    CBLOCK_SCOPE(loop_i,iFor,pr,ko);
+    if(p.iB<=1){
+        loop_i>>"FOR(n,vl) a[n] = i;";
+    }else{
+        loop_i["../beg"]<</*            */ OSSFMT(" A iB="<<p.iB<<" iv="<<p.iv());
+        use_sqij();
+        INSCMT(loop_i, OSSFMT("FOR(n,vl) a[n] = io + sqij[n]/"<<p.jB*p.kB<<";"),
+                /*                      */ OSSFMT("divmod by jB*kB="<<p.jB<<"*"<<p.kB));
+        // not always used:
+        //loop_i>>OSSFMT("FOR(n,vl) ta[n] = sqij[n]%"<<p.jB*p.kB<<";");
+    }
+    auto jFor = (p.iB<=1? string("int const j=jo;")
+            : OSSFMT("for(int j=jo; j<jo+"<<p.jB<<"; j+="<<p.jv()<<")"));
+    CBLOCK_SCOPE(loop_j,jFor,pr,loop_i);
+    loop_j["../beg"]<</*                */ OSSFMT("jB="<<p.jB<<" jv="<<p.jv());
     if(p.iB>1 && p.jB>1){
-        k>>OSSFMT("    for(int j=jo; j<jo+"<<p.jB<<"; j+="<<p.jv()<<"){    // a jB="<<p.jB<<" jv="<<p.jv()<<"\n");
-        k>>OSSFMT("     FOR(n,vl) b[n] = jo + ta[n]/"<<p.jv()<<";\n");
+        use_sqij();
+        decl>>"vr ta;"; // usage is localized, avoid a 'use_ta()' lambda
+        loop_i>>OSSFMT("FOR(n,vl) ta[n] = sqij[n]%"<<p.jB*p.kB<<";");
+        loop_j>>OSSFMT("FOR(n,vl) b[n] = jo + ta[n]/"<<p.kv()<<";");
     }else if(p.jB>1){
-        k>>OSSFMT("    for(int j=jo; j<jo+"<<p.jB<<"; j+="<<p.jv()<<"){    // b jB="<<p.jB<<" jv="<<p.jv()<<"\n");
-        k>>OSSFMT("     FOR(n,vl) b[n] = jo + sq[n]/"<<p.kv()<<";        // kB="<<p.kB<<" kv="<<p.kv()<<"\n");
+        use_sqij();
+        loop_j>>OSSFMT("FOR(n,vl) b[n] = jo + sqij[n]/"<<p.kv()<<";");
     }else{
-        k>>"    {int const j=jo;\n";
-        k>>"    FOR(n,vl) b[n] = jo;\n";
+        loop_j>>"FOR(n,vl) b[n] = jo;";
     }
-
-    if(p.kB>1){
-        k>>OSSFMT("     for(int k=ko; k<ko+"<<p.kB<<"; k+="<<p.kv()<<"){    // kv="<<p.kv()<<" vl="<<p.kVl<<"\n");
-        k>>OSSFMT("      FOR(n,vl) c[n] = ko + sq[n]%"<<p.kv()<<"; // mod by kB="<<p.kB<<" [kv="<<p.kv()<<"] shortcut\n");
+#if 0
+    if(p.iB>1 && p.jB>1){
+        k>>OSSFMT("    for(int j=jo; j<jo+"<<p.jB<<"; j+="<<p.jv()<<"){    // a jB="<<p.jB<<" jv="<<p.jv());
+        k>>OSSFMT("     FOR(n,vl) b[n] = jo + ta[n]/"<<p.kv()<<";");
+    }else if(p.jB>1){
+        k>>OSSFMT("    for(int j=jo; j<jo+"<<p.jB<<"; j+="<<p.jv()<<"){    // b jB="<<p.jB<<" jv="<<p.jv());
+        k>>OSSFMT("     FOR(n,vl) b[n] = jo + sqij[n]/"<<p.kv()<<";        // kB="<<p.kB<<" kv="<<p.kv());
     }else{
-        k>>"     {int const k=ko;\n";
-        k>>"      FOR(n,vl) c[n] = ko;\n";
+        k>>"    {int const j=jo;";
+        k>>"    FOR(n,vl) b[n] = jo;";
+    }
+#endif
+
+    auto kFor = (p.kB<=1? string("int const k=ko;")
+            : OSSFMT("for(int k=ko; k<ko+"<<p.kB<<"; k+="<<p.kv()<<")"));
+    CBLOCK_SCOPE(loop_k,kFor,pr,loop_j);
+    if(p.kB>1){
+        use_sqij();
+        INSCMT(loop_k,OSSFMT("FOR(n,vl) c[n] = ko + sqij[n]%"<<p.kv()<<";"),
+               OSSFMT("mod by kB="<<p.kB<<" [kv="<<p.kv()<<"] shortcut"));
+    }else{
+        loop_k>>"FOR(n,vl) c[n] = ko;";
     }
 
     int const ijkB = p.iB*p.jB*p.kB;
     if(ijkB%p.kVl){
-        k>>OSSFMT("      vl = min(vl, sq[0]+vl - "<<ijkB%p.kVl<<");\n");
+        decl["vl"].set(OSSFMT("int vl="<<p.kVl<<";"));  // default 'vl' was 'const'
+        beforeInnerLoops>>OSSFMT("vl="<<p.kVl<<";");
+        use_sqij();
+        use_cnt(); // vector extract 0'th element is slow on Aurora.  Maintain 'cnt'
+        loop_k>>OSSFMT("vl = min(vl, cnt+vl - "<<ijkB%p.kVl<<");");
     }
-    kz>>"      FOR(n,vl) sq[n] += vl;\n";
-    kz>>"}}}}}}";
-    kz>>"#undef FOR\n";
 
-    //kf>>"cout<<oss.str()<<endl;\n";        // should go to "../last" to avoid timing it
+    auto& kabc = loop_k["abc"];         // <-- our return value (innermost loop)
+    auto& kz = loop_k["last"]["last"];
+    if(decl.find("sqij")){                // have_sqij?
+        kz>>"FOR(n,vl) sqij[n] += vl;";
+    }
+    if(decl.find("cnt")){
+        kz>>"cnt += vl;";
+    }
+    kz>>"#undef FOR";
+
+    //kf>>"cout<<oss.str()<<endl;";       // should go to "../last" to avoid timing it
 
     return kabc;
 }
 
 void BlockingMain::emit_print(cprog::Cblock& abc, cprog::Cblock& untimed){
     abc>>CSTR(#define prtijk(i,j,k) do{oss<<" {"<<i<<","<<j<<","<<k<<"}"<<endl;}while(0)\n);
-    abc>>"      prtijk(i,j,k);\n";
-    abc>>"#undef prtijk\n";
+    abc>>"prtijk(i,j,k);";
+    abc>>"#undef prtijk";
 #if 0 // self-contained
-    oss<<CSTR(#define prt(a) do{oss<<#a<<": ";for(int u=0;u<vl;++u)oss<<' '<<a[u]; oss<<endl;}while(0)\n);
+    abc>>CSTR(#define prt(a) do{oss<<#a<<": ";for(int u=0;u<vl;++u)oss<<' '<<a[u]; oss<<endl;}while(0)\n);
 #else // if genBlock is already using vecprt, the jit routine can use it too (?)
-    abc<<CSTR(#define prt(a) do{oss<<#a<<"["<<setw(3)<<vl<<"]: "<<vecprt(8,2, a, vl)<<endl;}while(0)\n);
+    abc>>CSTR(#define prt(a) do{oss<<#a<<"["<<setw(3)<<vl<<"]: "<<vecprt(8,2, a, vl)<<endl;}while(0)\n);
 #endif
-    abc >>"      prt(a);"
-        >>"      //prt(ta);"
-        >>"      prt(b);"
-        >>"      prt(c);";
-    abc>>"#undef prt\n";
+    abc >>"prt(a);"
+        >>"//prt(ta);"
+        >>"prt(b);"
+        >>"prt(c);";
+    abc>>"#undef prt";
 
     abc>>"fooOut += a[0]+b[0]+c[0];";
 
-    untimed>>"cout<<oss.str()<<endl;";
+    INSCMT(untimed,"cout<<oss.str()<<endl;","untimed");
     untimed>>"oss.clear(); oss.str(\"\");";
 }
 
@@ -1070,102 +1115,5 @@ std::vector<BlockingPlan> mkBlockingPlans(int const ii, int const jj, int const 
     }
     return vBp;
 }
-
-std::string code(BlockingPlan const& p)
-{
-    ostringstream oss;
-    p.prt(oss);
-    int const &ii=p.ii, &jj=p.jj, &kk=p.kk;
-    oss<<CSTR(#define prt(a) do{oss<<#a<<": ";for(int u=0;u<vl;++u)oss<<' '<<a[u]; oss<<endl;}while(0)\n);
-    oss<<CSTR(#define prtijk(i,j,k) do{oss<<" {"<<i<<","<<j<<","<<k<<"}"<<endl;}while(0)\n);
-    oss<<CSTR(#define FOR(I,VL) for(int I=0;I<VL;++I)\n);
-    oss<<"int vl="<<p.kVl<<";\n";
-    oss<<"typedef int vr["<<p.kVl<<"];\n";
-    oss<<"vr a, b, c, sq, tmp, ta, tb, tc;\n";
-    oss<<"// outer loops: "<<p.iLpo<<" "<<p.jLpo<<" "<<p.kLpo<<"\n";
-    if(p.iLpo>1){
-        oss<<"for(int io=0; io<"<<ii<<"; io+="<<p.iB<<"){ //"<<(ii%p.iB==0?" norem":" rem")<<"\n";
-    }else{
-        oss<<"{int const io=0;\n";
-    }
-    if(p.jLpo>1){
-        oss<<" for(int jo=0; jo<"<<jj<<"; jo+="<<p.jB<<"){ //"<<(jj%p.jB==0?" norem":" rem")<<"\n";
-    }else{
-        oss<<" {int const jo=0;\n";
-    }
-    if(p.kLpo>1){
-        oss<<"  for(int ko=0; ko<"<<kk<<"; ko+="<<p.kB<<"){ //"<<(kk%p.kB==0?" norem":" rem")<<" "<<p.ijkOuter()<<" outer\n";
-    }else{
-        oss<<"  {int const ko=0;\n";
-    }
-    oss<<"   FOR(n,vl) a[n] = b[n] = c[n] = ta[n] = 0;\n";
-#if 0 // nosimd
-    if(p.iB>1){
-        oss<<"  for(int i=io; i<io+"<<p.iB<<"; ++i){ // iv="<<p.iv()<<"\n";
-        oss<<"   FOR(n,vl) a[n] = ko + n%"<<p.jB*p.kB<<"; // ?\n";
-    }else{
-        oss<<"   for(int i=io; i==io; ++i){ // iv="<<p.iv()<<"\n";
-        oss<<"    FOR(n,vl) a[n] = ko;\n";
-    }
-    if(p.jB>1){
-        oss<<"    for(int j=jo; j<jo+"<<p.jB<<"; ++j){ // jv="<<p.jv()<<"\n";
-        oss<<"     FOR(n,vl) b[n] = ji + n%"<<p.kB<<"; // ?\n";
-    }else{
-        oss<<"   for(int j=jo; j==jo; ++j){ // jv="<<p.jv()<<"\n";
-        oss<<"    FOR(n,vl) a[n] = ko;\n";
-    }
-    oss<<"     for(int k=ko; k<ko+"<<p.kB<<"; ++k){ // kv="<<p.kv()<<" vl="<<p.kVl<<"\n";
-    oss<<"      prtijk(i,j,k);\n";
-#else // simd 'c'
-    oss<<"   FOR(n,vl) sq[n] = n;\n";
-    oss<<"   // inner loops: "<<p.iLp <<" "<<p.jLp <<" "<<p.kLp <<"\n";
-    oss<<"   // inner vls  : "<<p.iv()<<" "<<p.jv()<<" "<<p.kv()<<"\n";
-    oss<<"   // inner block: "<<p.iB  <<" "<<p.jB  <<" "<<p.kB  <<"\n";
-    if(p.iB>1){
-        oss<<"   for(int i=io; i<io+"<<p.iB<<"; i+="<<p.iv()<<"){    // A iB="<<p.iB<<" iv="<<p.iv()<<"\n";
-        oss<<"    FOR(n,vl) a[n] = ko + sq[n]/"<<p.jB*p.kB<<";    // divmod by jB*kB="<<p.jB<<"*"<<p.kB<<"\n";
-        oss<<"    FOR(n,vl) ta[n] = sq[n]%"<<p.jB*p.kB<<";\n";
-    }else{
-        //oss<<"  for(int i=io; i==io; ++i){ // iv="<<p.iv()<<"\n";
-        oss<<"   {int const i=io;\n";
-        oss<<"    FOR(n,vl) a[n] = i;\n";
-    }
-
-    if(p.iB>1 && p.jB>1){
-        oss<<"    for(int j=jo; j<jo+"<<p.jB<<"; j+="<<p.jv()<<"){    // a jB="<<p.jB<<" jv="<<p.jv()<<"\n";
-        oss<<"     FOR(n,vl) b[n] = jo + ta[n]/"<<p.jv()<<";\n";
-    }else if(p.jB>1){
-        oss<<"    for(int j=jo; j<jo+"<<p.jB<<"; j+="<<p.jv()<<"){    // b jB="<<p.jB<<" jv="<<p.jv()<<"\n";
-        oss<<"     FOR(n,vl) b[n] = jo + sq[n]/"<<p.kv()<<";        // kB="<<p.kB<<" kv="<<p.kv()<<"\n";
-    }else{
-        oss<<"    {int const j=jo;\n";
-        oss<<"    FOR(n,vl) b[n] = jo;\n";
-    }
-
-    if(p.kB>1){
-        oss<<"     for(int k=ko; k<ko+"<<p.kB<<"; k+="<<p.kv()<<"){    // kv="<<p.kv()<<" vl="<<p.kVl<<"\n";
-        oss<<"      FOR(n,vl) c[n] = ko + sq[n]%"<<p.kv()<<"; // mod by kB="<<p.kB<<" [kv="<<p.kv()<<"] shortcut\n";
-    }else{
-        oss<<"     {int const k=ko;\n";
-        oss<<"      FOR(n,vl) c[n] = ko;\n";
-    }
-
-    int const ijkB = p.iB*p.jB*p.kB;
-    if(ijkB%p.kVl){
-        oss<<"      vl = min(vl, sq[0]+vl - "<<ijkB%p.kVl<<");\n";
-    }
-    oss<<"      prtijk(i,j,k);\n";
-    oss<<"      prt(a); prt(ta); prt(b); prt(c);\n";
-    oss<<"      FOR(n,vl) sq[n] += vl;\n";
-#endif
-    oss<<"}}}}}}"<<endl;
-    oss<<"#undef FOR\n";
-    oss<<"#undef prtijk\n";
-    oss<<"#undef prt\n";
-    oss<<"cout<<oss.str()<<endl;\n";        // should go to "../last"
-
-    return oss.str();
-}
-
 
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break

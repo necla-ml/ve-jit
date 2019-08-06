@@ -20,23 +20,23 @@
 /** what kernel is default? */
 #define WHICH_KERNEL KRNBLK3_CHECK
 
-#if 0
 extern "C" {
-	/** bool flags indicating kernel requests for certain defined variables.
+	char const*        krnblk3_name(int const which); 
+
+	/** bool flags indicating variables (registers) required by different kernels
 	 * Variable existence is flagged with tags in the Cblock tree in a 'definitions'
 	 * code block. */
 	struct KernelNeeds{
 		uint8_t cnt;        ///< fd["have_cnt"]  cnt=0, vl0, 2*vl0, etc, also defined at exit of fused-loop scope
-		uint8_t iijj;       ///< fd["have_iijj"] const ii*jj product of loop limits
+		uint8_t iijj;       ///< fd["have_iijj"] const ii*jj*_ product of loop limits
 		uint8_t sq;         ///< fd["have_sq"]   const {0..vl-1} vector
 		uint8_t sqij;       ///< fd["have_sqij"] {cnt..cnt+vl-1} vector
 		uint8_t vl;         ///< fd["have_vl"]   current VL scalar
 	};
-
 	struct KernelNeeds krnblk3_needs(int const which); ///< \deprecated
-	char const*        krnblk3_name(int const which);  ///< \deprecated
 }//extern "C"
 
+#if 0
 struct KrnBlk3Abs {
 	KrnBlk3Abs(std::string pfx="Fl_") : pfx(pfx) {}
 	virtual ~KrnBlk3Abs() = 0;

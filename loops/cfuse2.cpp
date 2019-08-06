@@ -58,12 +58,6 @@
 /** what kernel? */
 #define WHICH_KERNEL KERNEL_HASH
 
-#define INSCMT(BLK,INS,CMT) do{ \
-    auto ins=(INS); \
-    auto cmt=(CMT); \
-    (BLK)>>OSSFMT(left<<setw(40)<<ins<<" // "<<cmt); \
-} while(0)
-
 void other_fastdiv_methods(int const jj);
 
 using namespace std;

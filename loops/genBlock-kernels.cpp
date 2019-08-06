@@ -1,10 +1,30 @@
-#if 0
 #include "genBlock-kernels.hpp"
 #include "../stringutil.hpp"
 #include "../vechash.hpp"
 using namespace std;
 using namespace cprog;
 
+extern "C" {
+    static char const* krnblk3_names_default[] = {
+        "NONE","HASH","PRINT","CHECK" };
+    static struct KernelNeeds const krnblk3_needs_default[] = {
+        { .cnt=0, .iijj=0, .sq=0, .sqij=0, .vl=0 }, // KRNBLK3_NONE          dummy, to look at code
+        { .cnt=0, .iijj=0, .sq=1, .sqij=1, .vl=1 }, // KRNBLK3_HASH          not recently used
+        { .cnt=0, .iijj=0, .sq=0, .sqij=0, .vl=1 }, // KRNBLK3_PRINT
+        { .cnt=1, .iijj=1, .sq=0, .sqij=0, .vl=1 }  // KRNBLK3_CHECK
+    };
+
+    char const* krnblk3_name(int const which){
+        assert( which >= 0 && which <= KRNBLK3_CHECK );
+        return krnblk3_names_default[which];
+    }
+    struct KernelNeeds krnblk3_needs(int const which){
+        assert( which >= 0 && which <= KRNBLK3_CHECK );
+        return krnblk3_needs_default[which];
+    }
+}//extern "C"
+
+#if 0
 //
 // Local objects ------------------------------
 //
@@ -101,26 +121,6 @@ struct KrnBlk3_sqij final : public KrnBlk3
 //
 // Local objects END ------------------------------
 //
-
-static char const* krnblk3_names_default[] = {
-    "NONE","HASH","PRINT","CHECK" };
-static struct KernelNeeds const krnblk3_needs_default[] = {
-    { .cnt=0, .iijj=0, .sq=0, .sqij=0, .vl=0 }, // KRNBLK3_NONE          dummy, to look at code
-    { .cnt=0, .iijj=0, .sq=1, .sqij=1, .vl=1 }, // KRNBLK3_HASH          not recently used
-    { .cnt=0, .iijj=0, .sq=0, .sqij=0, .vl=1 }, // KRNBLK3_PRINT
-    { .cnt=1, .iijj=1, .sq=0, .sqij=0, .vl=1 }  // KRNBLK3_CHECK
-};
-
-extern "C" {
-    struct KernelNeeds krnblk3_needs(int const which){
-        assert( which >= 0 && which <= KRNBLK3_CHECK );
-        return krnblk3_needs_default[which];
-    }
-    char const* krnblk3_name(int const which){
-        assert( which >= 0 && which <= KRNBLK3_CHECK );
-        return krnblk3_names_default[which];
-    }
-}//extern "C"
 
 std::ostringstream KrnBlk3Abs::oss = std::ostringstream{};
 

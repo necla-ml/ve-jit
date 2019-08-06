@@ -436,7 +436,7 @@ int main(int argc,char**argv){
                     else if(kern=="HASH") which=KERNEL_HASH;
                     else if(kern=="PRINT") which=KERNEL_PRINT;
                     else if(kern=="CHECK") which=KERNEL_CHECK;
-                    else if(kern=="SQIJ") which=KERNEL_HASH;
+                    else if(kern=="SQIJ") which=KERNEL_SQIJ;
                     else{
                         cout<<"-kKERN "<<c<<" not supported (stays at "<<kernel_name(which)<<")"<<endl;
                     }

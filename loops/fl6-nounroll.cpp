@@ -13,12 +13,6 @@ using namespace cprog;
 //#define DBG(WHAT) cout<<" DBG:"<<WHAT<<endl
 #define DBG(WHAT)
 
-#define INSCMT(BLK,INS,CMT) do{ \
-    auto ins=(INS); \
-    auto cmt=(CMT); \
-    (BLK)>>OSSFMT(left<<setw(40)<<ins<<" // "<<cmt); \
-} while(0)
-
 static std::ostringstream oss;
 
 static bool tag_once(Cblock &cb, std::string const& sub){

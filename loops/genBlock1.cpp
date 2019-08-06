@@ -27,12 +27,6 @@ using namespace std;
 using namespace loop;
 using namespace cprog;
 
-#define INSCMT(BLK,INS,CMT) do{ \
-    auto ins=(INS); \
-    auto cmt=(CMT); \
-    (BLK)>>OSSFMT(left<<setw(40)<<ins<<" // "<<cmt); \
-} while(0)
-
 #if 1
 /** false if cb[sub] exists, else true, and create empty cb[sub] TAG node. */
 static bool tag_once(Cblock &cb, std::string const& sub){

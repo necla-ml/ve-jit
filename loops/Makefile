@@ -968,11 +968,12 @@ tmpScaffold1: tmpScaffold1.c
 	g++ -O3 $^ -L.. -Wl,-rpath=.. -ljit1-x86 -ldl -o $@
 	./$@
 tmpScaffold.cpp: genBlock
-	./$^ 13 13 13
+	./$^ -kPRINT 13 13 13 # genBlock generates tmpScaffold.cpp
+# rm -f tmpScaffold genBlock;
+# { make VERBOSE=1 genBlock && ./genBlock -kPRINT 9 9 9 && make VERBOSE=1 tmpScaffold && ./tmpScaffold; } >& x.log
 tmpScaffold: tmpScaffold.cpp
 	@# rm -f tmpScaffold; { make VERBOSE=1 tmpScaffold; } >& x.log
-	g++ -O3 -std=c++11 $^ -L.. -Wl,-rpath=.. -ljit1-x86 -ldl -o $@
-	./$@
+	g++ -O3 -std=c++11 $^ -Wall -Werror -L.. -Wl,-rpath=.. -ljit1-x86 -ldl -o $@
 %: %.cpp
 	$(GCXX) -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
 	$(GCXX) -Wall -std=c++11 -I.. -O3 $< -o $@
