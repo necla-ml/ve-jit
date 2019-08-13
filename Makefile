@@ -614,6 +614,31 @@ cjitDemo: cjitDemo.cpp cblock.hpp dllbuild.hpp jitpipe.hpp libjit1-x86.so
 	@# hello world multiple function dllbuild example (cblock,dllbuild,jitpipe)
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 
+VECC:=ncc
+VECXX:=nc++
+ve_fastdiv-ve.o: ve_fastdiv.c
+	$(VECC) ${CFLAGS} -O2 -E $< -o ve_fastdiv.i
+	$(VECC) ${CFLAGS} -O2 -S $< -o ve_fastdiv.S
+	$(VECC) ${CFLAGS} -O2 -c $< -o $@
+ve_fastdiv-ve.lo:
+	$(VECC) ${CFLAGS} -fPIC -O2 -c $< -o $@
+ve_fastdiv-x86.o: ve_fastdiv.c
+	g++ ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
+ve_fastdiv-x86.lo:
+	g++ ${CXXFLAGS} -fPIC -O2 -c asmfmt.cpp -o $@
+ve_fastdiv-ve.lo: ve_fastdiv.c
+test_ve_fastdiv-x86: test_ve_fastdiv.cpp ve_fastdiv-x86.o ve_fastdiv.h timer.h
+	$(VECXX) -std=gnu++11 -O3 -o $@ test_ve_fastdiv.cpp ve_fastdiv.c
+test_ve_fastdiv-ve: test_ve_fastdiv.cpp ve_fastdiv-ve.o ve_fastdiv.h timer.h
+	$(VECXX) -std=gnu++11 -O3 -E test_ve_fastdiv.cpp -o test_ve_fastdiv.i
+	$(VECXX) -std=gnu++11 -O3 -o $@ $(filter-out %.h,$^)
+test_ve_fastdiv-speed-x86: test_ve_fastdiv.cpp ve_fastdiv-x86.o ve_fastdiv.h timer.h
+	$(VECXX) -std=gnu++11 -DSPEED=1 -O3 -S test_ve_fastdiv.cpp -o test_ve_fastdiv-x86.S
+	$(VECXX) -std=gnu++11 -DSPEED=1 -O3 -o $@ test_ve_fastdiv.cpp ve_fastdiv.c
+test_ve_fastdiv-speed-ve: test_ve_fastdiv.cpp ve_fastdiv-ve.o ve_fastdiv.h timer.h
+	$(VECXX) -std=gnu++11 -DSPEED=1 -O3 -S test_ve_fastdiv.cpp -o test_ve_fastdiv.S
+	$(VECXX) -std=gnu++11 -DSPEED=1 -O3 -o $@ $(filter-out %.h,$^)
+
 # next test show how to dynamically *compile* and load a dll given
 # a std::string containing 'C' code.
 clean:

@@ -6,6 +6,7 @@
 #include <time.h>
 #include <errno.h>
 #include <unistd.h> //sleep
+#include <iostream.h> //fprintf
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,7 +25,8 @@ extern "C" {
             // In contrast to nc++, ncc has this flag defined and true always, I think.
 #if defined(__cplusplus) && ! (defined(__GNUC__STDC_INLINE__) && __GNUC__STDC_INLINE__)
             // nc++ by default allows only the most basic inline asm syntax
-            asm("lhm.l %s0,0x1000");
+            asm("lea %s0,0x1000");
+            asm("lhm.l %s0,0(%s0)");
             return;
 #else
             // ncc seems always to support both volatile and extended asm syntax
