@@ -420,7 +420,7 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
             if( it->basename.empty() ){
                 it = erase(it);
             }else{
-                cout<<" Keeping: "<<it->basename<<"."<<it->suffix<<endl;
+                cout<<" Keeping: "<<it->basename<<it->suffix<<endl;
                 ++it;
             }
         }
