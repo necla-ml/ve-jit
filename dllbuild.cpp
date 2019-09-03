@@ -122,7 +122,7 @@ SubDir::SubDir(std::string subdir)
 }
 std::string DllFile::short_descr() const {
     std::ostringstream oss;
-    oss <<basename<<"."<<suffix
+    oss <<basename<<suffix
         <<" "<<code.size()<<" code bytes, "
         <<syms.size()<<" symbols";
     return oss.str();
@@ -374,6 +374,25 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
                         cout<<" Duplicate DllFile "<<i<<" vs "<<j<<"! code/syms do not match "
                                 <<"\n    prev: "<<df_j.short_descr()
                                 <<"\n    skip: "<<df_i.short_descr();
+                        // This might means you have incorrectly generated the function name.
+                        // So print both versions to help debug.
+
+                        cout<<"\ndf_i.syms -----------------------------------------------------------\n";
+                        for(auto const& sym: df_i.syms){
+                            cout<<"      "<<sym.symbol<<endl;
+                            if(!sym.comment.empty()){ cout<<"        // "<<sym.comment<<endl; }
+                        }
+                        cout<<"\ndf_j.syms -----------------------------------------------------------\n";
+                        for(auto const& sym: df_j.syms){
+                            cout<<"      "<<sym.symbol<<endl;
+                            if(!sym.comment.empty()){ cout<<"        // "<<sym.comment<<endl; }
+                        }
+                        cout<<"\ndf_i.code -----------------------------------------------------------\n"
+                            <<df_i.code
+                            <<endl;
+                        cout<<"\ndf_j.code -----------------------------------------------------------\n"
+                            <<df_j.code
+                            <<endl;
                         THROW(" Duplicate DllFile "<<i<<" vs "<<j<<"! code/syms do not match "
                                 <<"\n    prev: "<<df_j.short_descr()
                                 <<"\n    skip: "<<df_i.short_descr());

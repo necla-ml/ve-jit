@@ -156,7 +156,7 @@ vejit.tar.gz: jitpage.h intutil.h vfor.h \
 	$(MAKE) all-vejit-libs # libjit1[_omp][_ft][-x86].{a|so}
 	cp -av $(filter %.hpp,$^) $(filter %.h,$^) vejit/include/
 	cp -av pstreams-1.0.1 vejit/include/
-	cp -av $(filter %.a,$^) $(filter %.so,$^) $(filter bin.mk%,$^) $(filter %.lo,$^) vejit/lib/
+	cp -av $(filter %.a,$^) $(filter %.so,$^) $(filter %.lo,$^) vejit/lib/
 	cp -av $(filter %.cpp,$^) $(filter %.c,$^) vejit/share/vejit/src/
 	cp -av ${VEJIT_SHARE} vejit/share/vejit/
 	cp -av Makefile.share vejit/share/vejit/Makefile
