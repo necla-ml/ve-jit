@@ -954,13 +954,13 @@ string cjitConvolutionForward00( int const verbosity=0 /*struct param const* con
 
     //auto& fn_vec_init =
     fn["vec_init"]
-        >>" /* XXX _ve_lvl(VLEN)) */ ;"
+        >>" /* veSetVLEN(VLEN)) */ ;"
         >>"const __vr vzeros = _vel_vbrds_vsl(0.0f, VLEN); // lower 32-bits are zero bits, so same as _vel_pvbrdl_vsl(0UL, VLEN)"
         >>"const __vr vrseq = _vel_vseq_vl(VLEN);"
         >>"const int64_t sw_x_VLEN = strideWidth * VLEN;"
         >>"int64_t const vl_x_init = outWidth /*- x0=0*/ < VLEN ? outWidth /*- x0=0*/ : VLEN ;"
         >>"int64_t vl = vl_x_init;"
-        >>" /* XXX _ve_lvl(vl)) */ ;"
+        >>" /* veSetVLEN(vl)) */ ;"
         >>"__vr const vrj_init = _vel_vaddsl_vsvl(-padWidth,  _vel_vmulsl_vsvl(strideWidth, vrseq, vl), vl);"
         ;
 
@@ -992,13 +992,13 @@ string cjitConvolutionForward00( int const verbosity=0 /*struct param const* con
         >>"}"
         >>""
         >>"int64_t vl = vl_x_init;"
-        >>" /* XXX _ve_lvl(vl)) */ ;"
+        >>" /* veSetVLEN(vl)) */ ;"
         >>"__vr vrj = vrj_init;"
           ;
     CBLOCK_SCOPE(loop_x0,"for(int64_t x0=0 ; x0<outWidth; x0+=VLEN)",pr,loop_y);
     loop_x0
             >>"const int64_t vl = outWidth - x0 < VLEN ? outWidth - x0: VLEN;"
-            >>" /* XXX _ve_lvl(vl)) */ ;"
+            >>" /* veSetVLEN(vl)) */ ;"
             >>"__vr vrsum = vzeros;"
             ;
     CBLOCK_SCOPE(loop_r,"for (int64_t r = kh_beg; r < kh_end; ++r)",pr,loop_x0);
@@ -1100,13 +1100,13 @@ vednnConvolutionForward_direct_default3(
   const int64_t outHW = outHeight * outWidth;
 
 
-   /* XXX _ve_lvl(VLEN)) */  ; // <----- VERY VERY VERY IMPORTANT to remember this init !!! 1.
+   /* veSetVLEN(VLEN)) */  ; // <----- VERY VERY VERY IMPORTANT to remember this init !!! 1.
   const __vr vzeros = _vel_vbrds_vsl(0.0f, VLEN) ; // lower 32-bits are zero bits, so same as _vel_pvbrdl_vsl(0UL, VLEN)
   const __vr vrseq = _vel_vseq_vl(VLEN);
   const int64_t sw_x_VLEN = strideWidth * VLEN;
   int64_t const vl_x_init = outWidth /*- x0=0*/ < VLEN ? outWidth /*- x0=0*/ : VLEN ;
   int64_t vl = vl_x_init;
-   /* XXX _ve_lvl(vl)) */  ;
+   /* veSetVLEN(vl)) */  ;
   __vr const vrj_init = _vel_vaddsl_vsvl(-padWidth,  _vel_vmulsl_vsvl(strideWidth, vrseq, vl), vl);
 
   //int64_t const kByMax = 1;
@@ -1136,12 +1136,12 @@ vednnConvolutionForward_direct_default3(
           }
 
           int64_t vl = vl_x_init;
-           /* XXX _ve_lvl(vl)) */  ;
+           /* veSetVLEN(vl)) */  ;
           __vr vrj = vrj_init;
           for ( int64_t x0=0; x0<outWidth; x0+=VLEN )
           {
             const int64_t vl = outWidth - x0 < VLEN ? outWidth - x0 : VLEN ;
-             /* XXX _ve_lvl(vl)) */  ;
+             /* veSetVLEN(vl)) */  ;
             __vr vrsum = vzeros;
             // slower:
             //    any use of ve lvs_svs_u64/f32

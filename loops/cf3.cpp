@@ -532,7 +532,7 @@ void test_vloop2_no_unrollX(Lpi const vlen, Lpi const ii, Lpi const jj,
         //fd.scope(block,"vectorized double-loop --> index vectors");
         //+++++++++++++++++ constant registers +++++++++++++++++++
         //fd.ins("lvl vl0",                   "VL = vl0");
-        fd>>OSSFMT(" /* XXX _ve_lvl(vl0)) */ ;  // VL = "<<vl0);
+        fd>>OSSFMT(" /* XXX veSetVLENvl0)) */ ;  // VL = "<<vl0);
         if(which==KERNEL_PRINT){
             if(!fd.find("have_vl")){
                 fd  >>"int64_t vl = vl0;";
@@ -674,7 +674,7 @@ INDUCE:
                 }
                 fi  >>"// (ii*jj)%vl0 != 0 --> last iter VL change"
                     >>"vl = (vl0<iijj-cnt? vl0: iijj-cnt); // vl = min(vl0,iijj-cnt)"
-                    >>" /* XXX _ve_lvl(vl)) */ ;";
+                    >>" /* XXX veSetVLENvl)) */ ;";
             }
         }
         // 2. Induction from a->ax, b->bx
@@ -961,7 +961,7 @@ INDUCE:
                 //fi.ins("mins.l vl, vl0, cnt",    "vl = min(vl,cnt)");
                 //fi.ins("lvl vl");
                 fi  >>"vl = (vl0<cnt? vl0: cnt); // vl = min(vl0,cnt) for last iter,"
-                    >>" /* XXX _ve_lvl(vl)) */ ;";
+                    >>" /* XXX veSetVLENvl)) */ ;";
             }
         }
 #endif
@@ -1075,7 +1075,7 @@ KERNEL_BLOCK:
         // LOOP_DONE ...
         if(SAVE_RESTORE_VLEN){
             //fz.ins("lvl vl_save","load VL <-- vl_save (restore VL on exit)");
-            fz  >>"// /* XXX _ve_lvl(vl_save)) */ ; // restore VL on exit XXX when SVL op is supported!!!";
+            fz  >>"// /* XXX veSetVLENvl_save)) */ ; // restore VL on exit XXX when SVL op is supported!!!";
         }
 
 #undef FOR

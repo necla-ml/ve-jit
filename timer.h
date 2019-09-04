@@ -6,7 +6,7 @@
 #include <time.h>
 #include <errno.h>
 #include <unistd.h> //sleep
-#include <iostream.h> //fprintf
+#include <stdio.h> //fprintf
 
 #ifdef __cplusplus
 extern "C" {
@@ -14,6 +14,7 @@ extern "C" {
 
 #ifdef __ve__
 
+#if !defined(__clang__) // then assume ncc/nc++ ...
     inline unsigned long long
         __cycle()
         {
@@ -25,6 +26,7 @@ extern "C" {
             // In contrast to nc++, ncc has this flag defined and true always, I think.
 #if defined(__cplusplus) && ! (defined(__GNUC__STDC_INLINE__) && __GNUC__STDC_INLINE__)
             // nc++ by default allows only the most basic inline asm syntax
+            // clang++ says its an error "should return a value [-Wreturn-type]
             asm("lea %s0,0x1000");
             asm("lhm.l %s0,0(%s0)");
             return;
@@ -42,6 +44,16 @@ extern "C" {
             return val;
 #endif
         }
+#else // clang++ support extended asm (WOW!)
+    inline unsigned long long
+        __cycle()
+        {
+            void *vehva = (void *)0x1000;
+            /*register*/ unsigned long long val; // 'register' incompatible with C++17
+            asm volatile ("lhm.l %0,0(%1)":"=r"(val):"r"(vehva));
+            return val;
+        }
+#endif
 
 #else
 

@@ -70,7 +70,7 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
 
     auto& cf4_defs = (1? cf4: outer); // not 100% sure where I want them
     cf4_defs .DEF(pfx) .DEF(vl0) .DEF(ii) .DEF(jj) ;
-    fd>>OSSFMT(" /* XXX _ve_lvl(vl0)) */ ;  // VL="<<vl0<<" jj%vl0="<<jj%vl0<<" iijj%vl0="<<iijj%vl0);
+    fd>>OSSFMT(" /* XXX veSetVLENvl0)) */ ;  // VL="<<vl0<<" jj%vl0="<<jj%vl0<<" iijj%vl0="<<iijj%vl0);
 
     //
     // ------------- helper lambdas ------------
@@ -196,7 +196,7 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
                     //<<"// vl = min(vl0,remain)"
                     <<" // iijj="<<iijj/vl0<<"*vl0+"<<iijj%vl0
                     );
-            ff  >>" /* XXX _ve_lvl(vl)) */ ;";
+            ff  >>" /* XXX veSetVLENvl)) */ ;";
         }
         if(!fp_sets_ab){
             use_sqij();

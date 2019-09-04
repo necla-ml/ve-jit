@@ -40,7 +40,6 @@ hiding latencies through parallelization.
 #endif
 
 #if VE_INTRINSICS
-#include "veintrin.h"
 #include "velintrin.h"
 #endif
 
@@ -305,7 +304,7 @@ int main(int argc, char **arg) {
 #if VE_INTRINSICS
     double vfdiv_npot_cyc = 0;
     double vfd21_npot_cyc = 0;
-    __vr vcookie=_ve_vbrd_vs_i64(0);
+    __vr vcookie=_vel_vbrdl_vsl(0,256);
 #endif
     u64 t0, t1;
     int s, r, i, j;
@@ -392,28 +391,25 @@ int main(int argc, char **arg) {
 			asm volatile ("###VEDIV");
 #if 0
             t0 = __cycle();
-            _ve_lvl(vl);
             { // 45.3 ns
-                __vr const v_odiv = _ve_vld_vss(8,vfd_odiv);
+                __vr const v_odiv = _vel_vld_vssl(8,vfd_odiv,vl);
                 for (u64 ii = 0; ii < NUM_NUMS; ++ii) {
                     u64 n = num[ii];
                     //for (j = 0; j < series_len; ++j) {
                     //    v = _fastmod21(v, fd21+ii);
                     //}
-                    __vr v = _ve_vbrd_vs_i64(n);
+                    __vr v = _vel_vbrdl_vsl(n,vl);
                     // naive VDIV  vlen=256 --> 46 ns
-                    __vr d = _ve_vdivul_vvv(v, v_odiv);
-                    //__vr d = _ve_vdivul_vvs(v, 13);
-                    __vr m = _ve_vmulul_vvv(d, v_odiv);
-                    v = _ve_vsubul_vvv(v,m);
+                    __vr d = _vel_vdivul_vvvl(v, v_odiv, vl);
+                    __vr m = _vel_vmulul_vvvl(d, v_odiv, vl);
+                    v = _vel_vsubul_vvvl(v,m,vl);
                     //use_value(v);
-                    vcookie = _ve_vxor_vvv(vcookie,v);
+                    vcookie = _vel_vxor_vvvl(vcookie,v,vl);
                 }
             }
             t1 = __cycle();
 #else
 #if TEST == U_MOD_VEC
-            _ve_lvl(vl);
             { // 45.1 ns
                 __vr const v_odiv = _vel_vld_vssl(8,vfd_odiv,vl); // den[j]
                 __vr vtmp2 = _vel_vld_vssl(8,tmp2,vl);
@@ -435,7 +431,6 @@ int main(int argc, char **arg) {
                 _vel_vst_vssl(vtmp2,8,tmp2,vl);
             }
 #elif TEST == VEC_MOD_U
-            _ve_lvl(vl);
             { // 45.1 ns
                 __vr const vn = _vel_vld_vssl(8,tmp,vl);       // vn=num[j]
                 __vr vtmp2 = _vel_vld_vssl(8,tmp2,vl);
@@ -463,26 +458,25 @@ int main(int argc, char **arg) {
             /* fd21 VEC */
             assert( series_len <= 256 );
             fill_arrays21();
-            _ve_lvl(series_len);
 			asm volatile ("###VE21");
 #if 0
             t0 = __cycle();
             { // 11.6 ns
                 __vr const v_odiv = _vel_vld_vssl(8,vfd_odiv,vl); // den[j]
-                __vr const v_mult = _ve_vld_vss(8,vfd_mul);
+                __vr const v_mult = _vel_vld_vssl(8,vfd_mul,vl);
                 for (u64 ii = 0; ii < NUM_NUMS; ++ii) {
                     u64 n = num[ii];
                     //for (j = 0; j < series_len; ++j) {
                     //    v = _fastmod21(v, fd21+ii);
                     //}
-                    __vr v = _ve_vbrd_vs_i64(n);
+                    __vr v = _vel_vbrdl_vsl(n,vl);
                     // vectorized FASTDIV vlen=256 --> 11 ns
-                    __vr x = _ve_vmulul_vvv(v, v_mult);
-                    __vr d = _ve_vsrl_vvs(x, FASTDIV_C);
-                    __vr m = _ve_vmulul_vvv(d, v_odiv);
-                    v = _ve_vsubul_vvv(v,z);
+                    __vr x = _vel_vmulul_vvvl(v, v_mult, vl);
+                    __vr d = _vel_vsrl_vvsl(x, FASTDIV_C, vl);
+                    __vr m = _vel_vmulul_vvvl(d, v_odiv, vl);
+                    v = _vel_vsubul_vvvl(v,z,vl);
                     //use_value(v);
-                    vcookie = _ve_vxor_vvv(vcookie,v);
+                    vcookie = _vel_vxor_vvv(vcookie,v,vl);
                 }
             }
             t1 = __cycle();
@@ -510,7 +504,6 @@ int main(int argc, char **arg) {
                 _vel_vst_vssl(vtmp2,8,tmp2,vl);
             }
 #elif TEST == VEC_MOD_U
-            _ve_lvl(vl);
             { // 5.6 ns
                 __vr const vn = _vel_vld_vssl(8,tmp,vl);       // vn=num[j]
                 __vr vtmp2 = _vel_vld_vssl(8,tmp2,vl);
@@ -684,8 +677,8 @@ int main(int argc, char **arg) {
             printf("branchless_pot_cyc  : %.1f ns\n\n", to_ns_f(branchless_pot_cyc));
     }
 #if VE_INTRINSICS
-    vcookie += _ve_vsuml_vv(vcookie);
-    cookie64 += _ve_lvs_svs_u64(vcookie,0);
+    vcookie += _vel_vsuml_vvl(vcookie,256);
+    cookie64 += _vel_lvsl_svs(vcookie,0);
 #endif
     printf("cookie=%llu\n", (llu)(cookie+cookie64));
 }

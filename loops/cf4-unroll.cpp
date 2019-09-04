@@ -115,9 +115,9 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
 
     auto& cf4_defs = outer;
     cf4_defs .DEF(pfx) .DEF(vl0) .DEF(ii) .DEF(jj) ;
-    fc>>OSSFMT(" /* XXX _ve_lvl(vl0)) */ ;  // VL="<<vl0<<" jj%vl0="<<jj%vl0<<" iijj%vl0="<<iijj%vl0);
+    fc>>OSSFMT(" /* XXX veSetVLENvl0)) */ ;  // VL="<<vl0<<" jj%vl0="<<jj%vl0<<" iijj%vl0="<<iijj%vl0);
     if(iijj%vl0){
-        fd>>OSSFMT(" /* XXX _ve_lvl(vl0)) */ ;  // VL="<<vl0<<" jj%vl0="<<jj%vl0<<" iijj%vl0="<<iijj%vl0);
+        fd>>OSSFMT(" /* XXX veSetVLENvl0)) */ ;  // VL="<<vl0<<" jj%vl0="<<jj%vl0<<" iijj%vl0="<<iijj%vl0);
     }
 
     //
@@ -398,7 +398,7 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
             if(last_iter_check && iijj%vl0 ){ // last iter has reduced VL
                 if(nloop == unroll){
                     auto final_vl = iijj % vl0;
-                    auto instr=OSSFMT(" /* XXX _ve_lvl("<<(fd.find("have_vl")?"vl=":"")<<final_vl<<") */ ;");
+                    auto instr=OSSFMT(" /* XXX veSetVLEN"<<(fd.find("have_vl")?"vl=":"")<<final_vl<<") */ ;");
                     ff>>OSSFMT(left<<setw(40)<<instr<<" // iijj="<<iijj/vl0<<"*vl0+"<<final_vl);
                 }else{ // must check whether, this time through, vl changes
                     use_vl();
@@ -408,7 +408,7 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
                             //<<"// vl = min(vl0,remain)"
                             <<" // iijj="<<iijj/vl0<<"*vl0+"<<iijj%vl0
                             );
-                    ff>>" /* XXX _ve_lvl(vl)) */ ;";
+                    ff>>" /* XXX veSetVLENvl)) */ ;";
                 }
             }
             if(fp_sets_ab){

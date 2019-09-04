@@ -156,13 +156,13 @@ void cf5_no_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
     if(tag_once(fd0,"set_vl")){
         // 'vl_is(vl0)' might cut a useless LVL op
         if(!vl_is(vl0)){
-            fd>>OSSFMT(" /* XXX _ve_lvl(vl0)) */ ;  // VL="<<vl0<<" jj%vl0="<<jj%vl0
+            fd>>OSSFMT(" /* XXX veSetVLENvl0)) */ ;  // VL="<<vl0<<" jj%vl0="<<jj%vl0
                     <<" iijj%vl0="<<iijj%vl0);
             vl_remember(vl0);
             assert(vl_is(vl0));
         }
     }else if(!vl_is(vl0)){
-        fd>>OSSFMT(" /* XXX _ve_lvl(vl0)) */ ;  // VL="<<vl0<<" jj%vl0="<<jj%vl0
+        fd>>OSSFMT(" /* XXX veSetVLENvl0)) */ ;  // VL="<<vl0<<" jj%vl0="<<jj%vl0
                 <<" iijj%vl0="<<iijj%vl0<<" VL was "<<vl_str());
         vl_remember(vl0);
     }else{
@@ -263,7 +263,7 @@ void cf5_no_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
                     ?"vl = (vl0<iijj-cnt? vl0: iijj-cnt);"
                     :"vl = (cnt<vl0? cnt: vl0);");
             INSCMT(ff,instr,OSSFMT("iijj="<<iijj/vl0<<"*vl0+"<<iijj%vl0));
-            ff>>" /* XXX _ve_lvl(vl)) */ ;";
+            ff>>" /* XXX veSetVLENvl)) */ ;";
         }
         if(!fp_sets_ab){
             use_sqij();

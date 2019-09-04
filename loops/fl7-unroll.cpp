@@ -177,13 +177,13 @@ void fl6_unroll_split_ii(
         // first call initializes vector length [maybe save/restore?]
         // 'vl_is(vl0)' might cut a useless LVL op
         if(!vl_is(vl0)){
-            fd>>OSSFMT("// XXX _ve_lvl(vl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0
+            fd>>OSSFMT("// XXX veSetVLENvl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0
                     <<" iijj%vl0="<<iijj%vl0);
             vl_remember(vl0);
             assert(vl_is(vl0));
         }
     }else if(!vl_is(vl0)){
-        fd>>OSSFMT("// XXX _ve_lvl(vl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0
+        fd>>OSSFMT("// XXX veSetVLENvl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0
             <<" iijj%vl0="<<iijj%vl0<<" VL was "<<vl_str());
         vl_remember(vl0);
     }else{
@@ -313,7 +313,7 @@ void fl6_unroll_split_ii(
         fcp>>OSSFMT("// Cyclic precalc, pfx="<<pfx<<", cyc="<<cyc<<", for["<<ilo<<","<<ihi
                 <<")for["<<jlo<<","<<jhi<<")"<<" VL="<<vl0);
         if(!oldpfx.empty()) fcp<<", matches vl jj cyc from oldpfx "<<pfx;
-        //fcp>>OSSFMT("// XXX _ve_lvl("<<vl0<<"); // debug");
+        //fcp>>OSSFMT("// XXX veSetVLEN"<<vl0<<"); // debug");
         vl_remember(vl0);
 
         if(oldpfx.empty()){ // usual case
@@ -568,7 +568,7 @@ void fl6_unroll_split_ii(
             if(last_iter_check && iijj%vl0 ){ // last iter has reduced VL
                 if(nloop == unroll){
                     auto final_vl = iijj % vl0;
-                    auto instr=OSSFMT("// XXX _ve_lvl("<<(have_vl()?"vl=":"")<<final_vl<<");");
+                    auto instr=OSSFMT("// XXX veSetVLEN"<<(have_vl()?"vl=":"")<<final_vl<<");");
                     ff>>OSSFMT(left<<setw(40)<<instr<<" // XXX iijj="<<iijj/vl0<<"*vl0+"<<final_vl);
                 }else{ // must check whether, this time through, vl changes
                     use_vl(); // vl = min(vl0,remain)
@@ -576,14 +576,14 @@ void fl6_unroll_split_ii(
                                 ?"vl = (vl0<iijj-cnt? vl0: iijj-cnt);"
                                 :"vl = (cnt<vl0? cnt: vl0);"),
                             OSSFMT(" // iijj="<<iijj/vl0<<"*vl0+"<<iijj%vl0));
-                    ff>>"// XXX _ve_lvl(vl);";
+                    ff>>"// XXX veSetVLENvl);";
                 }
             }else if(0 && iijj%vl0){ // XXX DEBUG
                 if(nloop == unroll){
-                    ff>>"//_ve_lvl(vl0); // debug";
+                    ff>>"//veSetVLENvl0); // debug";
                 }else{
                     use_vl();
-                    ff>>OSSFMT("// XXX _ve_lvl(vl0); // debug");
+                    ff>>OSSFMT("// XXX veSetVLENvl0); // debug");
                 }
             }
             if(!fp_sets_ab){ // if no pre-loop a,b calc, do it right before kernel call
@@ -923,13 +923,13 @@ void fl6_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
         // first call initializes vector length [maybe save/restore?]
         // 'vl_is(vl0)' might cut a useless LVL op
         if(!vl_is(vl0)){
-            fd>>OSSFMT("// XXX _ve_lvl(vl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0
+            fd>>OSSFMT("// XXX veSetVLENvl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0
                     <<" iijj%vl0="<<iijj%vl0);
             vl_remember(vl0);
             assert(vl_is(vl0));
         }
     }else if(!vl_is(vl0)){
-        fd>>OSSFMT("// XXX _ve_lvl(vl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0
+        fd>>OSSFMT("// XXX veSetVLENvl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0
             <<" iijj%vl0="<<iijj%vl0<<" VL was "<<vl_str());
         vl_remember(vl0);
     }else{
@@ -1055,7 +1055,7 @@ void fl6_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
         fcp>>OSSFMT("// Cyclic precalc, pfx="<<pfx<<", cyc="<<cyc<<", for["<<ilo<<","<<ihi
                 <<")for["<<jlo<<","<<jhi<<")"<<" VL="<<vl0);
         if(!oldpfx.empty()) fcp<<", matches vl jj cyc from oldpfx "<<pfx;
-        //fcp>>OSSFMT("// XXX _ve_lvl("<<vl0<<");");
+        //fcp>>OSSFMT("// XXX veSetVLEN"<<vl0<<");");
         vl_remember(vl0);
 
         if(oldpfx.empty()){ // usual case
@@ -1307,7 +1307,7 @@ void fl6_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
             if(last_iter_check && iijj%vl0 ){ // last iter has reduced VL
                 if(nloop == unroll){
                     auto final_vl = iijj % vl0;
-                    auto instr=OSSFMT("// XXX _ve_lvl("<<(have_vl()?"vl=":"")<<final_vl<<");");
+                    auto instr=OSSFMT("// XXX veSetVLEN"<<(have_vl()?"vl=":"")<<final_vl<<");");
                     ff>>OSSFMT(left<<setw(40)<<instr<<" // iijj="<<iijj/vl0<<"*vl0+"<<final_vl);
                 }else{ // must check whether, this time through, vl changes
                     use_vl(); // vl = min(vl0,remain)
@@ -1315,14 +1315,14 @@ void fl6_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
                                 ?"vl = (vl0<iijj-cnt? vl0: iijj-cnt);"
                                 :"vl = (cnt<vl0? cnt: vl0);"),
                             OSSFMT(" // iijj="<<iijj/vl0<<"*vl0+"<<iijj%vl0));
-                    ff>>"// XXX _ve_lvl(vl);";
+                    ff>>"// XXX veSetVLENvl);";
                 }
             }else if(0 && iijj%vl0){ // XXX DEBUG
                 if(nloop == unroll){
-                    ff>>"//_ve_lvl(vl0); // debug";
+                    ff>>"//veSetVLENvl0); // debug";
                 }else{
                     use_vl();
-                    ff>>OSSFMT("// XXX _ve_lvl(vl0); // debug");
+                    ff>>OSSFMT("// XXX veSetVLENvl0); // debug");
                 }
             }
             if(!fp_sets_ab){ // if no pre-loop a,b calc, do it right before kernel call

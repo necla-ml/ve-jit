@@ -175,8 +175,8 @@ void KrnBlk3_check::emit(Cblock& bDef,
                     >>"fflush(stdout);";
             gb3_kernel_check
                 >>"for(uint64_t i=0;i<vl;++i){"
-                >>"    int64_t const a_i = _ve_lvs_svs_u64(a,i);"
-                >>"    int64_t const b_i = _ve_lvs_svs_u64(b,i);"
+                >>"    int64_t const a_i = _vel_lvsl_svs(a,i);"
+                >>"    int64_t const b_i = _vel_lvsl_svs(b,i);"
                 >>"    int const aok = (a_i == ilo+(cnt+i)/jj);"
                 >>"    int const bok = (b_i == jlo+(cnt+i)%jj);";
             gb3_kernel_check
@@ -197,12 +197,12 @@ void KrnBlk3_check::emit(Cblock& bDef,
         auto& chk=bKrn["chk"];
         chk>>OSSFMT("for(uint64_t "<<pfx<<"_i=0; "<<pfx<<"_i<"<<sVL<<"; ++"<<pfx<<"_i){");
         if(v){ chk>>OSSFMT(""
-                <<"\n    int64_t a_i=_ve_lvs_svs_u64("<<vA<<","<<pfx<<"_i)"
-                <<            ", b_i=_ve_lvs_svs_u64("<<vB<<","<<pfx<<"_i);"
+                <<"\n    int64_t a_i=_vel_lvsl_svs("<<vA<<","<<pfx<<"_i)"
+                <<            ", b_i=_vel_lvsl_svs("<<vB<<","<<pfx<<"_i);"
                 <<"\n    printf(\"i=%lu got %ld %ld expect %lu %lu\\n\", "<<pfx<<"_i"<<",a_i,b_i, ilo+(cnt+"<<pfx<<"_i)/jj, jlo+(cnt+"<<pfx<<"_i)/jj );");
         }
-        chk>>OSSFMT("    assert( _ve_lvs_svs_u64("<<vA<<","<<pfx<<"_i) == ilo+(cnt+"<<pfx<<"_i)/jj );");
-        chk>>OSSFMT("    assert( _ve_lvs_svs_u64("<<vB<<","<<pfx<<"_i) == jlo+(cnt+"<<pfx<<"_i)%jj );");
+        chk>>OSSFMT("    assert( _vel_lvsl_svs("<<vA<<","<<pfx<<"_i) == ilo+(cnt+"<<pfx<<"_i)/jj );");
+        chk>>OSSFMT("    assert( _vel_lvsl_svs("<<vB<<","<<pfx<<"_i) == jlo+(cnt+"<<pfx<<"_i)%jj );");
         chk>>"}";
     }
     if(!bOut.find("out_once")){
@@ -233,7 +233,7 @@ void KrnBlk3_hash::emit(Cblock& bDef,
     {
         // constants moved upwards to beginning of scope enclosing bDef
         auto& bDefConst = bDef["..*/first"];
-        string vSeq = (vSEQ0.empty()? "_ve_vseq_v()": vSEQ0);
+        string vSeq = (vSEQ0.empty()? OSSFMT("_vel_vseq_vl("<<vl<<")"): vSEQ0);
         VecHash2::kern_C_begin(outer,inner,bDefConst, vSeq.c_str(), vl);
         if(!bDefConst.find("have_vechash2_kernel")){
             auto m = VecHash2::kern_C_macro("VECHASH2_KERNEL");
@@ -292,7 +292,7 @@ void KrnBlk3_print::emit(Cblock& bDef,
             >>"    if(terse && vl>=16) linesep=(vl>16 && i==7? \" ...\": \"\");"
             >>"    if(terse && vl>16 && i>=8 && i<vl-8) continue;"
             >>"    printf(\"%3lld%s\",\n"
-            >>"      (long long signed)_ve_lvs_svs_u64(a,i),"
+            >>"      (long long signed)_vel_lvsl_svs(a,i),"
             >>"      (i%16==15? linesep: \" \")); }"
             >>"printf(\"}\\n\");"
             >>"linesep=\"\\n   \";"
@@ -301,7 +301,7 @@ void KrnBlk3_print::emit(Cblock& bDef,
             >>"    if(terse && vl>=16) linesep=(vl>16 && i==7? \" ...\": \"\");"
             >>"    if(terse && vl>16 && i>=8 && i<vl-8) continue;"
             >>"    printf(\"%3lld%s\",\n"
-            >>"      (long long signed)_ve_lvs_svs_u64(b,i),"
+            >>"      (long long signed)_vel_lvsl_svs(b,i),"
             >>"      (i%16==15? linesep: \" \")); }"
             >>"printf(\"}\\n\");"
             ;
@@ -321,7 +321,7 @@ void KrnBlk3_sqij::emit(Cblock& bDef,
         int64_t const vl, std::string extraComment, int const v/*=0, verbose*/
         ) const{
     bKrn["beg"]>>OSSFMT("// KERNEL("<<vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"],sqij="<<vA<<"*jj+"<<vB<<")");
-    bKrn["prt"]>>"__vr const x = STORE(0, _ve_addul_vsv(ptr,_ve_vmulul_vsv(stride,sqij)));";
+    bKrn["prt"]>>"__vr const x = STORE(0, _vel_addul_vsvl(ptr,_vel_vmulul_vsvl(stride,sqij,"<<vl<<"),"<<vl<<"));";
     if(!extraComment.empty()) bKrn["prt"]<<" // "<<extraComment;
 }
 #endif

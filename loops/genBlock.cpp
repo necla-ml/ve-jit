@@ -17,7 +17,7 @@
  * - execute jit code "right away" (using dllbuild techniques, see cjitDemo.cpp)
  */
 #include "genBlock-kernels.hpp"
-#include "genBlock-jit.hpp"
+//#include "genBlock-jit.hpp" // missing?
 #include "../stringutil.hpp"
 #include "../fuseloop.hpp"
 #include "../cblock.hpp"
@@ -26,6 +26,88 @@
 using namespace std;
 using namespace loop;
 using namespace cprog;
+
+template<typename T> struct Triples { T i, j, k; };
+template<typename T>
+std::vector<std::vector<Triples<T>>> refTriples(
+        T const ii,T const jj,T const kk,       // original loop limits
+        T const iB, T const jB, T const kB,     // blocking factors
+        T const iv, T const jv, T const kv);    // vectorization lengths
+template<typename T>
+std::vector<std::vector<Triples<T>>> refTriples(
+        T const ii,T const jj,T const kk,       // original loop limits
+        T const iB, T const jB, T const kB,     // blocking factors
+        T const iv, T const jv, T const kv)     // vectorization lengths
+{
+    int const v=1; // verbosity in [0,3]
+    std::vector<std::vector<Triples<T>>> ret;
+    ret.reserve( (17ULL*ii*jj*kk) / (16ULL*iv*jv*kv*16) );
+    std::vector<Triples<T>> ix;
+    ix.reserve( (17ULL*iB*jB*kB) / (16ULL*iv*jv*kv) );
+    T io,jo,ko; // outer loop counters (step iB,jB,kB)
+    T i, j, k ; // inner loop counters (step iv,jv,kv)
+    T is,js,ks; // simd  loop counters (unit steps)
+    auto ixout=[&](char const* pfx){
+        cout<<pfx;
+        for(size_t l=0; l<ix.size(); ++l)
+            cout<<"{"<<ix[l].i<<","<<ix[l].j<<","<<ix[l].k<<"}";
+        cout<<endl;
+    };
+    auto oloops=[&](){
+        cout<<" outer"
+
+        <<"{0.."<<ii<<"By"<<iB
+        <<",0.."<<jj<<"By"<<jB
+        <<",0.."<<kk<<"By"<<kB
+        <<"}";
+    };
+    auto iloops=[&](){
+        cout<<" inner"
+        <<"{"<<io<<"To"<<min(io+iB,ii)<<"By"<<iv
+        <<","<<jo<<"To"<<min(jo+jB,jj)<<"By"<<jv
+        <<","<<ko<<"To"<<min(ko+kB,kk)<<"By"<<kv
+        <<"}";
+    };
+    auto sloops=[&](){
+        cout<<" ijk={"<<i<<","<<j<<","<<k<<"}simd"
+        <<"{"<<i<<"To"<<min(i+iv,ii)<<(i>=min(i+iv,ii)?"XXX":"")
+        <<","<<j<<"To"<<min(j+jv,jj)<<(j>=min(j+jv,jj)?"XXX":"")
+        <<","<<k<<"To"<<min(k+kv,kk)<<(k>=min(k+kv,kk)?"XXX":"")
+        <<"}";
+    };
+    if(v>=2){ cout<<"ref BEGIN "; oloops(); cout<<"\n"; }
+    for(io=0; io<ii; io+=iB){           // outer loops, scalar indices
+        for(jo=0; jo<jj; jo+=jB){       // blocking factors
+            for(ko=0; ko<kk; ko+=kB){   // iB, jB, kB
+                // Note: vectorization might want to change loop order
+                //       here.  Ex. i and k vectorized, j not is strange.
+                // Perhaps handle by filtering "difficult" BlockingPlans
+                ix.clear();
+                if(v>=2) iloops();
+                for(i=io; i<min(io+iB,ii); i+=iv){           // inner loop vectorizations
+                    for(j=jo; j<min(jo+jB,jj); j+=jv){       // with iv,jv,kv --> vectors
+                        for(k=ko; k<min(ko+kB,kk); k+=kv){   // a[vl], b[vl], c[vl]
+                            // Before simdization, loop increments iv, jv, kv
+                            // would all be one.
+                            //
+                            // Simdization of inner loops creates a virtual set
+                            // of three loops with following CONVENTION:
+                            if(v>=2){ sloops(); cout<<endl; }
+                            for(is=i; is<min(i+iv,ii); ++is){       // iv*jv*kv is normal
+                                for(js=j; js<min(j+jv,jj); ++js){     // vector length
+                                    for(ks=k; ks<min(k+kv,kk); ++ks){ // s for simd
+                                        ix.push_back({is,js,ks});
+                                    }}}
+                            if(v>=3) ixout("ref: ");
+                            // when some iloops execute "past end", inner loops
+                            // can execute zero times (ix may be empty)
+                            if(!ix.empty()){ ret.push_back(ix); ix.clear(); }
+                        }}}
+            }}}
+    if(v>=2) cout<<"ref END ["<<ret.size()<<" SIMD inner kernels]"<<endl;
+    else if(v>=1) cout<<" ref["<<ret.size()<<" krn@vl "<<iv*jv*kv<<"]"<<endl;
+    return ret;
+};
 
 #if 1
 /** false if cb[sub] exists, else true, and create empty cb[sub] TAG node. */
@@ -260,8 +342,9 @@ int main(int argc, char**argv){
                 cout<<"   II    = 1st loop a=0..II-1"<<endl;
                 cout<<"   JJ    = 2nd loop b=0..JJ-1"<<endl;
                 cout<<"   KK    = 3rd loop c=0..KK-1"<<endl;
-                cout<<" -kKERN  Choose KERN from [NONE],PRINT,CHECK,HASH"<<endl;
+                cout<<" -kKERN  Choose KERN from [NONE],PRINT,CHECK,HASH (WIP)"<<endl;
                 cout<<" triple loop --> loop over vector registers a[VLEN], b[VLEN] c[VLEN]"<<endl;
+                cout<<" We emit demo code (nothing VE specific)"<<endl;
                 opt_h = 1;
             }else if(*c=='k'){
                 std::string kern=string(++c);
@@ -281,7 +364,7 @@ int main(int argc, char**argv){
     if(argc > a+1) ii = atof(argv[a+1]);
     if(argc > a+2) jj = atof(argv[a+2]);
     if(argc > a+3) kk = atof(argv[a+3]);
-    cout<<" genBlock ii="<<ii<<", jj="<<jj<<", kk="<<kk<<endl;
+    cout<<" genBlock ii="<<ii<<", jj="<<jj<<", kk="<<kk<<", kernel="<<krnblk3_name(which)<<endl;
     
     vector<BlockingPlan> bps = mkBlockingPlans(ii,jj,kk);
     cout<<bps.size()<<" sorted BlockingPlans for ii="<<ii<<" jj="<<jj<<" kk="<<kk<<endl;
@@ -943,7 +1026,7 @@ void BlockingMain::emit_check(cprog::Cblock& allocate,
 }
 
 
-void BlockingMain::add_hash(BlockingPlan const& p){
+void BlockingMain::add_hash(BlockingPlan const& p){ // TODO
 }
 
 /** string for the "problem" part of the BlockingPlan */

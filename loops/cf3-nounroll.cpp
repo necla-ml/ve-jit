@@ -42,7 +42,7 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
             <<" nloop="<<nloop<<(jj==1? " jj==1": vl0%jj==0? " vl%jj==0"
                 : jj%vl==0? " jj%vl==0": positivePow2(jj)? " jj=2^N" : ""));
     fd>>alg_descr;
-    fd>>OSSFMT(" /* XXX _ve_lvl(vl0)) */ ;  // VL = "<<vl0);
+    fd>>OSSFMT(" /* XXX veSetVLENvl0)) */ ;  // VL = "<<vl0);
 
     //
     // ------------- helper lambdas ------------
@@ -165,7 +165,7 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
                     //<<"// vl = min(vl0,remain)"
                     <<" // iijj="<<iijj/vl0<<"*vl0+"<<iijj%vl0
                     );
-            ff  >>" /* XXX _ve_lvl(vl)) */ ;";
+            ff  >>" /* XXX veSetVLENvl)) */ ;";
         }
         if(!fp_sets_ab){
             use_sqij();
