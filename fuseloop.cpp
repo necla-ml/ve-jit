@@ -107,6 +107,7 @@ int64_t ve_vlen_suggest_equ(int64_t const nitems){
     return ret;
 }
 
+#if 0 // original version, commented
 int64_t ve_vlen_suggest(int64_t const nitems){
     int const v=0; // verbose
     int64_t ret=MVL;
@@ -164,6 +165,51 @@ int64_t ve_vlen_suggest(int64_t const nitems){
         }
     }
     return ret;
+}
+#else // streamlined version, see test_vej_vlen_suggest.cpp
+// streamlined calculation, in prep for jitting this calc
+uint64_t ve_vlen_suggest(uint64_t const nitems){
+  uint64_t ret = nitems;
+  if((int64_t)nitems > MVL){
+    if( nitems % MVL + 32U >= MVL ){
+      ret = MVL;
+    }else{
+      uint64_t const nLoops = (nitems+MVL-1U)/MVL;
+      ret = (nitems+nLoops-1U) / nLoops;
+      if(ret * nLoops != nitems ){
+        ret = (ret+31U)/32U*32U;
+      }
+    }
+  }
+  return ret;
+}
+#endif
+std::string vej_vlen_suggest(std::string var, uint64_t const nitems){
+  ostringstream oss;
+  uint64_t const vl = vej_vlen_suggest(nitems);
+  oss<<var<<" = "<<vl<<"UL; // "
+    <<"vej_vlen_suggest("<<nitems<<" items) as "<<nitems/vl<<" fulls";
+  if(nitems%vl){
+           oss<<" + "<<nitems%vl<<" rem";
+  }
+  return oss.str();
+}
+std::string vej_vlen_suggest(std::string var, std::string nitems){
+  ostringstream oss;
+  oss<<"{ // "<<var<<" = vej_vlen_suggest("<<nitems<<")\n";
+  oss<<"  "<<var<<" = nitems;\n";
+  oss<<"  if((int64_t)nitems > MVL){\n";
+  oss<<"    if( nitems % MVL + 32U >= MVL ){\n";
+  oss<<"      "<<var<<" = MVL;\n";
+  oss<<"    }else{\n";
+  oss<<"      uint64_t const nLoops = (nitems+MVL-1U)/MVL;\n";
+  oss<<"      "<<var<<" = (nitems+nLoops-1U) / nLoops;\n"; // the only expensive division
+  oss<<"      if("<<var<<" * nLoops != nitems ){\n";
+  oss<<"        "<<var<<" = ("<<var<<"+31U)/32U*32U;\n";
+  oss<<"    }\n";
+  oss<<"  }\n";
+  oss<<"}\n";
+  return oss.str();
 }
 
 std::string str(UnrollSuggest const& u, std::string const& pfx /*=""*/){
