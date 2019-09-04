@@ -186,9 +186,9 @@ uint64_t ve_vlen_suggest(uint64_t const nitems){
 #endif
 std::string vej_vlen_suggest(std::string var, uint64_t const nitems){
   ostringstream oss;
-  uint64_t const vl = vej_vlen_suggest(nitems);
+  uint64_t const vl = ve_vlen_suggest(nitems);
   oss<<var<<" = "<<vl<<"UL; // "
-    <<"vej_vlen_suggest("<<nitems<<" items) as "<<nitems/vl<<" fulls";
+    <<"ve_vlen_suggest("<<nitems<<" items) as "<<nitems/vl<<" fulls";
   if(nitems%vl){
            oss<<" + "<<nitems%vl<<" rem";
   }
@@ -196,19 +196,20 @@ std::string vej_vlen_suggest(std::string var, uint64_t const nitems){
 }
 std::string vej_vlen_suggest(std::string var, std::string nitems){
   ostringstream oss;
-  oss<<"{ // "<<var<<" = vej_vlen_suggest("<<nitems<<")\n";
-  oss<<"  "<<var<<" = nitems;\n";
-  oss<<"  if((int64_t)nitems > MVL){\n";
-  oss<<"    if( nitems % MVL + 32U >= MVL ){\n";
-  oss<<"      "<<var<<" = MVL;\n";
-  oss<<"    }else{\n";
-  oss<<"      uint64_t const nLoops = (nitems+MVL-1U)/MVL;\n";
-  oss<<"      "<<var<<" = (nitems+nLoops-1U) / nLoops;\n"; // the only expensive division
-  oss<<"      if("<<var<<" * nLoops != nitems ){\n";
-  oss<<"        "<<var<<" = ("<<var<<"+31U)/32U*32U;\n";
-  oss<<"    }\n";
-  oss<<"  }\n";
-  oss<<"}\n";
+  oss <<"{ // "<<var<<" = vej_vlen_suggest("<<nitems<<")\n"
+      <<"  "<<var<<" = nitems;\n"
+      <<"  if((int64_t)nitems > MVL){\n"
+      <<"    if( nitems % MVL + 32U >= MVL ){\n"
+      <<"      "<<var<<" = MVL;\n"
+      <<"    }else{\n"
+      <<"      uint64_t const nLoops = (nitems+MVL-1U)/MVL;\n"
+      <<"      "<<var<<" = (nitems+nLoops-1U) / nLoops;\n" // the only expensive division
+      <<"      if("<<var<<" * nLoops != nitems ){\n"
+      <<"        "<<var<<" = ("<<var<<"+31U)/32U*32U;\n"
+      <<"    }\n"
+      <<"  }\n"
+      <<"}\n"
+      ;
   return oss.str();
 }
 

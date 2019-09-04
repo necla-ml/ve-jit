@@ -145,8 +145,11 @@ UnrollSuggest unroll_suggest( UnrollSuggest & u, int vl_min=0, int v=0/*verbosit
  * \sa DEFINE_UNROLL for a related task of dividing a loop upper
  * limit equitably for purposes of unrolling, where the best value
  * is the lowest equitable split [fewer constraints].
+ *
+ * \c (int64_t)nitems should be positive (api changed to use unsigned arith)
  */
-int64_t ve_vlen_suggest(int64_t const nitems);
+//int64_t ve_vlen_suggest(int64_t const nitems);
+uint64_t ve_vlen_suggest(uint64_t const nitems);
 /** jit \c ve_vlen_suggest with known \c 0--nitems loop limit.
  * \return \c "var = CONSTANT;" statement. This is fast. */
 std::string vej_vlen_suggest(std::string var, uint64_t const nitems);
