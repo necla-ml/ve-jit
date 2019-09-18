@@ -127,7 +127,7 @@ force: # force libs to be recompiled
 VEJIT_SHARE:=cblock.cpp ve-msk.cpp ve-asm/veli_loadreg.cpp dllbuild.cpp ve_divmod.cpp COPYING
 VEJIT_LIBS:=libjit1-x86.a libveli-x86.a libjit1-x86.so bin.mk-x86.lo
 VEJIT_LIBS+=libjit1-justc-x86.a libjit1-cxx-x86.lo # possible ld.so workaround
-ifeq ($(CC:ncc%=ncc),ncc)
+ifeq ($(patsubst ncc%,ncc,%(CC)),ncc)
 VEJIT_LIBS+=libjit1.a libveli.a libjit1.so bin.mk-ve.lo
 VEJIT_LIBS+=libjit1-justc-ve.a libjit1-cxx-ve.lo # possible ld.so workaround
 endif
