@@ -492,7 +492,6 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
             }
 
             string dfSourceFile = df.basename+df.suffix; // no "." because suffix could be "-vi.c"
-            sources<<" \\\n\t"<<dfSourceFile;
             df.objects = DllFile::obj(dfSourceFile); // checks name correctness
             // A source file might produce several objects by different compile options
             // The symbols should be renamed to coexist in a single dll
@@ -500,45 +499,92 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
             // objcopy with a rename file seems best way to rename
             // compile-option-differentiated symbols.
             //
-            vector<SymbolDecl> altsyms;
-            for(auto const& object: df.objects){
-                objects<<" \\\n\t"<<object; // add to makefile OBJECTS:=
-                at_file<<object<<"\n";      // also add to @FILE to circumvent command line limits
-                deps<<"\n"<<object<<": "<<dfSourceFile;
-                // What object file types do we recognize?
-                if(object.rfind("_unroll-ve.o")==object.size()-12){
-                    ostringstream rename;
-                    for(auto const& sd: df.syms){ // SymbolDecl
-                        string altname = "unroll_"+sd.symbol;
-                        string altfwd = sd.fwddecl;
-                        size_t fnLoc = altfwd.find(sd.symbol);
-                        if(fnLoc != string::npos)
-                            altfwd.replace(fnLoc, sd.symbol.length(), altname);
-                        altsyms.emplace_back(altname,"unrolled version",altfwd);
-                        rename<<"\techo '"<<sd.symbol<<" "<<altname<<"' >> $@\n";
+            vector<std::string> dfRenames(df.objects.size());
+            // Find alternate symbols and their rename script recipes
+            {
+                vector<SymbolDecl> altsyms;
+                for(size_t i=0U; i<df.objects.size(); ++i){
+                    string object = df.objects[i];
+                    // What object file types do we recognize?
+                    if(object.rfind("_unroll-ve.o")==object.size()-12){
+                        ostringstream rename;
+                        for(auto const& sd: df.syms){ // SymbolDecl
+                            string altname = "unroll_"+sd.symbol;
+                            string altfwd = sd.fwddecl;
+                            size_t fnLoc = altfwd.find(sd.symbol);
+                            if(fnLoc != string::npos)
+                                altfwd.replace(fnLoc, sd.symbol.length(), altname);
+                            altsyms.emplace_back(altname,"unrolled version",altfwd);
+                            rename<<"\techo '"<<sd.symbol<<" "<<altname<<"' >> $@\n";
+                        }
+                        dfRenames[i] = rename.str();
                     }
-                    string renames = rename.str();
-                    //std::cout<<" XXX renames = <"<<renames<<">\n";
-                    if(!renames.empty()){
+                }
+                // append all altsyms, from any alternate object files
+                if(!altsyms.empty()){
+                    df.syms.reserve(df.syms.size() + altsyms.size());
+                    for(auto const s: altsyms)
+                        df.syms.push_back(s);
+                }
+            }
+
+            df.abspath = dir.abspath+'/'+dfSourceFile;
+            // Are all symbols already available to us?
+            //   For example, if executable is linked again libmegajit.so,
+            //   we can avoid re-compiling if all object file symbols already known.
+            bool df_know_all_symbols = true;
+            {
+                for(auto const& sym: df.syms){
+                    void* mainSyms = dlopen(nullptr,RTLD_LAZY);
+                    // do I need to use handle to specific lib?
+                    //string megalib=getPath()+"/libmegajit.so";
+                    //void* mainSyms = dlopen(megalib.c_str(), RTLD_LAZY);
+                    void* addr = dlsym(mainSyms, sym.symbol.c_str());
+                    if(1){
+                        cout<<" Already know symbol: "<<sym.symbol<<" @ "<<addr<<"\n";
+                        if(!sym.comment.empty())
+                            prefix_lines(cout,sym.comment,"        // ")<<"\n";
+                        if(!sym.fwddecl.empty())
+                            prefix_lines(cout,sym.fwddecl,"        ")<<"\n";
+                        cout.flush();
+                    }
+                    char const* dlerr=dlerror();
+                    if(dlerr){
+                        cout<<"** symbol "<<sym.symbol<<" is unknonwn ***"<<endl;
+                        df_know_all_symbols  =  false;
+                        break;
+                    }
+                }
+            }
+
+            if( !df_know_all_symbols ){
+                sources<<" \\\n\t"<<dfSourceFile;
+                // add objects, at_file, deps and renames to build recipe
+                for(size_t i=0U; i<df.objects.size(); ++i){
+                    string object = df.objects[i];
+                    objects<<" \\\n\t"<<object; // add to makefile OBJECTS:=
+                    at_file<<object<<"\n";      // also add to @FILE to circumvent command line limits
+                    deps<<"\n"<<object<<": "<<dfSourceFile;
+                    auto const& renames = dfRenames[i];
+                    if(renames.size()){
+                        std::cout<<" XXX renames[obj "<<i<<" "<<object<<"] = <"<<renames<<">"
+                            <<" --> mkfile!\n";
                         string renameFile(object);
                         renameFile.append(".rename");
                         mkfile<<"\n"<<renameFile<<":"
                             <<"\n\t@rm -f "<<renameFile<<"\n"
                             <<renames;
                         hello<<"\nhello: |"<<renameFile; // create this FIRST (only if not present)
+                    }else{
+                        std::cout<<" XXX renames[obj "<<i<<" "<<object<<"] = EMPTY <"<<renames<<">\n";
                     }
                 }
+                std::cout<<"Writing source file[s]\n";
+                df.write(this->dir);            // source file input (throw if err)
             }
-            // append all altsyms, from any alternate object files
-            if(!altsyms.empty()){
-                df.syms.reserve(df.syms.size() + altsyms.size());
-                for(auto const s: altsyms)
-                    df.syms.push_back(s);
-            }
-
-            df.abspath = dir.abspath+'/'+dfSourceFile;
-            df.write(this->dir);            // source file input (throw if err)
         }
+
+        // Final assembly of the makefile from sources, deps, objects, ...
         mkfile<<"\n#sources\n"<<sources.str()<<endl;
         mkfile<<"\n#deps   \n"<<deps   .str()<<endl;
         mkfile<<"\n#objects\n"<<objects.str()<<endl;
@@ -799,7 +845,7 @@ std::unique_ptr<DllOpen> DllBuild::dllopen(){
         }
         ret.files.push_back(filepath);
         ret.tag.push_back(df.tag);
-        for(auto const sym: df.syms){
+        for(auto const& sym: df.syms){
             dlerror(); // clear previous error [if any]
             void* addr = dlsym(ret.libHandle, sym.symbol.c_str());
             if(v>0){

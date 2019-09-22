@@ -50,6 +50,7 @@ endif
 mkfile_path := $(realpath $(lastword $(MAKEFILE_LIST)))
 mkfile_dir := $(dir $(mkfile_path))
 MEGA_ARCHIVE?=$(abspath $(mkfile_dir)/../libmegajit.a)
+MEGA_ARCHIVE_SO?=$(abspath $(mkfile_dir)/../libmegajit.a)
 
 # Example of how to compile a [local copy of] a jit '-vi.c' file
 #        [copied from ../vednn-ek/test/tmp_cjitConv01/cjitConvFwd_parmstr-vi.c]
@@ -187,6 +188,9 @@ ifneq (${BIN_MK_VERBOSE},0)
 	echo "-------- Library $(LIBNAME) created in `pwd`"
 	-ls -l $@; echo 'nnm wordcount: ' `$(NM) $@ | wc`
 endif
+#if [ -s "$(MEGA_ARCHIVE_SO)" ]; then \
+#  ncc -shared -o $(MEGA_ARCHIVE_SO) $(LIBFLAGS)  -Wl,--whole-archive $@  $(MEGA_ARCHIVE_SO); \
+#fi
 
 # Allow override of default compiler (maybe particular version is required)
 # NCC   must be used for .S files (nas possibly, if you don't use cpp preprocessor)
