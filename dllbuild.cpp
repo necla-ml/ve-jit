@@ -474,7 +474,10 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
             "\n\techo '$* unroll_$*' > $@"
             "\nhello: | $(patsubst %-vi.c,%_unroll-ve.o.rename,$(SOURCES))"
             "\n\techo 'Hello, cjitConv.mk begins'"
+            ;
 #endif
+        // get "already-known" symbols
+        void* mainSyms = dlopen(nullptr,RTLD_LAZY);
         for(size_t i=0U; i<size(); ++i){
             DllFile& df = (*this)[i];
             if(1){ // handle absent fields in DllFile
@@ -534,25 +537,19 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
             //   we can avoid re-compiling if all object file symbols already known.
             bool df_know_all_symbols = true;
             {
+                cout<<"Symbol check for "<<dfSourceFile<<endl;
                 for(auto const& sym: df.syms){
-                    void* mainSyms = dlopen(nullptr,RTLD_LAZY);
                     // do I need to use handle to specific lib?
                     //string megalib=getPath()+"/libmegajit.so";
                     //void* mainSyms = dlopen(megalib.c_str(), RTLD_LAZY);
                     void* addr = dlsym(mainSyms, sym.symbol.c_str());
-                    if(1){
-                        cout<<" Already know symbol: "<<sym.symbol<<" @ "<<addr<<"\n";
-                        if(!sym.comment.empty())
-                            prefix_lines(cout,sym.comment,"        // ")<<"\n";
-                        if(!sym.fwddecl.empty())
-                            prefix_lines(cout,sym.fwddecl,"        ")<<"\n";
-                        cout.flush();
-                    }
                     char const* dlerr=dlerror();
                     if(dlerr){
-                        cout<<"** symbol "<<sym.symbol<<" is unknonwn ***"<<endl;
+                        cout<<"    main symbol "<<sym.symbol<<" is unknown"<<endl;
                         df_know_all_symbols  =  false;
                         break;
+                    }else{
+                        cout<<"    main symbol "<<sym.symbol<<" is knonwn @ "<<addr;
                     }
                 }
             }
