@@ -549,7 +549,7 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
                         df_know_all_symbols  =  false;
                         break;
                     }else{
-                        cout<<"    main symbol "<<sym.symbol<<" is knonwn @ "<<addr;
+                        cout<<"    main symbol "<<sym.symbol<<" is known @ "<<addr;
                     }
                 }
             }

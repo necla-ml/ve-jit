@@ -111,6 +111,8 @@ AT_OBJECTS_FILE:=
 REAL_OBJECTS_FILE:=
 EXTRA_ARCHIVE_OBJECTS:=$(OBJECTS)
 endif
+$(info EXTRA_ARCHIVE_OBJECTS=$(EXTRA_ARCHIVE_OBJECTS))
+
 .PRECIOUS: $(ARCHIVE)
 # Remember, any OBJECTS_FILE should **duplicate** the 'make' OBJECTS dependencies
 $(ARCHIVE): $(REAL_OBJECTS_FILE) $(OBJECTS)
@@ -163,21 +165,28 @@ ifneq (${BIN_MK_VERBOSE},0)
 	-ls -l lib*; echo 'nnm wordcount: ' `nnm $@ | wc`
 endif
 
+# ve attempts
+#ncc -o $@ $(LDFLAGS) $(LIBFLAGS) $(filter %-ve.o,$^)
+# did not work echo '$(OBJECTS)' | gawk 'BEGIN{RS=" "}//' > $@.objects
+#  did not create file $(file >$@.objects,$(filter %-ve.o,$^))
+#ncc -o $@ $(LDFLAGS) $(LIBFLAGS) @$@.objects
+#ls -l OBJECTS-ve.list
+#
+# ncc does not support @FILE for long command lines
+#ncc -o $@ $(LDFLAGS) $(LIBFLAGS) @OBJECTS-ve.list
+#
 $(LIBNAME): $(OBJECTS) ${OBJECTS_FILE}
 ifneq (${BIN_MK_VERBOSE},0)
 	echo "-------- Linking --------"
 	echo "LDFLAGS = $${LDFLAGS}"
+	echo "LIBFLAGS = $${LIBFLAGS}"
+	echo "ARCHIVE         $(ARCHIVE)"
+	echo "LIBNAME         $(LIBNAME)"
+	echo "AT_OBJECTS_FILE $(AT_OBJECTS_FILE)"
+	echo "MEGA_ARCHIVE    $(MEGA_ARCHIVE)"
 endif
 ifeq (${TARGET},ve)
-	@#ncc -o $@ $(LDFLAGS) $(LIBFLAGS) $(filter %-ve.o,$^)
-	@# did not work echo '$(OBJECTS)' | gawk 'BEGIN{RS=" "}//' > $@.objects
-	@#  did not create file $(file >$@.objects,$(filter %-ve.o,$^))
-	@#ncc -o $@ $(LDFLAGS) $(LIBFLAGS) @$@.objects
-	@#ls -l OBJECTS-ve.list
-	@#
-	@# ncc does not support @FILE for long command lines
-	@#ncc -o $@ $(LDFLAGS) $(LIBFLAGS) @OBJECTS-ve.list
-	@#
+	@echo "ncc -shared -o $@ $(LDFLAGS) $(LIBFLAGS) -Wl,--whole-archive $(ARCHIVE) -Wl,--no-whole-archive"
 	ncc -shared -o $@ $(LDFLAGS) $(LIBFLAGS) -Wl,--whole-archive $(ARCHIVE) -Wl,--no-whole-archive
 else # much simple for x86, gcc supports @file
 	gcc -shared -o $@ $(LDFLAGS) $(LIBFLAGS) ${AT_OBJECTS_FILE}
