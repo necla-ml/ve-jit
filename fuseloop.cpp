@@ -321,6 +321,7 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int b_pe
     char const * b_period_pow2 = (b_period > 1 && positivePow2(b_period)? " 2^k": "");
     // opt: if nloop is low, can also precalc (whether or not it is periodic)
     int const bcyc_regs = (nloop<b_period? nloop: b_period);
+#if 0
     bool const have_b_period = true //jj>1 /*&& jj>=b_period*/
         && bcyc_regs > 1 && bcyc_regs < b_period_max
         && !(nloop>1 && vl%jj==0)
@@ -328,6 +329,7 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int b_pe
         && !(nloop>1 && vl%jj!=0 && jj%vl!=0) // ???
         && !(b_period>1 && !(nloop>1 && jj%vl==0) && jj_pow2 && bcyc_regs<b_period_max)
         ;
+#endif
     // Adjust default values:
     //ret.vll [0]
     //ret.nloop

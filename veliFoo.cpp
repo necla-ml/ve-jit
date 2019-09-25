@@ -174,7 +174,8 @@ VeliErr     veliLoadreg(uint64_t start, uint64_t count/*=1U*/)
     }while(0)
 #define HAVE(WHERE) ((kase& (uint64_t{1}<<(WHERE))) != 0)
     /** requires variables: int v; VeliErr ret.
-     * \tparm STR is << sequence like: " The value is "<<a<<" I think." */
+     * \tparm STR is << sequence like: " The value is "<<a<<" I think."
+     * __VAR_ARGS__ is a an assertion. */
 #define KASE(WHERE,STR,...) do \
     { \
         uint64_t const where = (WHERE); \
@@ -497,6 +498,7 @@ VeliErr     veliLoadreg(uint64_t start, uint64_t count/*=1U*/)
         //    lea    :  Sx <-- Sy + Sz + sext(D,64)
         //    lea.sl :  Sx <-- Sy + Sz + (sext(D,64)<<32)
         // lea TMP, lo
+#ifndef NDEBUG
         uint64_t tmplo = (int64_t)(int32_t)lo;
         // lea.sl OUT, <hi or hi+1> (,TMP)
         //        -ve lo will fill hi with ones i.e. -1
@@ -505,6 +507,7 @@ VeliErr     veliLoadreg(uint64_t start, uint64_t count/*=1U*/)
         uint64_t tmp2 = tmphi << 32;    // (sext(D,64)<<32)
         uint64_t out = tmp2 + tmplo;     // lea.sl lea_out, tmphi(,lea_out);
         assert( parm == out );
+#endif
 #endif
         if((int32_t)lo >= 0){
             // simulate and check...

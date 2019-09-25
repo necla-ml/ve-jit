@@ -630,14 +630,12 @@ static void opLoadreg_lea(OpLoadregStrings& ret, uint64_t const parm){
     //uint64_t tmp2 = tmphi << 32;    // (sext(D,64)<<32)
     //uint64_t out = tmp2 + tmplo;     // lea.sl lea_out, tmphi(,lea_out);
     //assert( parm == out );
-    // Changed:  do not use a T0 tmp register
-    string comment("# ");
-    comment += (dd!=hi?"Xld ":" ld ")+jithex(parm);
-    //ret.lea2="lea OUT, "+jithex(lo)+comment; // VE expr size error?
-    ret.lea2 = "lea OUT, ";
-    ret.lea2 += jithex(lo);
-    ret.lea2 += comment;
-    ret.lea2 += " ; lea.sl OUT, "+jithex(dd)+"(,OUT)";
+    // Changed:  do not use a tmp register
+    std::ostringstream oss;
+    ret.lea2 = OSSFMT("lea OUT, "<<jithex(lo)
+            <<"; lea.sl OUT, "<<jithex(dd)<<"(,OUT)"
+            <<"  # "<<(dd!=hi?"Xld OUT=":" ld OUT=")<<jithex(parm)
+            );
 }
 static void opLoadreg_log(OpLoadregStrings& ret, uint64_t const parm){
     /** VE bit ops logic */

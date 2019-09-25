@@ -172,7 +172,9 @@ struct Asmblock : AsmFmtVe {
     // appending an Asmblock, however, appends a child block
     /** \c codeline append to \c _code (\c Asmblock appends to \c _sub) */
     Asmblock& append(Asmblock &ab){
+#ifndef NDEBUG
         int const v=0;
+#endif
         ASMBLOCK_DBG(v,3," append! "<<std::endl);
         assert(_parent != nullptr );
         ASMBLOCK_DBG(v,10," this@"<<_parent->_name<<"/"<<_name<<" append");
@@ -401,7 +403,9 @@ Asmblock& Asmblock::append(std::string codeline){
     return *this;
 }
 inline std::string Asmblock::fullpath() const {
+#ifndef NDEBUG
     int const v=0;
+#endif
     ASMBLOCK_DBG(v,1," fullpath!"<<std::endl;);
     std::string out;
     out.reserve(256);
@@ -429,7 +433,9 @@ inline std::string Asmblock::fullpath() const {
     return out;
 }
 inline Asmblock& Asmblock::unlink() {
+#ifndef NDEBUG
     int const v=0;
+#endif
     if(this == &(_root->root))
         THROW("unlink of "<<fullpath()<<" failed, is it root?");
     if(_parent != this && _parent != nullptr){
@@ -636,7 +642,9 @@ inline Asmblock& mk_func(Asmunit& cunit, std::string name, std::string decl){
  */
 inline Asmblock* Asmblock::find(std::string p) const {
     assert(_root != nullptr);
+#ifndef NDEBUG
     int const v = _root->v;
+#endif
     ASMBLOCK_DBG(v,3,std::string(8,'=')<<" Asmblock "<<fullpath()<<" find(\""<<p<<"\")");
     if(p.empty()){
         ASMBLOCK_DBG(v,3," empty => not found\n");

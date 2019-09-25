@@ -35,6 +35,8 @@ SHELL:=/bin/bash
 CFLAGS:=-O2 -g2 -pthread
 CFLAGS+=-Wall -Werror
 CFLAGS+=-Wno-unknown-pragmas
+CFLAGS+=-DNDEBUG
+
 # note 'gnu' is needed to support extended asm in nc++
 #      17 allows assert inside constexpr, but gnu++17 is not ok for both nc++ and g++
 #      (17 not supported by gc++-4.8.5 on ds02)
@@ -84,6 +86,7 @@ CC:=ncc
 CXX:=nc++
 CFLAGS:=-O2 -g2
 CFLAGS+=-Wall -Werror
+CFLAGS+=-DNDEBUG
 #CXXFLAGS:=$(CFLAGS) -std=c++11 # does not allow extended asm -- need 'gnu' extensions...
 CXXFLAGS:=$(CFLAGS) -std=gnu++11
 VE_EXEC:=ve_exec
@@ -126,11 +129,18 @@ force: # force libs to be recompiled
 # for tarball...
 VEJIT_SHARE:=cblock.cpp ve-msk.cpp ve-asm/veli_loadreg.cpp dllbuild.cpp ve_divmod.cpp COPYING
 VEJIT_LIBS:=libjit1-x86.a libveli-x86.a libjit1-x86.so bin.mk-x86.lo
-VEJIT_LIBS+=libjit1-justc-x86.a libjit1-cxx-x86.lo # possible ld.so workaround
 ifeq ($(patsubst ncc%,ncc,%(CC)),ncc)
 VEJIT_LIBS+=libjit1.a libveli.a libjit1.so bin.mk-ve.lo
+endif
+
+ifeq (0,1)
+# expanded tarball (old ncc linker issues)
+VEJIT_LIBS+=libjit1-justc-x86.a libjit1-cxx-x86.lo # possible ld.so workaround
+ifeq ($(patsubst ncc%,ncc,%(CC)),ncc)
 VEJIT_LIBS+=libjit1-justc-ve.a libjit1-cxx-ve.lo # possible ld.so workaround
 endif
+endif
+
 .PHONY: all-vejit-libs
 huh:
 	echo VEJIT_LIBS are $(VEJIT_LIBS)	
@@ -638,6 +648,9 @@ test_ve_fastdiv-speed-x86: test_ve_fastdiv.cpp ve_fastdiv-x86.o ve_fastdiv.h tim
 test_ve_fastdiv-speed-ve: test_ve_fastdiv.cpp ve_fastdiv-ve.o ve_fastdiv.h timer.h
 	$(VECXX) -std=gnu++11 -DSPEED=1 -O3 -S test_ve_fastdiv.cpp -o test_ve_fastdiv.S
 	$(VECXX) -std=gnu++11 -DSPEED=1 -O3 -o $@ $(filter-out %.h,$^)
+jload_demo: jload_demo.cpp libjit1.a
+	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -DDLLBUILD_MAIN $< \
+		libjit1.a -ldl
 
 # next test show how to dynamically *compile* and load a dll given
 # a std::string containing 'C' code.
