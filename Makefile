@@ -21,8 +21,16 @@ else
 READELF:=readelf
 endif
 
-ifneq ($(CC:ncc%=ncc),ncc)
+# The following idiom is fragile ..... :
+#    ifneq ($(CC:ncc%=ncc),ncc)
+# bash counterpart: COMPILE_TYPE=`${CC} --version 2>&1 | awk '{print $$1; exit}'`
+COMPILE_TYPE:=$(word 1,$(shell $(CC) --version 2>&1))
+$(if $(COMPILE_TYPE),,$(error could not determine C compiler type for CC=$(CC))) # VE(ncc) vs x86(gcc or ...)
+# ..... and should be replaceed with something like:
+#    ifneq ($(COMPILE_TYPE),ncc)
 
+ifneq ($(COMPILE_TYPE),ncc)
+$(info Only building a few x86 targets [CC=$(CC)])
 #
 # only a few things can compile for x86...
 #
@@ -46,6 +54,7 @@ LIBJIT1_TARGETS:=libjit1-x86.a libjit1-x86.so
 LIBJIT1_TARGETS+=libjit1-justc-x86.a # temporary
 LDFLAGS+=-ldl
 else
+$(info ncc compiler detected [CC=$(CC)])
 #
 # we may want to generate jit code on host OR ve
 # Ex. 1: Simple tests, libraries of complex kernels precompiled for VE:
@@ -81,10 +90,9 @@ TARGETS=libjit1.a libjit1-x86.a asmfmt-ve\
 #CXX:=nc++-1.6.0
 #CC:=ncc-2.1.28
 #CXX:=nc++-2.1.28
-
-CC:=ncc
-CXX:=nc++
-CFLAGS:=-O2 -g2
+#CC:=ncc
+#CXX:=nc++
+CFLAGS:=-O3 -g2
 CFLAGS+=-Wall -Werror
 CFLAGS+=-DNDEBUG
 #CXXFLAGS:=$(CFLAGS) -std=c++11 # does not allow extended asm -- need 'gnu' extensions...
@@ -129,14 +137,14 @@ force: # force libs to be recompiled
 # for tarball...
 VEJIT_SHARE:=cblock.cpp ve-msk.cpp ve-asm/veli_loadreg.cpp dllbuild.cpp ve_divmod.cpp COPYING
 VEJIT_LIBS:=libjit1-x86.a libveli-x86.a libjit1-x86.so bin.mk-x86.lo
-ifeq ($(patsubst ncc%,ncc,%(CC)),ncc)
+ifeq ($(COMPILE_TYPE),ncc)
 VEJIT_LIBS+=libjit1.a libveli.a libjit1.so bin.mk-ve.lo
 endif
 
 ifeq (0,1)
 # expanded tarball (old ncc linker issues)
 VEJIT_LIBS+=libjit1-justc-x86.a libjit1-cxx-x86.lo # possible ld.so workaround
-ifeq ($(patsubst ncc%,ncc,%(CC)),ncc)
+ifeq ($(COMPILE_TYPE),ncc)
 VEJIT_LIBS+=libjit1-justc-ve.a libjit1-cxx-ve.lo # possible ld.so workaround
 endif
 endif
@@ -172,7 +180,7 @@ vejit.tar.gz: jitpage.h intutil.h vfor.h \
 	cp -av Makefile.share vejit/share/vejit/Makefile
 	tar czf $@.tmp vejit
 	tar tvzf $@.tmp vejit
-ifneq ($(CC:ncc%=ncc),ncc)
+ifeq ($(COMPILE_TYPE),ncc)
 	mv $@.tmp vejit-x86.tar.gz
 	@echo "created vejit-x86.tar.gz"
 else
@@ -651,6 +659,17 @@ test_ve_fastdiv-speed-ve: test_ve_fastdiv.cpp ve_fastdiv-ve.o ve_fastdiv.h timer
 jload_demo: jload_demo.cpp libjit1.a
 	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -DDLLBUILD_MAIN $< \
 		libjit1.a -ldl
+easm_demo: easm_demo.cpp
+	-nc++ easm_demo.cpp -Wall -o easm_demo && ./easm_demo
+	-clang++ -std=gnu++14 -target linux-ve -O3 -mllvm \
+		-show-spill-message-vec -fno-vectorize -fno-unroll-loops \
+		-fno-slp-vectorize -fno-crash-diagnostics \
+		-S easm_demo.cpp -Wall -o easm_demo.cpp.s
+	clang++ -std=gnu++14 -target linux-ve -O3 -mllvm \
+		-show-spill-message-vec -fno-vectorize -fno-unroll-loops \
+		-fno-slp-vectorize -fno-crash-diagnostics \
+		easm_demo.cpp -Wall -o easm_demo \
+		&& ./easm_demo
 
 # next test show how to dynamically *compile* and load a dll given
 # a std::string containing 'C' code.

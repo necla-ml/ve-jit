@@ -36,7 +36,9 @@ LDLIBS?=
 X86FLAGS:=
 X86LIBS:=
 X86LIBS+=-ldl
-ifneq ($(CC:ncc%=ncc),ncc)
+COMPILE_TYPE:=$(word 1,$(shell $(CC) --version 2>&1))
+$(if $(COMPILE_TYPE),,$(error could not determine C compiler type for CC=$(CC))) # VE(ncc) vs x86(gcc or ...)
+ifneq ($(COMPILE_TYPE),ncc)
 LDLIBS+=${X86LIBS}
 endif
 

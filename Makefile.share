@@ -2,7 +2,9 @@
 # NOT USED
 #
 VEJIT_ROOT:=../..
-ifneq ($(CC),ncc)
+COMPILE_TYPE:=$(word 1,$(shell $(CC) --version 2>&1))
+$(if $(COMPILE_TYPE),,$(error could not determine C compiler type for CC=$(CC))) # VE(ncc) vs x86(gcc or ...)
+ifneq ($(COMPILE_TYPE),ncc)
 .PRECIOUS: jitpp_loadreg
 #
 # only a few things can compile for x86...
@@ -99,7 +101,7 @@ dltest1.log:
 	-{ $(MAKE) VERBOSE=1 dltest1-x86 \
 		&& /usr/bin/time ./dltest1-x86 13 \
 		&& echo YAY; } >& $@
-ifeq ($(patsubst ncc%,ncc,%(CC)),ncc)
+ifeq ($(COMPILE_TYPE),ncc)
 	@# '7' should return the correct value from the JIT function.
 	-{ echo ""; echo ""; \
 		$(MAKE) VERBOSE=1 dltest1 \

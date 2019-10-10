@@ -2,7 +2,9 @@ VEJIT_ROOT:=..
 SHELL:=/bin/bash
 TARGETS:=
 
-ifneq ($(CC:ncc%=ncc),ncc)
+COMPILE_TYPE:=$(word 1,$(shell $(CC) --version 2>&1))
+$(if $(COMPILE_TYPE),,$(error could not determine C compiler type for CC=$(CC))) # VE(ncc) vs x86(gcc or ...)
+ifneq ($(COMPILE_TYPE),ncc)
 CFLAGS:=-O2 -g2 -pthread
 CFLAGS+=-Wall -Werror
 CFLAGS+=-Wno-unknown-pragmas
@@ -51,7 +53,7 @@ dltest1.log:
 	rm -f dltest1 dltest1-x86 tmp_*.c lib*_lucky.so
 	@# '13' has been hard-wired to produce incorrect std::string ccode
 	-{ $(MAKE) VERBOSE=1 dltest1-x86 && $(VE_EXEC) ./dltest1-x86 13 && echo YAY; } >& $@ || echo "Ohoh, continuing anyway"
-ifeq ($(CC),ncc)
+ifeq ($(COMPILE_TYPE),ncc)
 	@# '7' should return the correct value from the JIT function.
 	-{ echo ""; echo ""; $(MAKE) VERBOSE=1 dltest1-ve && \
 		$(VE_EXEC) ve_exec ./dltest1-ve 7 && echo YAY; } \
