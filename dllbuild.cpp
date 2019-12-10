@@ -545,11 +545,11 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
                     void* addr = dlsym(mainSyms, sym.symbol.c_str());
                     char const* dlerr=dlerror();
                     if(dlerr){
-                        cout<<"    main symbol "<<sym.symbol<<" is unknown"<<endl;
+                        cout<<"    primary symbol unknown: "<<sym.symbol<<endl;
                         df_know_all_symbols  =  false;
                         break;
                     }else{
-                        cout<<"    main symbol "<<sym.symbol<<" is known @ "<<addr;
+                        cout<<"    primary symbol  known : "<<sym.symbol<<" @ "<<addr;
                     }
                 }
             }
@@ -564,8 +564,7 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
                     deps<<"\n"<<object<<": "<<dfSourceFile;
                     auto const& renames = dfRenames[i];
                     if(renames.size()){
-                        std::cout<<" XXX renames[obj "<<i<<" "<<object<<"] = <"<<renames<<">"
-                            <<" --> mkfile!\n";
+                        cout<<" renames[obj "<<i<<" "<<object<<"]: "<<renames;
                         string renameFile(object);
                         renameFile.append(".rename");
                         mkfile<<"\n"<<renameFile<<":"
@@ -573,10 +572,10 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
                             <<renames;
                         hello<<"\nhello: |"<<renameFile; // create this FIRST (only if not present)
                     }else{
-                        std::cout<<" XXX renames[obj "<<i<<" "<<object<<"] = EMPTY <"<<renames<<">\n";
+                        //cout<<" XXX renames[obj "<<i<<" "<<object<<"] = EMPTY <"<<renames<<">\n";
                     }
                 }
-                std::cout<<"Writing source file[s]\n";
+                cout<<"Writing source file[s]\n";
                 df.write(this->dir);            // source file input (throw if err)
             }
         }

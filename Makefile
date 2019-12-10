@@ -154,7 +154,7 @@ huh:
 	echo VEJIT_LIBS are $(VEJIT_LIBS)	
 all-vejit-libs:
 	./mklibs.sh 2>&1 | tee mklibs.log	# writes libs into vejit/lib/
-vejit.tar.gz: jitpage.h intutil.h vfor.h \
+vejit.tar.gz: jitpage.h intutil.h vfor.h timer.h \
 		intutil.hpp stringutil.hpp throw.hpp \
 		asmfmt_fwd.hpp asmfmt.hpp codegenasm.hpp velogic.hpp fuseloop.hpp ve_divmod.hpp \
 		cblock.hpp dllbuild.hpp \
