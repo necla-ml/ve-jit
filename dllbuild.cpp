@@ -445,7 +445,7 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
             // append all altsyms, from any alternate object files
             if(!altsyms.empty()){
                 df.syms.reserve(df.syms.size() + altsyms.size());
-                for(auto const s: altsyms)
+                for(auto const &s: altsyms)
                     df.syms.push_back(s);
             }
 
@@ -742,7 +742,7 @@ std::unique_ptr<DllOpen> DllBuild::dllopen(){
         }
         ret.files.push_back(filepath);
         ret.tag.push_back(df.tag);
-        for(auto const sym: df.syms){
+        for(auto const &sym: df.syms){
             dlerror(); // clear previous error [if any]
             void* addr = dlsym(ret.libHandle, sym.symbol.c_str());
             if(v>0){

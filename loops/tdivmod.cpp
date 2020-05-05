@@ -29,10 +29,11 @@ hiding latencies through parallelization.
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/time.h>
+#include <assert.h>
 #include "timer.h"
 #include "intutil.hpp"
 #if defined(__ve)
-#include "veintrin.h"
+#include "velintrin.h"
 #endif
 
 typedef int32_t s32;
@@ -290,7 +291,7 @@ int main(int argc, char **arg) {
     double fd21_pot_cyc;
 #if defined(__ve)
     double vfd21_npot_cyc;
-    __vr vcookie=_ve_vbrd_vs_i64(0);
+    __vr vcookie=_vel_vbrdl_vsl(0,256);
 #endif
     u64 t0, t1;
     int s, r, i, j;
@@ -347,27 +348,26 @@ int main(int argc, char **arg) {
             fill_arrays21();
 			asm volatile ("###VE");
             t0 = __cycle();
-            _ve_lvl(series_len);
-            __vr v_mult = _ve_vld_vss(8,vfd_mul);
-            __vr v_odiv = _ve_vld_vss(8,vfd_odiv);
+            __vr v_mult = _vel_vld_vssl(8,vfd_mul,series_len);
+            __vr v_odiv = _vel_vld_vssl(8,vfd_odiv,series_len);
             for (u64 ii = 0; ii < NUM_NUMS; ++ii) {
                 u64 n = num[ii];
                 //for (j = 0; j < series_len; ++j) {
                 //    v = _fastmod21(v, fd21+ii);
                 //}
-                __vr v = _ve_vbrd_vs_i64(n);
+                __vr v = _vel_vbrdl_vsl(n,series_len);
 #if 0 // naive VDIV  vlen=256 --> 46 ns
-                __vr d = _ve_vdivul_vvv(v, v_odiv);
-                __vr m = _ve_vmulul_vvv(x, v_odiv);
-                v = _ve_vsubul_vvv(v,m);
+                __vr d = _vel_vdivul_vvvl(v, v_odiv,series_len);
+                __vr m = _vel_vmulul_vvvl(x, v_odiv,series_len);
+                v = _vel_vsubul_vvv(v,m);
 #else // vectorized FASTDIV vlen=256 --> 11 ns
-                __vr x = _ve_vmulul_vvv(v, v_mult);
-                __vr y = _ve_vsrl_vvs(x, FASTDIV_C);
-                __vr z = _ve_vmulul_vvv(y, v_odiv);
-                v = _ve_vsubul_vvv(v,z);
+                __vr x = _vel_vmulul_vvvl(v, v_mult,series_len);
+                __vr y = _vel_vsrl_vvsl(x, FASTDIV_C,series_len);
+                __vr z = _vel_vmulul_vvvl(y, v_odiv,series_len);
+                v = _vel_vsubul_vvvl(v,z,series_len);
 #endif
                 //use_value(v);
-                vcookie = _ve_vxor_vvv(vcookie,v);
+                vcookie = _vel_vxor_vvvl(vcookie,v,series_len);
             }
             t1 = __cycle();
             vfd21_npot_cyc += (double)(t1 - t0) / NUM_NUMS;
@@ -512,8 +512,8 @@ int main(int argc, char **arg) {
             printf("branchless_pot_cyc  : %.1f ns\n\n", to_ns_f(branchless_pot_cyc));
     }
 #if defined(__ve)
-    vcookie += _ve_vsuml_vv(vcookie);
-    cookie64 += _ve_lvs_svs_u64(vcookie,0);
+    vcookie += _vel_vsuml_vvl(vcookie,256);
+    cookie64 += _vel_lvsl_svs(vcookie,0);
 #endif
     printf("cookie=%llu\n", (llu)(cookie+cookie64));
 }

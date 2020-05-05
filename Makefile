@@ -1,5 +1,9 @@
 VEJIT_ROOT:=.
 SHELL:=/bin/bash
+#GCC=gcc
+#GXX=g++
+GCC=clang
+GXX=clang++
 # normal build target = all
 # distribution target = vejit.tar.gz
 # major clean and rebuild tests:
@@ -77,6 +81,8 @@ LIBJIT1_TARGETS+=libjit1-justc-x86.a # temporary
 # for ncc-2.x, we should add -ldl (as for x86)
 LDFLAGS+=-ldl
 endif
+
+CFLAGS+=-D_GNU_SOURCE
 
 TARGETS+=$(LIBJIT1_TARGETS) $(LIBVELI_TARGETS)
 
@@ -218,7 +224,7 @@ libjit1-cxx-ve.lo: libjit1-cxx.cpp
 	# gnu++11 allows extended asm...
 	$(CXX) ${CXXFLAGS} -fPIC -c $< -o $@
 libjit1-cxx-x86.lo: libjit1-cxx.cpp
-	g++ ${CXXFLAGS} -fPIC -c $< -o $@
+	$(GXX) ${CXXFLAGS} -fPIC -c $< -o $@
 
 #libbin_mk.a: bin.mk-ve.o
 #	rm -f $@; $(AR) rcs $@ $^
@@ -252,7 +258,7 @@ libjit1.so: jitpage.lo intutil.lo bin.mk-ve.lo \
 intutil.lo: intutil.c intutil.h
 	$(CC) ${CFLAGS} -fPIC -O2 -c $< -o $@
 jitpage.lo: jitpage.c jitpage.h
-	$(CXX) $(CXXFLAGS) -fPIC -O2 -c $< -o $@ -ldl
+	$(CC) $(CFLAGS) -fPIC -O2 -c $< -o $@
 asmfmt.lo: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
 	$(CXX) ${CXXFLAGS} -fPIC -O2 -c asmfmt.cpp -o $@
 vechash.lo: vechash.cpp vechash.hpp throw.hpp vfor.h
@@ -282,50 +288,51 @@ libjit1-x86.so: asmfmt-x86.lo jitpage-x86.lo intutil-x86.lo \
 	readelf -h $@
 	readelf -d $@
 asmfmt-x86.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp stringutil.hpp jitpage.h
-	g++ ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
+	$(GXX) ${GXXFLAGS} -O2 -c asmfmt.cpp -o $@
 asmfmt-x86.lo: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
-	g++ ${CXXFLAGS} -fPIC -O2 -c asmfmt.cpp -o $@
+	$(GXX) ${GXXFLAGS} -fPIC -O2 -c asmfmt.cpp -o $@
 intutil-x86.o: intutil.c intutil.h
-	g++ ${CFLAGS} -O2 -c $< -o $@
+	$(GCC) ${CFLAGS} -O2 -c $< -o $@
 intutil-x86.lo: intutil.c intutil.h
-	g++ ${CFLAGS} -fPIC -O2 -c $< -o $@
+	$(GCC) ${CFLAGS} -fPIC -O2 -c $< -o $@
 jitpage-x86.o: jitpage.c jitpage.h
-	g++ $(CXXFLAGS) -O2 -c $< -o $@ -ldl
+	$(GCC) $(CFLAGS) -O2 -c $< -o $@
 jitpage-x86.lo: jitpage.c jitpage.h
-	g++ $(CXXFLAGS) -fPIC -O2 -c $< -o $@ -ldl
+	$(GCC) $(GXXFLAGS) -fPIC -O2 -c $< -o $@
 cblock-x86.o: cblock.cpp cblock.hpp
-	g++ ${CXXFLAGS} -c $< -o $@
+	$(GXX) ${GXXFLAGS} -c $< -o $@
 cblock-x86.lo: cblock.cpp cblock.hpp
-	g++ ${CXXFLAGS} -fPIC -c $< -o $@
+	$(GXX) ${GXXFLAGS} -fPIC -c $< -o $@
 ve-msk-x86.o: ve-msk.cpp ve-msk.hpp
-	g++ ${CXXFLAGS} -c $< -o $@
+	$(GXX) ${GXXFLAGS} -c $< -o $@
 ve-msk-x86.lo: ve-msk.cpp ve-msk.hpp
-	g++ ${CXXFLAGS} -fPIC -c $< -o $@
+	$(GXX) ${GXXFLAGS} -fPIC -c $< -o $@
 asmblock-x86.o: asmblock.cpp asmblock.hpp
-	g++ ${CXXFLAGS} -g2 -std=c++11 -c $< -o $@
+	$(GXX) ${GXXFLAGS} -g2 -std=c++11 -c $< -o $@
 asmblock-x86.lo: asmblock.cpp asmblock.hpp
-	g++ ${CXXFLAGS} -fPIC -c $< -o $@
+	$(GXX) ${GXXFLAGS} -fPIC -c $< -o $@
 vechash-x86.o: vechash.cpp vechash.hpp
-	g++ ${CXXFLAGS} -g2 -std=c++11 -c $< -o $@
+	$(GXX) ${GXXFLAGS} -g2 -std=c++11 -c $< -o $@
 vechash-x86.lo: vechash.cpp vechash.hpp
-	g++ ${CXXFLAGS} -fPIC -c $< -o $@
+	$(GXX) ${GXXFLAGS} -fPIC -c $< -o $@
 dllbuild-x86.o: dllbuild.cpp dllbuild.hpp
-	g++ -o $@ $(CXXFLAGS) -Wall -Werror -c $<
+	$(GXX) -o $@ $(GXXFLAGS) -Wall -Werror -c $<
 dllbuild-x86.lo: dllbuild.cpp dllbuild.hpp
-	g++ -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -c $<
+	$(GXX) -o $@ $(GXXFLAGS) -fPIC -Wall -Werror -c $<
 fuseloop-x86.o: fuseloop.cpp fuseloop.hpp
-	g++ -o $@ $(CXXFLAGS) -Wall -Werror -c $<
+	$(GXX) -o $@ $(GXXFLAGS) -Wall -Werror -c $<
 fuseloop-x86.lo: fuseloop.cpp fuseloop.hpp
-	g++ -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -c $<
+	$(GXX) -o $@ $(GXXFLAGS) -fPIC -Wall -Werror -c $<
 
 cblock-x86: cblock.cpp cblock.hpp
-	g++ ${CXXFLAGS} -DMAIN_CBLOCK -c $< -o cblock.o
-	g++ ${CXXFLAGS} -DMAIN_CBLOCK -E $< -o cblock.i
-	g++ -Wall -g2 -DMAIN_CBLOCK cblock.o -o $@
+	$(GXX) ${GXXFLAGS} -DMAIN_CBLOCK -c $< -o cblock.o
+	$(GXX) ${GXXFLAGS} -DMAIN_CBLOCK -E $< -o cblock.i
+	$(GXX) -Wall -g2 -DMAIN_CBLOCK cblock.o -o $@
+asmblock-x86: asmblock.cpp asmblock.hpp asmfmt-x86.o jitpage-x86.o intutil-x86.o
+	$(GXX) ${GXXFLAGS} -DMAIN_ASMBLOCK $(filter %.cpp,$^) $(filter %.o,$^) -o $@ -ldl
+
 cblock-ve: cblock.cpp cblock.hpp
 	${CXX} ${CXXFLAGS} -DMAIN_CBLOCK $< -o $@
-asmblock-x86: asmblock.cpp asmblock.hpp asmfmt-x86.o jitpage-x86.o intutil-x86.o
-	g++ ${CXXFLAGS} -DMAIN_ASMBLOCK $(filter %.cpp,$^) $(filter %.o,$^) -o $@ -ldl
 asmblock-ve: asmblock.cpp asmblock.hpp asmfmt-ve.o jitpage-ve.o intutil-ve.o
 	$(CXX) ${CXXFLAGS} -DMAIN_ASMBLOCK $(filter %.cpp,$^) $(filter %.o,$^) -o $@ -ldl
 

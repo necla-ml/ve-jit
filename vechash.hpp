@@ -224,7 +224,7 @@ class VecVlHash{
     /** helper for generic vector hashing.
      * \p maxmvl we can hash_combine up to some max vector length */
     VecVlHash( int const mvl )
-        : mvl(mvl), mem(new uint64_t(3*mvl))
+        : mvl(mvl), mem(new uint64_t[3*mvl])
           //, hashVal(scramble64::r2), j(0)
           , vs(mem+0), vx(mem+mvl), vy(mem+2*mvl)
     { if(!mem) THROW("Out of memory"); init(); }
@@ -266,12 +266,13 @@ class VecHashMvl {
      */
     VecHashMvl( uint32_t const seed=0 )
         : /*mvl(VecHashMvl_MVL),*/ mem(new uint64_t[mvl*4])
-          , hashVal(scramble64::r2), j((uint64_t)seed<<32) //, j0(j)
+          //, hashVal(scramble64::r2)
+          //, j((uint64_t)seed<<32) //, j0(j)
           // vs,vx,vy simulate vector registers
           // (better if the memory is on separate cache pages)
           , vs(mem+0*mvl), vx(mem+1*mvl), vy(mem+2*mvl), vz(mem+3*mvl)
 #ifndef NDEBUG
-          , nCombine(0)
+          //, nCombine(0)
 #endif
     {
         if(!mem) THROW("Out of memory");
@@ -333,17 +334,17 @@ class VecHashMvl {
         VFOR(i,mvl) vx[i] = 0;
     }
     uint64_t *mem;      // to simulate vector registers
-    uint64_t hashVal;   // accumulating sequence hash value
+    //uint64_t hashVal;   // accumulating sequence hash value
     //uint64_t j0;        // initial value of j
-    uint64_t j;         // incrementing sequence position ~ vs[0]
+    //uint64_t j;         // incrementing sequence position ~ vs[0]
     uint64_t *vs;       // vr[0..mvl-1] seq register (j..j+vl-1)
     uint64_t *vx;       // vx[0..mvl-1] state register
     // temporary registers
     uint64_t *vy;       // vx[0..mvl-1] scratch register
     uint64_t *vz;       // vz[0..mvl-1] scratch register
-    uint64_t r;         // scalar scratch register
+    //uint64_t r;         // scalar scratch register
 #ifndef NDEBUG
-    int nCombine;       // combining one or two vectors (we can't switch)
+    //int nCombine;       // combining one or two vectors (we can't switch)
 #endif
 };
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break

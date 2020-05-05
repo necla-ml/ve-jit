@@ -1,5 +1,8 @@
 SHELL=/bin/bash	
 NCXX:=nc++	
+CXX:=nc++
+#GXX:=g++
+GXX:=clang++
 CLANG_VI_FLAGS?=-show-spill-message-vec -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics
 CXXLANG_FLAGS:=-target linux-ve -O3 -mllvm $(CLANG_VI_FLAGS)
 
@@ -39,20 +42,20 @@ fuse2: fuse2.cpp ../libjit1-x86.a ../libveli-x86.a
 	echo "CC=${CC}"
 	echo "LDLIBS=${LDLIBS}"
 	#g++ -Wall -Wno-unknown-pragmas -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
-	g++ -Wall -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
+	$(GXX) -Wall -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
 fuse3: fuse3.cpp ../libjit1-x86.a ../libveli-x86.a
 	echo "CC=${CC}"
 	echo "LDLIBS=${LDLIBS}"
-	g++ -Wall -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
+	$(GXX) -Wall -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
 fuse2-ve: fuse2.cpp ../libjit1.a ../libveli.a
 	echo "CC=${CC}"
 	echo "LDLIBS=${LDLIBS}"
-	$(CXX) -Wall -Werror -std=c++11 -g2 -O3 $(filter-out %.hpp,$^) -o $@ ${CXXFLAGS} ${LDLIBS}
+	$(NCXX) -Wall -Werror -std=c++11 -g2 -O3 $(filter-out %.hpp,$^) -o $@ ${CXXFLAGS} ${LDLIBS}
 fuse3-ve: ../stringutil.hpp ../codegenasm.hpp ../asmfmt_fwd.hpp ../asmfmt_fwd.hpp
 fuse3-ve: fuse3.cpp ../libjit1.a ../libveli.a
 	echo "CC=${CC}"
 	echo "LDLIBS=${LDLIBS}"
-	$(CXX) -Wall -Werror -std=c++11 -g2 -O3 $(filter-out %.hpp,$^) -o $@ ${CXXFLAGS} ${LDLIBS}
+	$(NCXX) -Wall -Werror -std=c++11 -g2 -O3 $(filter-out %.hpp,$^) -o $@ ${CXXFLAGS} ${LDLIBS}
 .PHONY: mega1
 # Instead of randomly trying a bunch of tf2-FOO.log targets,
 # we now record and execution hash of program flow to create
@@ -763,23 +766,29 @@ tf2-0.log: fuse2 Makefile tf2-3.log
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
 mul_add_shr_div: mul_add_shr_div.cpp ../timer.h ../intutil.h
-	g++ -Wall -std=c++11 -I.. -O3 $< -o $@
+	$(GXX) -Wall -std=c++11 -I.. -O3 $< -o $@
+mul_add_shr_div-ve: mul_add_shr_div.cpp ../timer.h ../intutil.h
+	$(NCXX) $(CXXFLAGS) -fdiag-vector=2 -Wall -std=c++11 -I.. -O3 $< -o $@
+divrem: divrem.cpp ../timer.h ../intutil.h
+	$(GXX) -Wall -std=c++11 -I.. -O3 $< -o $@
+divrem-ve: divrem.cpp ../timer.h ../intutil.h
+	$(NCXX) $(CXXFLAGS) -fdiag-vector=2 -Wall -std=c++11 -I.. -O3 $< -o $@
 tdivmod: tdivmod.cpp ../timer.h ../intutil.h
-	clang++ -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
-	clang++ -Wall -std=c++11 -I.. -O3 -S $< -o $@.s
-	clang++ -Wall -std=c++11 -I.. -O3 $< -o $@
+	$(GXX) -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
+	$(GXX) -Wall -std=c++11 -I.. -O3 -S $< -o $@.s
+	$(GXX) -Wall -std=c++11 -I.. -O3 $< -o $@
 tdivmod-ve: tdivmod.cpp ../timer.h ../intutil.h
 	clang++ ${CXXLANG_FLAGS} -Wall -std=c++11 -I.. -O3 -S $< -o $@.s
 	$(NCXX) $(CFLAGS) $@.s -o $@
 cfuse: cfuse.cpp ../libjit1-x86.a
-	g++ -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+	$(GXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 cfuse2: cfuse2.cpp ../libjit1-x86.a ../fuseloop.hpp ../cblock.hpp ../vechash.hpp ./exechash.hpp
-	g++ -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+	$(GXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 cfuse3: cfuse3.cpp ../libjit1-x86.a
-	g++ -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+	$(GXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 %: %.cpp
-	g++ -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
-	g++ -Wall -std=c++11 -I.. -O3 $< -o $@
+	$(GXX) -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
+	$(GXX) -Wall -std=c++11 -I.. -O3 $< -o $@
 clean:
 	rm -f *.i *.o *.gch a.out fuse2 fuse2lin fuse2-ve fuse3 fuse3-ve repro \
 		cfuse2 tdivmod tdivmod-ve

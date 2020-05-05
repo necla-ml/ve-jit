@@ -37,6 +37,9 @@
 #define FOR(I,VL) for(int I=0;I<VL;++I)
 #endif
 
+// register keyword deprecated
+#define register
+
 using namespace std;
 using namespace loop;
 

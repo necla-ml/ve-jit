@@ -147,13 +147,13 @@ class AsmFmtCols {
 
       /// \group simple formatting
       ///{
-      typedef struct {
+      struct AsmLine {
           std::string label;
           std::string op;
           std::string args;
           std::string comment;
           std::string remain; ///< allow multi-statement, ';' as separator
-      } AsmLine;
+      };
       static AsmLine parts(std::string const& instruction);        ///< split into op and args (only?)
 
       /** \#define symbol subst (into \b global scope) */

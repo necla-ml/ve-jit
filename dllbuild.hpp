@@ -75,7 +75,7 @@ class DllOpen{
     std::vector<std::string> const& getDlfiles() const {return files;}
     ~DllOpen();
   private:
-    friend class DllBuild;
+    friend struct DllBuild;
     std::string basename;
     void *libHandle;
     /** \b always have a map symbol-->address of the \e known JIT symbols. */
@@ -128,7 +128,7 @@ struct DllFile {
     std::string short_descr() const;
   private:
     std::vector<std::string> objects;        ///< set by \c DllBuild.prep
-    friend class DllBuild;
+    friend struct DllBuild;
     std::string abspath;
 };
 /** create empty, append various DllFile, then \c create() the DllOpen.

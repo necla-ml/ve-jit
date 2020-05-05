@@ -80,7 +80,10 @@ ExecutablePage::ExecutablePage( std::string const& fbin )
 ExecutablePage::~ExecutablePage(){
     int status = jitpage_free(const_cast<JitPage*>(&this->page));
     if(status){
-        throw runtime_error(" Problems releasing ExecutablePage");
+        // destructors really ought not to throw
+        //throw runtime_error(" Problems releasing ExecutablePage");
+        fprintf(stderr," Problems releasing ExecutablePage");
+        abort();
     }
 }
 #endif //ASMFMTREMOVE < 2
@@ -411,7 +414,7 @@ std::string AsmFmtCols::mac_lookup(std::string macname) const {
             return ret;
     }
     for(auto const& vmac: stack_defs){
-        for(auto const d: vmac){   // d ~ vector<symbol,subst>
+        for(auto const &d: vmac){   // d ~ vector<symbol,subst>
             //cout<<" mac_lookup for "<<macname<<" d=("<<d.first<<","<<d.second<<")"<<endl;
             if(d.first==macname){
                 ret = d.second;

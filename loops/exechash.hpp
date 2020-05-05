@@ -17,7 +17,8 @@
  * print the trace definition. */
 struct ExecHash {
     ExecHash(std::size_t maxMark=3) : v(0), r(0x55), maxMark(maxMark)
-                                      , hint(), hstr()
+                                      //, hint()
+                                      , hstr()
                                       , markCnt(), markVec(), markStr() {}
     /** You could add raw integer values */
     ExecHash& operator += (std::size_t const marker){
@@ -100,7 +101,7 @@ private:
     std::size_t v;      ///< our hash, updated via \e +=
     R64 r;              ///< sequential pseudo-random. do not change it's seed!
     std::size_t const maxMark;          ///< up to how many times do we track any location?
-    std::hash<std::size_t> hint;        ///< integer hashing object
+    //std::hash<std::size_t> hint;        ///< integer hashing object
     std::hash<std::string> hstr;        ///< string hashing object
     // for debug
     std::map<std::size_t,std::size_t> markCnt;  ///< map mark-->count up to maxMark (can exceed \c maxMark)
