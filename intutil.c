@@ -30,6 +30,34 @@ int const multiplyDeBruijnBitPosition2[32] =
     31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9
 };
 
+void fastdiv_make(struct fastdiv *d, uint32_t divisor)
+{
+    uint32_t l, r, e;
+    uint64_t m;
+
+    d->_odiv = divisor;
+    // Modifed [ejk]
+    l = ulog2(divisor);
+    if (divisor & (divisor - 1)) {      // non-power-of-two?
+        m = 1ULL << (l + 32);
+        d->mul = (uint32_t)(m / divisor);
+        r = (uint32_t)m - d->mul * divisor;
+        e = divisor - r;
+        if (e < (1UL << l)) {
+            ++d->mul;
+            d->add = 0;
+        } else {
+            d->add = d->mul;
+        }
+        d->shift = 32+l;                // <-- VE mod
+    } else {                            // power-of-two divisor
+        //printf(" divisor=%u,l=%d\n",divisor,l);
+        d->mul = 1;
+        d->add = 0;
+        d->shift = (divisor<=1? 0: l);
+    }
+}
+
 #ifdef __cplusplus //{
 } //extern "C"
 #endif

@@ -3,11 +3,19 @@ SHELL:=/bin/bash
 #GCC=gcc
 #GXX=g++
 GCC=clang
-GXX=clang++
+GCXX=clang++
 # normal build target = all
 # distribution target = vejit.tar.gz
 # major clean and rebuild tests:
 #   dllbuild
+
+UNAME_S:=$(shell uname -s)
+OS:=$(patsubst(CYGWIN%,Cygwin,$(UNAME_S))
+ifeq ($(OS),Cygwin)
+READELF:='echo readelf'
+else
+READELF:=readelf
+endif
 
 ifneq ($(CC:ncc%=ncc),ncc)
 
@@ -65,9 +73,11 @@ TARGETS=libjit1.a libjit1-x86.a asmfmt-ve\
 #CXX:=nc++-1.5.2
 #CC:=ncc-1.6.0
 #CXX:=nc++-1.6.0
+#CC:=ncc-2.1.28
+#CXX:=nc++-2.1.28
 
-#CC:=ncc
-#CXX:=nc++
+CC:=ncc
+CXX:=nc++
 CFLAGS:=-O2 -g2
 CFLAGS+=-Wall -Werror
 #CXXFLAGS:=$(CFLAGS) -std=c++11 # does not allow extended asm -- need 'gnu' extensions...
@@ -105,14 +115,14 @@ SHELL:=LC_ALL=C /bin/bash
 liblist:
 	@ls -l lib*.a lib*.so
 force: # force libs to be recompiled
-	rm -f libjit1*.a asmfmt*.o jitpage*.o intutil*.o
+	rm -f libjit1*.a asmfmt*.o jitpage*.o intutil*.o ve_divmod*.o
 	rm -f libveli*.a prgiFoo.o wrpiFoo.o
 	rm -f $(patsubst %.cpp,%*.o,$(LIBVELI_SRC)) $(LIBVELI_TARGETS)
 	$(MAKE) $(LIBJIT1_TARGETS)
 	$(MAKE) $(LIBVELI_TARGETS)
 
 # for tarball...
-VEJIT_SHARE:=cblock.cpp ve-msk.cpp ve-asm/veli_loadreg.cpp dllbuild.cpp COPYING
+VEJIT_SHARE:=cblock.cpp ve-msk.cpp ve-asm/veli_loadreg.cpp dllbuild.cpp ve_divmod.cpp COPYING
 VEJIT_LIBS:=libjit1-x86.a libveli-x86.a libjit1-x86.so bin.mk-x86.lo
 VEJIT_LIBS+=libjit1-justc-x86.a libjit1-cxx-x86.lo # possible ld.so workaround
 ifeq ($(CC:ncc%=ncc),ncc)
@@ -126,9 +136,9 @@ all-vejit-libs:
 	./mklibs.sh 2>&1 | tee mklibs.log	# writes libs into vejit/lib/
 vejit.tar.gz: jitpage.h intutil.h vfor.h \
 		intutil.hpp stringutil.hpp throw.hpp \
-		asmfmt_fwd.hpp asmfmt.hpp codegenasm.hpp velogic.hpp fuseloop.hpp \
+		asmfmt_fwd.hpp asmfmt.hpp codegenasm.hpp velogic.hpp fuseloop.hpp ve_divmod.hpp \
 		cblock.hpp dllbuild.hpp \
-		asmfmt.cpp cblock.cpp dllbuild.cpp jitpage.c intutil.c fuseloop.cpp \
+		asmfmt.cpp cblock.cpp dllbuild.cpp jitpage.c intutil.c fuseloop.cpp  ve_divmod.cpp \
 		ve-msk.hpp ve-msk.cpp \
 		jitpage.hpp jitpipe_fwd.hpp jitpipe.hpp cblock.hpp pstreams-1.0.1 bin_mk.c \
 		vechash.hpp vechash.cpp asmblock.hpp \
@@ -190,25 +200,26 @@ tools/%:
 #%-omp.o: %.c: $(CC) ${CFLAGS} -O2 -c $< -o $@
 #%-omp-ftrace1.o: %.c: $(CC) ${CFLAGS} -O2 -c $< -o $@
 libjit1.a: asmfmt-ve.o jitpage-ve.o intutil-ve.o \
-	vechash-ve.o cblock-ve.o asmblock-ve.o dllbuild-ve.o bin.mk-ve.lo ve-msk-ve.o fuseloop-ve.o
+	vechash-ve.o cblock-ve.o asmblock-ve.o dllbuild-ve.o bin.mk-ve.lo ve-msk-ve.o \
+	fuseloop-ve.o ve_divmod-ve.o
 	rm -f $@
 	$(AR) rcs $@ $^
-	readelf -h $@
+	$(READELF) -h $@
 # Simple code without C++ init section crap to avoid VE dynamic loader bug
 # with iostream initialization ... TEMPORARY WORKAROUND
 libjit1-justc-ve.a: jitpage-ve.o intutil-ve.o bin.mk-ve.lo
 	rm -f $@
 	$(AR) rcs $@ $^
-	readelf -h $@
+	$(READELF) -h $@
 libjit1-justc-x86.a: jitpage-x86.o intutil-x86.o bin.mk-x86.lo
 	rm -f $@
 	$(AR) rcs $@ $^
-	readelf -h $@
+	$(READELF) -h $@
 # The other part of the VE bug workaround is to distribute the C++ part
 # of libjit1 as a .lo object file, or as a monolithic C++ source file.
 # I'll also include libveli .cpp codes into the monolithic version
-libjit1-cxx.cpp: asmfmt.cpp vechash.cpp cblock.cpp asmblock.cpp dllbuild.cpp ve-msk.cpp fuseloop.cpp \
-	veliFoo.cpp wrpiFoo.cpp
+libjit1-cxx.cpp: asmfmt.cpp vechash.cpp cblock.cpp asmblock.cpp dllbuild.cpp ve-msk.cpp \
+	veliFoo.cpp wrpiFoo.cpp fuseloop.cpp ve_divmod.cpp
 	sed -e '/^\#ifdef _MAIN/,/^\#endif/d' asmfmt.cpp > $@
 	#   cblock is header-only -- the .cpp file is self-test/demo
 	# asmblock is header-only -- the .cpp file is self-test/demo
@@ -220,11 +231,12 @@ libjit1-cxx.cpp: asmfmt.cpp vechash.cpp cblock.cpp asmblock.cpp dllbuild.cpp ve-
 	cat wrpiFoo.cpp >> $@
 	cat ve-msk.cpp >> $@
 	cat fuseloop.cpp >> $@
+	cat ve_divmod.cpp >> $@
 libjit1-cxx-ve.lo: libjit1-cxx.cpp
 	# gnu++11 allows extended asm...
 	$(CXX) ${CXXFLAGS} -fPIC -c $< -o $@
 libjit1-cxx-x86.lo: libjit1-cxx.cpp
-	$(GXX) ${CXXFLAGS} -fPIC -c $< -o $@
+	$(GCXX) ${CXXFLAGS} -fPIC -c $< -o $@
 
 #libbin_mk.a: bin.mk-ve.o
 #	rm -f $@; $(AR) rcs $@ $^
@@ -248,13 +260,15 @@ asmblock-ve.o: asmblock.cpp asmblock.hpp
 	$(CXX) ${CXXFLAGS} -c $< -o $@
 dllbuild-ve.o: dllbuild.cpp
 	$(CXX) $(CXXFLAGS) -Wall -Werror -c $< -o $@
-fuseloop-ve.o: fuseloop.cpp
+fuseloop-ve.o: fuseloop.cpp fuseloop.hpp
+	$(CXX) $(CXXFLAGS) -Wall -Werror -c $< -o $@
+ve_divmod-ve.o: ve_divmod.cpp
 	$(CXX) $(CXXFLAGS) -Wall -Werror -c $< -o $@
 libjit1.so: jitpage.lo intutil.lo bin.mk-ve.lo \
-	asmfmt.lo asmblock-ve.lo cblock-ve.lo dllbuild-ve.lo fuseloop-ve.lo # C++ things
+	asmfmt.lo asmblock-ve.lo cblock-ve.lo dllbuild-ve.lo fuseloop-ve.lo ve_divmod-ve.lo # C++ things
 	$(CXX) -o $@ -shared -Wl,-trace -wL,-verbose $^ #-ldl #-lnc++
-	readelf -h $@
-	readelf -d $@
+	$(READELF) -h $@
+	$(READELF) -d $@
 intutil.lo: intutil.c intutil.h
 	$(CC) ${CFLAGS} -fPIC -O2 -c $< -o $@
 jitpage.lo: jitpage.c jitpage.h
@@ -271,26 +285,28 @@ asmblock-ve.lo: asmblock.cpp asmblock.hpp
 	$(CXX) ${CXXFLAGS} -fPIC -c $< -o $@
 dllbuild-ve.lo: dllbuild.cpp
 	$(CXX) $(CXXFLAGS) -fPIC -Wall -Werror -c $< -o $@
-fuseloop-ve.lo: fuseloop.cpp
+fuseloop-ve.lo: fuseloop.cpp fuseloop.hpp
+	$(CXX) $(CXXFLAGS) -fPIC -Wall -Werror -c $< -o $@
+ve_divmod-ve.lo: ve_divmod.cpp
 	$(CXX) $(CXXFLAGS) -fPIC -Wall -Werror -c $< -o $@
 
 libjit1-x86.a: asmfmt-x86.o jitpage-x86.o intutil-x86.o \
-		cblock-x86.o dllbuild-x86.o bin.mk-x86.lo fuseloop-x86.o \
+		cblock-x86.o dllbuild-x86.o bin.mk-x86.lo fuseloop-x86.o  ve_divmod-x86.o \
 		vechash-x86.o asmblock-x86.o ve-msk-x86.o
 	rm -f $@
 	ar rcs $@ $^
-	readelf -h $@
-	readelf -d $@
+	$(READELF) -h $@
+	$(READELF) -d $@
 libjit1-x86.so: asmfmt-x86.lo jitpage-x86.lo intutil-x86.lo \
-		cblock-x86.lo dllbuild-x86.lo bin.mk-x86.lo fuseloop-x86.lo \
+		cblock-x86.lo dllbuild-x86.lo bin.mk-x86.lo fuseloop-x86.lo ve_divmod-x86.lo \
 		vechash-x86.lo asmblock-x86.lo ve-msk-x86.lo
-	gcc -o $@ -shared $^ # -ldl
-	readelf -h $@
-	readelf -d $@
+	$(GCC) -o $@ -shared $^ # -ldl
+	$(READELF) -h $@
+	$(READELF) -d $@
 asmfmt-x86.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp stringutil.hpp jitpage.h
-	$(GXX) ${GXXFLAGS} -O2 -c asmfmt.cpp -o $@
+	$(GCXX) ${GXXFLAGS} -O2 -c asmfmt.cpp -o $@
 asmfmt-x86.lo: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
-	$(GXX) ${GXXFLAGS} -fPIC -O2 -c asmfmt.cpp -o $@
+	$(GCXX) ${GXXFLAGS} -fPIC -O2 -c asmfmt.cpp -o $@
 intutil-x86.o: intutil.c intutil.h
 	$(GCC) ${CFLAGS} -O2 -c $< -o $@
 intutil-x86.lo: intutil.c intutil.h
@@ -298,38 +314,42 @@ intutil-x86.lo: intutil.c intutil.h
 jitpage-x86.o: jitpage.c jitpage.h
 	$(GCC) $(CFLAGS) -O2 -c $< -o $@
 jitpage-x86.lo: jitpage.c jitpage.h
-	$(GCC) $(GXXFLAGS) -fPIC -O2 -c $< -o $@
+	$(GCC) $(CFLAGS) -fPIC -O2 -c $< -o $@
 cblock-x86.o: cblock.cpp cblock.hpp
-	$(GXX) ${GXXFLAGS} -c $< -o $@
+	$(GCXX) ${GXXFLAGS} -c $< -o $@
 cblock-x86.lo: cblock.cpp cblock.hpp
-	$(GXX) ${GXXFLAGS} -fPIC -c $< -o $@
+	$(GCXX) ${GXXFLAGS} -fPIC -c $< -o $@
 ve-msk-x86.o: ve-msk.cpp ve-msk.hpp
-	$(GXX) ${GXXFLAGS} -c $< -o $@
+	$(GCXX) ${GXXFLAGS} -c $< -o $@
 ve-msk-x86.lo: ve-msk.cpp ve-msk.hpp
-	$(GXX) ${GXXFLAGS} -fPIC -c $< -o $@
+	$(GCXX) ${GXXFLAGS} -fPIC -c $< -o $@
 asmblock-x86.o: asmblock.cpp asmblock.hpp
-	$(GXX) ${GXXFLAGS} -g2 -std=c++11 -c $< -o $@
+	$(GCXX) ${GXXFLAGS} -g2 -std=c++11 -c $< -o $@
 asmblock-x86.lo: asmblock.cpp asmblock.hpp
-	$(GXX) ${GXXFLAGS} -fPIC -c $< -o $@
+	$(GCXX) ${GXXFLAGS} -fPIC -c $< -o $@
 vechash-x86.o: vechash.cpp vechash.hpp
-	$(GXX) ${GXXFLAGS} -g2 -std=c++11 -c $< -o $@
+	$(GCXX) ${GXXFLAGS} -g2 -std=c++11 -c $< -o $@
 vechash-x86.lo: vechash.cpp vechash.hpp
-	$(GXX) ${GXXFLAGS} -fPIC -c $< -o $@
+	$(GCXX) ${GXXFLAGS} -fPIC -c $< -o $@
 dllbuild-x86.o: dllbuild.cpp dllbuild.hpp
-	$(GXX) -o $@ $(GXXFLAGS) -Wall -Werror -c $<
+	$(GCXX) -o $@ $(GXXFLAGS) -Wall -Werror -c $<
 dllbuild-x86.lo: dllbuild.cpp dllbuild.hpp
-	$(GXX) -o $@ $(GXXFLAGS) -fPIC -Wall -Werror -c $<
+	$(GCXX) -o $@ $(GXXFLAGS) -fPIC -Wall -Werror -c $<
 fuseloop-x86.o: fuseloop.cpp fuseloop.hpp
-	$(GXX) -o $@ $(GXXFLAGS) -Wall -Werror -c $<
+	$(GCXX) -o $@ $(GXXFLAGS) -Wall -Werror -c $<
 fuseloop-x86.lo: fuseloop.cpp fuseloop.hpp
-	$(GXX) -o $@ $(GXXFLAGS) -fPIC -Wall -Werror -c $<
+	$(GCXX) -o $@ $(GXXFLAGS) -fPIC -Wall -Werror -c $<
+ve_divmod-x86.o: ve_divmod.cpp ve_divmod.hpp cblock.hpp
+	$(GCXX) -o $@ $(CXXFLAGS) -Wall -Werror -c $<
+ve_divmod-x86.lo: ve_divmod.cpp ve_divmod.hpp cblock.hpp
+	$(GCXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -c $<
 
 cblock-x86: cblock.cpp cblock.hpp
-	$(GXX) ${GXXFLAGS} -DMAIN_CBLOCK -c $< -o cblock.o
-	$(GXX) ${GXXFLAGS} -DMAIN_CBLOCK -E $< -o cblock.i
-	$(GXX) -Wall -g2 -DMAIN_CBLOCK cblock.o -o $@
+	$(GCXX) ${GXXFLAGS} -DMAIN_CBLOCK -c $< -o cblock.o
+	$(GCXX) ${GXXFLAGS} -DMAIN_CBLOCK -E $< -o cblock.i
+	$(GCXX) -Wall -g2 -DMAIN_CBLOCK cblock.o -o $@
 asmblock-x86: asmblock.cpp asmblock.hpp asmfmt-x86.o jitpage-x86.o intutil-x86.o
-	$(GXX) ${GXXFLAGS} -DMAIN_ASMBLOCK $(filter %.cpp,$^) $(filter %.o,$^) -o $@ -ldl
+	$(GCXX) ${GXXFLAGS} -DMAIN_ASMBLOCK $(filter %.cpp,$^) $(filter %.o,$^) -o $@ -ldl
 
 cblock-ve: cblock.cpp cblock.hpp
 	${CXX} ${CXXFLAGS} -DMAIN_CBLOCK $< -o $@
@@ -457,7 +477,7 @@ dllvebug14: dllbug.cpp libvebug.so
 	echo "Exit status $$?"
 
 #allsyms-x86: allsyms.cpp
-#	g++ -g2 -O2 -std=c++11 -D_GNU_SOURCE $< -o $@ -ldl
+#	$(GCXX) -g2 -O2 -std=c++11 -D_GNU_SOURCE $< -o $@ -ldl
 #allsyms-ve: allsyms.cpp
 #	${CXX} -g2 -O2 -std=c++11 -D_GNU_SOURCE $< -o $@
 .PHONY: dlprt-x86.log dlprt-ve.log
@@ -476,7 +496,7 @@ libveli.a:     $(patsubst %.cpp,%.o,    $(LIBVELI_SRC))
 libveli-x86.a: $(patsubst %.cpp,%-x86.o,$(LIBVELI_SRC))
 	$(AR) rcs $@ $^
 $(patsubst $(LIBVELI_SRC),%.cpp,%-x86.o) %-x86.o: %.cpp
-	g++ ${CXXFLAGS} -Wall -O2 -c $< -o $@
+	$(GCXX) ${CXXFLAGS} -Wall -O2 -c $< -o $@
 $(patsubst $(LIBVELI_SRC),%.cpp,%.o) %.o: %.cpp
 	@#$(CXX) -Wall -O2 -c $< -o $@
 	@# inline asm is incompatible with nc++ -std=c++11 # AHAA must use -std=gnu++11
@@ -491,12 +511,14 @@ $(patsubst $(LIBVELI_SRC),%.cpp,%.o) %.o: %.cpp
 
 #asmfmt.cpp has a standalone demo program with -D_MAIN compiler	
 asmfmt-x86: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp intutil.c intutil.h jitpage.c jitpage.h
-	g++ $(CXXFLAGS) -O2 -E -dD $< >& $(patsubst %,%.i,$@)
-	g++ ${CXXFLAGS} -Wall -D_MAIN asmfmt.cpp jitpage.c intutil.c -o $@ -ldl
-asmfmt-ve: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp jitpage-ve.o
-	$(CXX) $(CXXFLAGS) -O2 -E -dD $< >& $(patsubst %,%.i,$@)
+	$(GCXX) $(CXXFLAGS) -O2 -dD -E $< >& $(patsubst %,%.i,$@)
+	$(GCXX) ${CXXFLAGS} -Wall -D_MAIN asmfmt.cpp -x c++ jitpage.c intutil.c -o $@ -ldl
+asmfmt-main-ve.o: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
+	$(CXX) $(CXXFLAGS) -D_MAIN -dD -E $< >& $(patsubst %,%.i,$@)
 	#$(CXX) $(CXXFLAGS) -O2 -D_MAIN $(filter-out %.hpp,$^) -o $@
-	$(CXX) ${CXXFLAGS} -D_MAIN -Wall asmfmt.cpp jitpage.c intutil.c -o $@ -ldl
+	$(CXX) ${CXXFLAGS} -O2 -D_MAIN -Wall -c asmfmt.cpp -o $@
+asmfmt-ve: asmfmt-main-ve.o jitpage-ve.o intutil-ve.o
+	$(CXX) ${CXXFLAGS} -D_MAIN -Wall $^ -o $@ -ldl
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
 %.asm: %.c
 	$(CC) $(CFLAGS) -g2 -Wa,-adhln -S $< >& $*.s
@@ -508,19 +530,19 @@ asmfmt-ve: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp jitpage-ve.o
 #		--rename-section .data=.rodata,alloc,load,readonly,data,contents \
 #		$< $@
 ftostring: ftostring.c
-	gcc -O3 $< -o $@
+	$(GCC) -O3 $< -o $@
 bin.mk-x86.lo bin_mk.c: bin.mk ftostring
 	# objcopy method lacks --add-symbol.  could use custom linker script, but use ftostring...
 	./ftostring bin.mk bin_mk >& bin_mk.c
-	gcc -fPIC -c bin_mk.c -o $@ #&& rm -f bin_mk.c
-	readelf -s $@
-	readelf -h $@
+	$(GCC) -fPIC -c bin_mk.c -o $@ #&& rm -f bin_mk.c
+	$(READELF) -s $@
+	$(READELF) -h $@
 bin.mk-ve.lo: bin.mk ftostring
 	# objcopy method lacks --add-symbol.  could use custom linker script, but use ftostring...
 	./ftostring bin.mk bin_mk >& bin_mk.c
 	$(CC) -fPIC -c bin_mk.c -o $@ #&& rm -f bin_mk.c
-	readelf -s $@
-	readelf -h $@
+	$(READELF) -s $@
+	$(READELF) -h $@
 #bin.mk-ve.o: bin.mk
 #	nobjcopy --input binary --output elf64-ve --binary-architecture ve \
 #		--rename-section .data=.rodata,alloc,load,readonly,data,contents \
@@ -568,11 +590,11 @@ dllvebug.log:
 		} ; } >& dllvebug.log && echo "dllvebug.log seems OK" || echo "dllvebug.log Huh?"
 	# NOTE **all** above fail because dllbuild-veb is linked with a shared C++ library.
 dllbuild-x86: dllbuild.cpp libjit1-x86.a
-	g++ -o $@ $(CXXFLAGS) -Wall -Werror -DDLLBUILD_MAIN $< -L. libjit1-x86.a -ldl
-	readelf -d $@
+	$(GCXX) -o $@ $(CXXFLAGS) -Wall -Werror -DDLLBUILD_MAIN $< -L. libjit1-x86.a -ldl
+	$(READELF) -d $@
 dllbuild-x86b: dllbuild.cpp libjit1-x86.so
-	g++ -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1-x86.so -ldl
-	readelf -d $@
+	$(GCXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1-x86.so -ldl
+	$(READELF) -d $@
 dllbuild-ve: dllbuild.cpp libjit1.a
 	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1.a -ldl
 	nreadelf -d $@
@@ -590,7 +612,7 @@ dllbuild-vec: dllbuild.cpp libjit1.so
 # a std::string containing 'C' code.
 clean:
 	rm -f *.o *.lo *.i *.ii *.out *.gch bin.mk*.o bin_mk.c
-	rm -f tmp_*.s tmp*lucky*
+	rm -f libjit1-cxx.cpp libjit1-cxx*.o libjit1-cxx*.lo tmp_*.s tmp*lucky*
 	for f in *.bin; do b=`basename $$f .bin`; rm -f $$b.asm $$b.o $$b.dis $$b.dump; done
 	for f in tmp_*.S; do b=`basename $$f .S`; rm -f $$b.asm $$b.dis $$b.dump; done
 	rm -rf tmp tmp-dllbuild

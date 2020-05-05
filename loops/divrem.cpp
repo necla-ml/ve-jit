@@ -41,6 +41,7 @@ typedef uint64_t u64;
 #define MAX_DEN 1024
 #define LLU long long unsigned
 
+// Note: wrong layout for vector-of-divisors
 struct fastdiv {
     u32 mul;
     u32 add;
@@ -99,6 +100,7 @@ void fastdiv_make(struct fastdiv *d, u32 divisor) {
 }
 
 #define fastdiv(v,d) ((u32)(((u64)(v)*(d)->mul + (d)->add) >> 32) >> (d)->shift)
+#define fastdiv64(v,d) ((((u64)(v)*(u64)((d)->mul) + (u64)((d)->add)) >> 32) >> (d)->shift)
 #define _fastmod(v,d) ((v) - fastdiv((v),(d)) * (d)->_odiv)
 inline u32 fastmod_br(u32 v, struct fastdiv *d) {
     if (d->mul == 0x80000000) {
@@ -159,6 +161,10 @@ void use_value(u32* vec, size_t len) {
     for(size_t i=0; i<len; ++i)
         cookie += vec[i];
 }
+void use_value(u64* vec, size_t len) {
+    for(size_t i=0; i<len; ++i)
+        cookie += vec[i];
+}
 void use_value(u32 v) {
     cookie += v;
 }
@@ -179,14 +185,23 @@ int main(int argc, char **arg) {
     branching_npot_ns = branching_pot_ns = 0;
     branchless_npot_ns = branchless_pot_ns = 0;
 
-    u32 x[256], y[256];
+    u64 x[256], y[256];
     for(int i=0; i<256; ++i) x[i] = 0;
     for(int i=0; i<256; ++i) y[i] = 0;
+#define DOVEC 1
+
+#if DOVEC==0 && defined(__ve)
+#define VEC _Pragma("_NEC novector")
+#else
+#undef DOVEC            // don't know how to disable vec for x86 target
+#define DOVEC 0
+#define VEC
+#endif
+    printf(" DOVEC=%d\n",DOVEC);
     for (s = 8; s >= 0; --s) {
         series_len = 1 << s;
         for (r = 0; r < NUM_RUNS; ++r) {
-//#define VEC
-#define VEC _Pragma("_NEC novector")
+
 // For nc++, measure div+rem time:
 //    branching usually slightly faster than builtin (not always)
 //    fastmod always fastest
@@ -233,7 +248,7 @@ int main(int argc, char **arg) {
                 asm("### fastmod_br npot_ns");
                 int const v = num[i];
                 VEC for (j = 0; j < series_len; ++j) {
-                    struct fastdiv const *d = fd+i;
+                    struct fastdiv const *d = fd+j;
                     y[j] = (d->mul == 0x80000000
                             ? (v & ((1 << d->shift) - 1))
                             : _fastmod(v,d));
@@ -251,7 +266,7 @@ int main(int argc, char **arg) {
                 asm("### fastmod npot_ns");
                 v = num[i];
                 VEC for (j = 0; j < series_len; ++j) {
-                    struct fastdiv const *d = fd+i;
+                    struct fastdiv const *d = fd+j;
                     y[j] = (d->mul == 0x80000000
                             ? (v & ((1 << d->shift) - 1))
                             : _fastmod(v,d));
@@ -266,10 +281,21 @@ int main(int argc, char **arg) {
             fill_arrays();
             t0 = clock_ns();
             for (i = 0; i < NUM_NUMS; ++i) {
-                v = num[i];
+                u64 v = num[i];
+                //u64 a[256];
+                //u64 b[256];
+                //u64 c[256];
+                asm("### branchless NPOT");
                 VEC for (j = 0; j < series_len; ++j) {
-                    y[j] = fastdiv(v, fd+i);
-                    x[j] ^= v - y[j]*den[j];
+                    struct fastdiv const *d = fd+j;
+                    y[j] = fastdiv(v, d);
+                    //y[j] = fastdiv64(v, fd+i);
+                    //a[j] = v * d->mul;
+                    //b[j] = a[j] + d->add;
+                    //c[j] = b[j] >> d->shift;
+                    //
+                    //x[j] ^= v - y[j]*d->_odiv;
+                    x[j] ^= v - y[j]*den[j]; // den[j] == d->_odiv
                 }
             }
             t1 = clock_ns();
@@ -282,8 +308,11 @@ int main(int argc, char **arg) {
             for (i = 0; i < NUM_NUMS; ++i) {
                 v = num[i];
                 VEC for (j = 0; j < series_len; ++j) {
-                    y[j] = fastdiv(v, fd+i);
-                    x[j] ^= v - y[j]*den[j];
+                    struct fastdiv const *d = fd+j;
+                    y[j] = fastdiv(v, d);
+                    //
+                    //x[j] ^= v - y[j]*d->_odiv;
+                    x[j] ^= v - y[j]*den[j]; // den[j] == d->_odiv
                 }
             }
             t1 = clock_ns();

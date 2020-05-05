@@ -65,7 +65,7 @@
 namespace cprog {
 
 struct Cunit;
-struct Cblock;
+class Cblock;
 struct CbmanipBase;
 
 struct IndentSpec;
@@ -107,7 +107,8 @@ inline std::ostream& operator<<(std::ostream& os, CbmanipBase & cbmanip){
 //@}
 
 //template<class T> struct endl {;}; // Nope. confusion with std::endl
-struct Cblock {
+class Cblock {
+  public:
     /// Empty Cblock constructor (placeholder)
     Cblock(Cunit *root, std::string name="root")
         : _root(root), _parent(this), _name(name), _type(""),
@@ -246,9 +247,10 @@ struct Cblock {
     Cblock& clear();
     /** swap all `_code` for something new */
     Cblock& set(std::string s) {_code=s; return *this;}
-    Cblock& setType(std::string type) {_type=type; return *this;}
     Cblock& setName(std::string type); ///< `{this->type=type; return *this;}` and update root!
+    Cblock& setType(std::string type) {_type=type; return *this;}
     std::string const& getName() const;
+    std::string const& getType() const;
     Cunit& getRoot() const;
     //Cblock& append(std::string code) {this->code += code; return *this;} // maybe inefficient
     //Cblock* next();
@@ -281,20 +283,22 @@ struct Cblock {
         if( ret == nullptr ) THROW(" Cblock["<<fullpath()<<"].at("<<path<<") not found");
         return *ret;
     }
-    //Cblock& find(std::string p) const;
-#if 1
+    /** upward block where '#define' for this->define(name,subst) would appear.
+     * - basically a careful version of find("..&ast;/body/..")
+     * - look for this (or upward) being "body" or else use \c this
+     * - from there look for "..", or else use \c this
+     * \note can return a non-const ref to \c *this (when \c this root of tree)
+     */
+    Cblock& goto_defines() const;
     /** Easy \c \#define \c \#undef attached to nearest-enclosing-scope.
      *
-     * - cb.def("M","S") -- #define M S  and #undef M
-     *   - if node is "body" put def+undef at node.at("..") and node.at("..")["last"]
-     *     - probably also have "../beg" and "../end" nodes
-     *   - this is a subcase of general method to use "nearest enclosing scope":
-     *     - node.at("..*\/body\/..") and node.at("..*\/body\/..")["last"]
+     * - cb.def("M","S") -- &num;define M S  and &num;undef M
+     *   - "&num;defines" into goto_defines()
+     *   - "&num;undef" to goto_defines["last"]["undefs"]
      * - Fancier control could be had manually, like:
-     *   - cb.at("..*\/loop_high/body").def("M","S"); to force upward scope
+     *   - cb.at("..&ast;/loop_high/body").def("M","S"); to force upward scope
      *   - consider how to change arb cblock into a scoped one.
      *     - Ex. foo--> foo_scope/{beg,body,end} where body "is" the old node "foo" ?
-     *
      * \return *this
      */
     Cblock& define(std::string name, std::string subst="");
@@ -331,7 +335,6 @@ struct Cblock {
         oss<<t;
         return this->define_here(name, oss.str());
     }
-#endif
 
   private:
     /** find first \b single-component path \c p for simple search strategy.
@@ -348,15 +351,15 @@ struct Cblock {
      */
     Cblock& unlink();
   private:
-    friend class CbmanipBase;
+    friend struct CbmanipBase;
     struct Cunit * const _root;
-    struct Cblock * _parent;
+    class Cblock * _parent;
   private:
     std::string _name;              ///< terminal \e path component (from root)
-    std::string _type;              ///< unused?
+    std::string _type;              ///< store /e notes (flags,state)
     CbmanipBase* _premanip;         ///< TODO support multiple?
     std::string _code;
-    std::vector<Cblock*> _sub;      ///< TODO separate '_exit' block with \e always-last semantics?
+    std::vector<Cblock*> _sub;      ///< name /e last => \e always-last semantics
     CbmanipBase* _postmanip;        ///< TODO support multiple?
     int _nwrites;   // counter
     int _maxwrites; // limit for _nwrites
@@ -443,6 +446,7 @@ struct PreIndent : IndentSpec {
 };
 
 inline std::string const& Cblock::getName() const {return _name;}
+inline std::string const& Cblock::getType() const {return _type;}
 
 inline Cblock& Cblock::after(Cblock& prev) {
     // streamlined, with 'append' that returns the argument, instead of 'prev'
@@ -531,6 +535,15 @@ inline Cblock& Cblock::after(Cblock& prev) {
 #define CBLOCK_SCOPE(CBLK_VAR,BEG,CUNIT,AFTER) auto& CBLK_VAR = mk_scope((CUNIT),#CBLK_VAR,(BEG)).after(AFTER)["body"];
 /** Sometimes you want to pass the block "body" to an outer scope as a pointer rather than a ref */
 #define CBLOCK_SCOPE_PTR(CBLK_VAR,BEG,CUNIT,AFTER) (&( mk_scope((CUNIT),#CBLK_VAR,(BEG)).after(AFTER)["body"] ))
+/** \return empty if N<0, #pragma nounroll if N==0, or #pragma unroll(N). */
+std::string ve_pragma_unroll(int64_t const N);
+/** Usage \c OSSFMT(UNROLL(u)"for(...)"). */
+#define UNROLL(N) ve_pragma_unroll(N)<<
+#define NO_UNROLL(...) "#pragma nounroll\n"
+/** for-loop macro allowing tight-binding #pragma */
+#define CBLOCK_FOR(CBVAR,UN_ROLL,INTRO,CBPARENT) \
+    CBLOCK_SCOPE(CBVAR,OSSFMT(UNROLL(UN_ROLL) INTRO),CBPARENT.getRoot(),CBPARENT)
+
 
 /** make name/{beg,body,end} for C++ extern "C" scope and return name/body */
 Cblock& mk_extern_c(Cunit& cunit, std::string name);

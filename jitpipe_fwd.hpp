@@ -52,7 +52,7 @@ struct PstreamPipe {
      */
     virtual int run( std::string cpp_asm_code );
 
-    /** \group JITpipe output */
+    /** \defgroup JITpipe output */
     //@{
     std::string out; ///< binary blob of machine code, output of this->command
     std::string err; ///< stderr of this->command
@@ -116,7 +116,7 @@ struct BLOBDISpipe : public PstreamPipe {
  */
 class DllPipe {
   public:
-    /** \group helpers */
+    /** \defgroup helpers */
     /** many details and long constructor moved to jitpipe.hpp */
     //@{
     enum CC { gcc, ncc, clang, nclang, ncompilers/*last real compiler*/

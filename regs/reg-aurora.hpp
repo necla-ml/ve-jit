@@ -26,6 +26,8 @@ constexpr RegId NREG_s = Regid(64);
 constexpr RegId NREG_v = Regid(64);
 constexpr RegId NREG_vm = Regid(16);
 
+/** Register Number Mapping agrees with DWARF mapping
+ * described in VE-ABI_v2.1.pdf */
 constexpr RegId IDscalar      = Regid(0);
 constexpr RegId IDscalar_last = Regid(IDscalar+NREG_s-1);    // 0..63
 constexpr RegId IDvector      = Regid(IDscalar_last+1);

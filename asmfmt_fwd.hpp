@@ -145,7 +145,7 @@ class AsmFmtCols {
        */
       AsmFmtCols *setParent( AsmFmtCols* p );
 
-      /// \group simple formatting
+      /// \defgroup simple formatting
       ///{
       struct AsmLine {
           std::string label;
@@ -172,11 +172,11 @@ class AsmFmtCols {
       AsmFmtCols& rcom(std::string const& comment);    ///< right <# comment>
       AsmFmtCols& lab(std::string const& label, std::string const& comment="");       ///< <label:>
       AsmFmtCols& ins();                               ///< blank line
-      AsmFmtCols& ins(std::string const& instruction); ///< <    ><op       >[<args>]
+      AsmFmtCols& ins(std::string const& instruction); ///< [    ][op       ][args]
       /** <    ><op          >[<args>]<      # <asmcomment> */
       AsmFmtCols& ins(std::string const& instruction, std::string const& comment);
       ///}
-      /// \group comment strings can also be a list of comment lines
+      /// \defgroup comment strings can also be a list of comment lines
       ///{
       template< typename... LComments >
           AsmFmtCols& lcom(std::string const& comment, LComments... lcomments){
@@ -268,7 +268,7 @@ struct AsmFmtVe : public AsmFmtCols
  * Could be a static member fn? */
 std::string uncomment_asm( std::string asmcode );
 
-/// \group VE assembler helpers
+/// \defgroup VE assembler helpers
 //@{
 /** \c out = replicated MSB (sign bit) of \c in.
  * \return code setting \c out to 0 or -1. */
@@ -283,7 +283,7 @@ std::string ve_abs64(std::string out, std::string in);
  * \p name of func (Ex. foo)*/
 void ve_set_base_pointer( AsmFmtCols & a, std::string bp="%s34", std::string name="foo" );
 
-/** \group VE load scalar register with constant */
+/** \defgroup VE load scalar register with constant */
 //@{
 struct OpLoadregStrings{
     std::string lea;

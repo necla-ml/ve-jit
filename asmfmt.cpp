@@ -41,7 +41,7 @@ size_t asm2bin( string const& fname_S, int const verbose/*=1*/ ){
     if( status == 0 ){
         if(verbose) cout << "     asm2bin(" << fname_S << ") DONE" << endl;
     }else{
-        if(verbose) cout<<" Ohoh: make command returned status "<<status<<endl; cout.flush();
+        if(verbose){cout<<" Ohoh: make command returned status "<<status<<endl; cout.flush();}
         throw runtime_error("asm2bin( \"" + fname_S + "\" ) failed, status=" + to_string(status));
     }
     // We return the filesize in bytes, so we know how big a jit page we need

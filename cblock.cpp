@@ -8,6 +8,16 @@
 
 namespace cprog{
 
+std::string ve_pragma_unroll(int64_t const N){
+    std::string ret(""); // return empty if N<0
+    if(N==0) return "#pragma nounroll\n";
+    else if(N>0){
+        std::ostringstream oss;
+        ret = OSSFMT("#pragma unroll("<<N<<")\n");
+    }
+    return ret;
+}
+
 Cblock& Cblock::append(std::string codeline){
     if( !codeline.empty() ){
 #if 0 // trial...
@@ -100,7 +110,8 @@ Cblock& Cblock::unlink() {
  * Otherwise throw if \c p.empty() or use \c at(p) fails to find a path.
  * */
 Cblock& Cblock::operator[](std::string p){
-    if(p.empty()) THROW("Cblock[""] oops");
+    //if(p.empty()) THROW("Cblock[""] oops - empty string!");
+    assert(!p.empty());
     // Be careful to not create sub-block with names containing wildcard strings
     if(p.find("/") != std::string::npos){       // PATH! revert to full-path search
         return this->at(p);                     //       throw if not found
@@ -401,32 +412,38 @@ Cblock* Cblock::find(std::string p) const {
 #endif
     }
 }
+/** where '#define' for this->define would appear. */
+Cblock& Cblock::goto_defines() const {
+    Cblock *a;
+    {
+        Cblock const* body = (getName()=="body"? this: find("..*/body)"));
+        if(!body) body=this;                  // prospective "scope"
+        a = body->find("..");                 // what encloses the "scope"?
+        if(!a) a = const_cast<Cblock*>(this); // else "right here"
+    }
+    return *a;
+}
+
+/** common code */
+static void emit_define(Cblock& a, Cblock& z, std::string name, std::string subst){
+    a>>"#define "<<name<<" "<<subst; // multiline backslash support?
+    z>>"#undef "<<name.substr(0,name.find('('));
+}
 /** attach to nearest-enclosing scope in a reasonable way. */
 Cblock& Cblock::define(std::string name, std::string subst){
     // sanity checks on name?
-    Cblock *a, *z;
-    {
-        a = find("..*/body/.."); // try a nearest enclosing scope
-        //if(!a) a = find("..");   // else "parent" [ optional? ]
-        if(!a) a = this;         // else "right here"
-        z = &(*a)["last"]["undefs"]; // try extra hard for undef to be 'last'
-    }
-    assert( a!=nullptr );
-    assert( z!=nullptr );
-    (*a)>>"#define "<<name<<" "<<subst; // multiline backslash support?
-    (*z)>>"#undef "<<name.substr(0,name.find('('));
+    Cblock& a = goto_defines();
+    Cblock& z = a["last"]["undefs"]; // try extra hard for undef to be 'last'
+    emit_define(a,z,name,subst);
     return *this;
 }
 
 /** attach to nearest-enclosing scope in a reasonable way. */
 Cblock& Cblock::define_here(std::string name, std::string subst){
     // sanity checks on name?
-    Cblock *a = this;
-    Cblock *z = &(*a)["last"]["undefs"];
-    assert( a!=nullptr );
-    assert( z!=nullptr );
-    (*a)>>"#define "<<name<<" "<<subst; // multiline backslash support?
-    (*z)>>"#undef "<<name.substr(0,name.find('('));
+    Cblock& a = *this;
+    Cblock& z = a["last"]["undefs"];
+    emit_define(a,z,name,subst);
     return *this;
 }
 
@@ -438,12 +455,11 @@ std::ostream& Cblock::dump(std::ostream& os, int const ind/*=0*/)
     }
     //int const v = _root->v+2;
     std::string in("\n&&& "+std::string(ind,' '));
-    os<<in<<fullpath()
-        <<(_premanip? " premanip": "")
-        <<" code["<<_code.size()<<"]"
-        <<" sub["<<_sub.size()<<"]"
-        <<(_postmanip? "postmanip": "")
-        ;
+    os<<in<<fullpath()<<(_premanip? " premanip": "");
+    if(_code.size()) os<<" CODE["<<_code.size()<<"]";
+    if(_sub.size()) os<<" SUB["<<_sub.size()<<"]";
+    if(!_type.empty()) os<<" "<<_type;
+    os<<(_postmanip? "postmanip": "");
     for(auto s: _sub) s->dump(os,ind+1); // it's easy to generate **very** deep trees
     return os;
 }

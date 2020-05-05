@@ -52,15 +52,15 @@ template<> inline int64_t mod_inverse<int64_t>(int64_t const a)
 }
 //@}
 
+/// \group basic integer ops
+/// Do we even want C versions?  Maybe C frontends should
+/// just call into the C++ code that can use these.
+//@{
 /** is \c v some 2^N for N>0? */
 inline bool constexpr positivePow2(uint64_t v) {
     return ((v & (v-1)) == 0);
 }
 
-/// \group C++ jit utilities
-/// Do we even want C versions?  Maybe C frontends should
-/// just call into the C++ code that can use these.
-//@{
 /** A portable count-ones routine */
     template<typename T>
 inline int popcount(T const n) 
@@ -72,13 +72,6 @@ inline int popcount(T const n)
     }
     return count;
 }
-
-/** \b if positivePow2(v) && v=2**N for N>0, \b then we return N. */
-inline int /*constexpr*/ positivePow2Shift(uint32_t v) {
-    //assert( positivePow2(v)
-    return multiplyDeBruijnBitPosition2[(uint32_t)(v * 0x077CB531U) >> 27];
-}
-//@}
 
 /** greatest common denominator, for a,b > 0 */
     template<typename T>
@@ -125,6 +118,8 @@ inline void extendedEuclid( T& k, T a, T& j, T b, T& g)
     k = xLast;
     j = yLast;
 }
+//@}
+
 //@} int arithmetic helpers
 
 /** fast integer division for \em unsigned 21-bit A/D as A*magic(D)>>42.
@@ -150,4 +145,5 @@ struct FastDiv21{
 };
 inline constexpr FastDiv21::FastDiv21(uint32_t const d) : _m(magic(d)), _d(d) {}
 
+// vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
 #endif // INTUTIL_HPP

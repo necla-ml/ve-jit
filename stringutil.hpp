@@ -56,6 +56,11 @@ inline std::string asDec(std::size_t s){
 
 /// \group string modification
 //@{
+/** This is q quick'n'dirty std::regex replacement.
+ * To do more complex things, like replace \e word \c needle,
+ * you can pull in &lt;regex&gt; and instead do something like:
+ * ```std::regex_replace(haystack,std::regex("\\b"+needle+"\\b"),replace);```
+ */
 inline std::string multiReplace(
         const std::string needle,
         const std::string replace,
@@ -230,7 +235,8 @@ std::string vecprt(int const n, int const wide, std::vector<T> v, int const vl){
     return oss.str();
 }
 
-/** open and close a tmp file from \c mkstemp, returning its name. */
+/** open and close a tmp file from \c mkstemp, returning its name.
+ * Cygwin would have to use _mktemp, I think. */
 inline std::string my_tmpnam() {
     std::string templ("tmpXXXXXX");
     char * templ_data = const_cast<char*>(templ.data()); // c++17 for non-const 'data()'

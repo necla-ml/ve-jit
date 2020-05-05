@@ -185,10 +185,29 @@ struct VecHash2 {
             std::string tmp );
     static void kern_asm_end( AsmFmtCols &a );
     // output 'C' code snippets
-    static void kern_C_begin( cprog::Cblock &defines, cprog::Cblock &state,
+    /** output 'C' code snippets to JIT code tree.
+     * \p outer     function scope, (where outer loops go)
+     * \p inner     inner loop scope
+     * \p defines   sub-block of inner loop scope
+     * - Simple apps can use outer==inner==defines and omit passing outer and inner.
+     * - You may also pass only inner and defines and we'll assume outer==inner. */
+    static void kern_C_begin( cprog::Cblock &outer, cprog::Cblock &inner,
+            cprog::Cblock &defines,
             char const* client_vs=nullptr, uint32_t const seed=0 );
+    static void kern_C_begin( cprog::Cblock &inner,
+            cprog::Cblock &defines,
+            char const* client_vs=nullptr, uint32_t const seed=0 ){
+        kern_C_begin(inner,inner,defines,client_vs,seed);
+    }
+    static void kern_C_begin(
+            cprog::Cblock &defines,
+            char const* client_vs=nullptr, uint32_t const seed=0 ){
+        kern_C_begin(defines,defines,defines,client_vs,seed);
+    }
     static void kern_C( cprog::Cblock &parent,
             std::string va, std::string vb, std::string vl, std::string hash);
+    /** strings `{"macname(VA,VB,VL,HASH)", "do{...}while(0)"}` */
+    static std::pair<std::string,std::string> kern_C_macro(std::string macname);
     static void kern_C_end( cprog::Cblock &cb );
   private:
     void init(){
@@ -266,14 +285,9 @@ class VecHashMvl {
      */
     VecHashMvl( uint32_t const seed=0 )
         : /*mvl(VecHashMvl_MVL),*/ mem(new uint64_t[mvl*4])
-          //, hashVal(scramble64::r2)
-          //, j((uint64_t)seed<<32) //, j0(j)
           // vs,vx,vy simulate vector registers
           // (better if the memory is on separate cache pages)
           , vs(mem+0*mvl), vx(mem+1*mvl), vy(mem+2*mvl), vz(mem+3*mvl)
-#ifndef NDEBUG
-          //, nCombine(0)
-#endif
     {
         if(!mem) THROW("Out of memory");
         init((uint64_t)seed<<32);
@@ -292,14 +306,15 @@ class VecHashMvl {
     }
 #endif
     /** If only a few times you need lower vector length,
-     * OR if mvl is 256 and you have a VMV vector rotate [by 256]. */
+     * OR if mvl is 256 and you have a VMV vector rotate [by 256].
+     * **NOT WORKING** */
     void hash_combine( uint64_t const* v, int const vl ){
         assert( vl > 0 && vl <= mvl ); // vl==0 OK, but wasted work.
         using namespace scramble64;
         VFOR(i,vl) vy[i] = r1 * vs[i];       // hash of vs[]=j..j+vl-1
-        VFOR(i,vl) vx[i] = r2 * vx[i];       // vx *= r1
+        VFOR(i,vl) vx[i] = r2 * v [i];       // vx = r1*v[]
         VFOR(i,vl) vy[i] = vy[i] ^ vx[i];    // vx ^= hash_vs[]
-        // stop now.  Full Merkle-Damgard would also:
+        // stop now.  Full block cipher might also do:
         //      VFOR(i,vl) vy[i] = r3 * vy[i];
         //      VFOR(i,vl) vy[i] = vy[i] ^ vx[i]
         //

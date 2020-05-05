@@ -1,0 +1,38 @@
+multiloop:
+for(0..ii)for(0..jj)...for(0..nn) etc.
+
+### TripleLoop(ii,jj,kk)
+1. fuse2(ii,jj)-->a[],b[]; for(kk)-->c[] KRN
+   - inner loop w/ ind't VL setting, good for high inner VL.
+     but only if this inner VL is higher than for (2.)
+2. fuse2(ii*jj, kk)-->ij[],c[]; (a,b)=divmod(ij,jj)
+   - this is good (without looking at VL settings)
+     because inner loop does not have an extra divmod
+3. fuse2(ii*kk, jj)-->ik[],b[]; (a,c)=divmod(ik,kk)
+   - inner loop with divmod, so fast divmod prefered
+4. fuse2(ii,jj*kk)->a[],jk[]; (b,c)=divmod(jk,kk)
+   - inner loop divmod, so fast divmod prefered
+
+### QuadLoop(ii,jj,kk,ll)
+1. fuse2(ii,jj) fuse(kk,ll)
+2. fuse2(ii,kk) fuse2(jj,ll)
+3. ...
+
+### Quint loops
+1. fuse2(ii,jj) for(mm) unroll(kk,ll)
+2. fuse2(ii*jj,kk*ll) for(mm) [divmod(ij,jj) divmod(kl,ll)]
+3. fuse2(ii*jj*kk,ll) for(mm) [divmod(ijk,ll); divmod(ij,jj)]
+4. fuse2(ii*jj*kk*ll) for(mm) [divmod(ijkl,ll); divmod(ijk,kk); divmod(ij,jj)]
+5. for(ii)for(jj) TripleLoop(kk,ll,mm)
+Choice could be governed by:
+- largest VL,
+- mask register re-use
+- outer loop splitting into masked/unmased variants
+1. 4. and 5. seem reasonable.
+
+## Other Optimization Techniques
+- loop splitting (maskfree sections?)
+- hand-unrolled inner kernels (e.g. 3x3 conv kernels)
+- symmetries in ii*kk, jj*ll --> nicer unrollings ("square"->register re-use
+- outer-loop vector-calc write+read (maybe a slowdown?) (with multiple VL's)
+

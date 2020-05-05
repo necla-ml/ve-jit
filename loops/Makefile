@@ -1,18 +1,21 @@
 SHELL=/bin/bash	
-NCXX:=nc++	
-CXX:=nc++
-#GXX:=g++
-GXX:=clang++
+NCXX:=nc++
+# on Aurora hosts, gcc is extremely old version, with incomplete <regex> impl, also missing iosfwd
+GCXX:=clang++
+# however, clang++ seems still to have ABI bugs.
+GCC:=clang
 CLANG_VI_FLAGS?=-show-spill-message-vec -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics
 CXXLANG_FLAGS:=-target linux-ve -O3 -mllvm $(CLANG_VI_FLAGS)
 
-.PHONY: all more force force-lib mega1-sample.log mega1
-all: fuse2 fuse2lin fuse3 mega1-sample.log
+.PHONY: all more ve force force-lib mega1-sample.log mega1
+all: fuse2 fuse2lin fuse3 mega1-sample.log cfuse2 cf3 cf4 cf5 fl6
 	@echo 'ALL DONE with make all'
 	@echo ' extra targets:'
 	@echo '    more  force-lib ../libjit1[-x86].a'
 	@echo '    mega1 mega1.log mega2 mega2.log mega1-sample.log'
 more: all tf2-1.log tf2-2.log tf2-3.log tf2-4.log tf2-0.log tf2-5.log tf2-m.log mega1-sample.log
+# These targets need access to ncc and VE hardware
+ve: cf3-sample.log cf3u-sample.log	
 
 # This may be somewhat lengthy
 force: force-lib
@@ -41,12 +44,12 @@ fuse2 fuse3 fuse2-ve fuse3-ve: $(COMMON_HDRS)
 fuse2: fuse2.cpp ../libjit1-x86.a ../libveli-x86.a
 	echo "CC=${CC}"
 	echo "LDLIBS=${LDLIBS}"
-	#g++ -Wall -Wno-unknown-pragmas -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
-	$(GXX) -Wall -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
+	#$(GCXX) -Wall -Wno-unknown-pragmas -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
 fuse3: fuse3.cpp ../libjit1-x86.a ../libveli-x86.a
 	echo "CC=${CC}"
 	echo "LDLIBS=${LDLIBS}"
-	$(GXX) -Wall -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 $(filter-out %.hpp,$^) -o $@ ${X86FLAGS} ${X86LIBS}
 fuse2-ve: fuse2.cpp ../libjit1.a ../libveli.a
 	echo "CC=${CC}"
 	echo "LDLIBS=${LDLIBS}"
@@ -80,6 +83,66 @@ mega1: Makefile fuse2
 	sort -r -n -k5 -k7 --stable $@-uniq.log > $@-uniqs.log
 mega1.log mega1-hash.log mega1-uniq.log mega1-uniqs.log:
 	if [ ! -f "$@" ]; then $(MAKE) mega1; fi
+mega1-cf3: Makefile cf3
+	# for VE, concentrate on example codes at VL=256 or 255.
+	rm -f $@.log; \
+	( \
+	for vlen in 256 255 254 16 8 9 15 13 12 11 10 7 6 5 4 3 24 48 127 128 253 2 1; do \
+	for jj in 3 4 5 6 7 8 9 10 11 12 13 14 16 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 36 40 41 42 43 48 60 63 64 72 84 85 86 128 160 192 224 255 256 257 384 511 512 513 640 768 896 992 1023 1024 1025 1152 1280 2 1; do \
+	for ii in `seq 1 16`; do \
+	echo "vl,ii,jj= $$vlen $$ii $$jj"; \
+	./cf3.sh $$vlen $$ii $$jj CHECK; \
+	rm -f cf/CHECK-$${vl}_$${ii}_$${jj}-vi{,.i,.s}; \
+	done; done; done; \
+	) >& $@.log;
+mega1-cf3u: Makefile cf3
+	# for VE, concentrate on example codes at VL=256 or 255.
+	rm -f $@.log; \
+	( \
+	for vlen in 256 255 254 16 8 9 15 13 12 11 10 7 6 5 4 3 24 48 127 128 253 2 1; do \
+	for jj in 3 4 5 6 7 8 9 10 11 12 13 14 16 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 36 40 41 42 43 48 60 63 64 72 84 85 86 128 160 192 224 255 256 257 384 511 512 513 640 768 896 992 1023 1024 1025 1152 1280 2 1; do \
+	for ii in `seq 1 16`; do \
+	echo "vl,ii,jj= $$vlen $$ii $$jj"; \
+	./cf3u.sh $$vlen $$ii $$jj CHECK; \
+	rm -f cf/CHECK-$${vl}_$${ii}_$${jj}-vi{,.i,.s}; \
+	done; done; done; \
+	) >& $@.log;
+mega1-cf4: Makefile cf4
+	# for VE, concentrate on example codes at VL=256 or 255.
+	rm -f $@.log; \
+	( \
+	for vlen in 256 255 254 16 8 9 15 13 12 11 10 7 6 5 4 3 24 48 127 128 253 2 1; do \
+	for jj in 3 4 5 6 7 8 9 10 11 12 13 14 16 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 36 40 41 42 43 48 60 63 64 72 84 85 86 128 160 192 224 255 256 257 384 511 512 513 640 768 896 992 1023 1024 1025 1152 1280 2 1; do \
+	for ii in `seq 1 16`; do \
+	echo "vl,ii,jj= $$vlen $$ii $$jj"; \
+	./cf4u.sh $$vlen $$ii $$jj CHECK 8; \
+	rm -f tmpcf4u8/CHECK-$${vl}_$${ii}_$${jj}-vi{,.i,.s}; \
+	done; done; done; \
+	) >& $@.log;
+mega1-cf5: Makefile cf5
+	# for VE, concentrate on example codes at VL=256 or 255.
+	rm -f $@.log; \
+	( \
+	for vlen in 256 255 254 16 8 9 15 13 12 11 10 7 6 5 4 3 24 48 127 128 253 2 1; do \
+	for jj in 3 4 5 6 7 8 9 10 11 12 13 14 16 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 36 40 41 42 43 48 60 63 64 72 84 85 86 128 160 192 224 255 256 257 384 511 512 513 640 768 896 992 1023 1024 1025 1152 1280 2 1; do \
+	for ii in `seq 1 16`; do \
+	echo "vl,ii,jj= $$vlen $$ii $$jj"; \
+	./cf.sh cf5 $$vlen $$ii $$jj CHECK 8; \
+	rm -f tmpcf4u8/CHECK-$${vl}_$${ii}_$${jj}-vi{,.i,.s}; \
+	done; done; done; \
+	) >& $@.log;
+mega1-cf5u: Makefile cf5
+	# for VE, concentrate on example codes at VL=256 or 255.
+	rm -f $@.log; \
+	( \
+	for vlen in 256 255 254 16 8 9 15 13 12 11 10 7 6 5 4 3 24 48 127 128 253 2 1; do \
+	for jj in 3 4 5 6 7 8 9 10 11 12 13 14 16 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 36 40 41 42 43 48 60 63 64 72 84 85 86 128 160 192 224 255 256 257 384 511 512 513 640 768 896 992 1023 1024 1025 1152 1280 2 1; do \
+	for ii in `seq 1 16`; do \
+	echo "vl,ii,jj= $$vlen $$ii $$jj"; \
+	./cf.sh cf5 -a $$vlen $$ii $$jj CHECK 8; \
+	rm -f tmpcf4u8/CHECK-$${vl}_$${ii}_$${jj}-vi{,.i,.s}; \
+	done; done; done; \
+	) >& $@.log;
 mega2: Makefile fuse2
 	rm -f $@.log; \
 	( \
@@ -100,79 +163,73 @@ mega1-sample.log: Makefile fuse2
 	#    stressing VL=256 and Vl=255
 	#    some code paths still have smaller VL examples
 	( echo "$@" \
-		&& ./fuse2 -t 256 4 1024 \
-		&& ./fuse2 -t 256 2 1024 \
-		&& ./fuse2 -t 256 3 1024 \
-		&& ./fuse2 -t 256 1 1024 \
-		&& ./fuse2 -t 256 8 992 \
-		&& ./fuse2 -t 256 1 768 \
-		&& ./fuse2 -t 256 3 768 \
-		&& ./fuse2 -t 256 4 768 \
-		&& ./fuse2 -t 256 2 768 \
-		&& ./fuse2 -t 256 3 512 \
-		&& ./fuse2 -t 256 2 512 \
-		&& ./fuse2 -t 256 1 512 \
-		&& ./fuse2 -t 256 4 512 \
-		&& ./fuse2 -t 256 6 384 \
-		&& ./fuse2 -t 256 2 384 \
-		&& ./fuse2 -t 256 4 384 \
-		&& ./fuse2 -t 256 5 384 \
-		&& ./fuse2 -t 256 3 257 \
-		&& ./fuse2 -t 256 1 257 \
-		&& ./fuse2 -t 256 7 257 \
-		&& ./fuse2 -t 256 2 257 \
-		&& ./fuse2 -t 256 2 256 \
-		&& ./fuse2 -t 256 4 256 \
-		&& ./fuse2 -t 256 3 256 \
-		&& ./fuse2 -t 256 8 255 \
-		&& ./fuse2 -t 256 16 160 \
-		&& ./fuse2 -t 256 12 160 \
-		&& ./fuse2 -t 256 8 160 \
-		&& ./fuse2 -t 256 9 64 \
-		&& ./fuse2 -t 256 12 64 \
-		&& ./fuse2 -t 256 13 64 \
-		&& ./fuse2 -t 256 16 64 \
-		&& ./fuse2 -t 256 13 60 \
-		&& ./fuse2 -t 256 16 48 \
-		&& ./fuse2 -t 256 16 33 \
-		&& ./fuse2 -t 256 9 32 \
-		&& ./fuse2 -t 256 16 32 \
-		&& ./fuse2 -t 256 13 20 \
-		&& ./fuse2 -t 256 2 4 \
-		&& ./fuse2 -t 256 1 3 \
-		&& ./fuse2 -t 256 2 3 \
-		&& ./fuse2 -t 256 1 1 \
-		&& ./fuse2 -t 255 3 256 \
-		&& ./fuse2 -t 255 1 256 \
-		&& ./fuse2 -t 255 7 256 \
-		&& ./fuse2 -t 255 2 256 \
-		&& ./fuse2 -t 255 14 128 \
-		&& ./fuse2 -t 255 12 85 \
-		&& ./fuse2 -t 255 6 85 \
-		&& ./fuse2 -t 255 4 85 \
-		&& ./fuse2 -t 255 7 85 \
-		&& ./fuse2 -t 255 9 85 \
-		&& ./fuse2 -t 255 10 85 \
-		&& ./fuse2 -t 255 12 64 \
-		&& ./fuse2 -t 255 15 34 \
-		&& ./fuse2 -t 255 16 32 \
-		&& ./fuse2 -t 255 16 16 \
-		&& ./fuse2 -t 16 16 9 \
-		&& ./fuse2 -t 12 7 16 \
-		&& ./fuse2 -t 12 6 16 \
-		&& ./fuse2 -t 12 3 16 \
-		&& ./fuse2 -t 12 12 8 \
-		&& ./fuse2 -t 9 9 16 \
-		&& ./fuse2 -t 9 9 8 \
-		&& ./fuse2 -t 9 9 4 \
-		&& ./fuse2 -t 9 16 4 \
-		&& ./fuse2 -t 9 9 2 \
-		&& ./fuse2 -t 8 16 1 \
-		&& ./fuse2 -t 8 9 1 \
-		&& ./fuse2 -t 7 15 1 \
-		&& ./fuse2 -t 5 16 1 \
-		&& ./fuse2 -t 5 15 1 \
-		&& ./fuse2 -t 4 16 1 \
+		&& ./mega1-sample.sh './fuse2 -t' \
+		&& echo "EVERYTHING LOOKS GOOD" \
+		) 2>&1 | tee $@
+.PRECIOUS: cf2-sample.log
+cf2-sample.log: Makefile cfuse2
+	( echo "$@" \
+		&& ./mega1-sample.sh ./cf2.sh \
+		&& echo "EVERYTHING LOOKS GOOD" \
+		) 2>&1 | tee $@
+.PRECIOUS: cf3-sample.log cf3u-sample.log
+cf3-sample.log: Makefile cf3
+	( echo "$@" \
+		&& ./mega1-sample.sh ./cf3.sh \
+		&& echo "EVERYTHING LOOKS GOOD" \
+		) 2>&1 | tee $@
+cf3u-sample.log: Makefile cf3
+	( echo "$@" \
+		&& ./mega1-sample.sh ./cf3u.sh \
+		&& echo "EVERYTHING LOOKS GOOD" \
+		) 2>&1 | tee $@
+.PRECIOUS: cf4-sample.log cf4u-sample.log
+cf4-sample.log: Makefile cf4
+	( echo "$@" \
+		&& ./mega1-sample.sh ./cf4u.sh CHECK 0 \
+		&& echo "EVERYTHING LOOKS GOOD" \
+		) 2>&1 | tee $@
+cf4u-sample.log: Makefile cf4
+	( echo "$@" \
+		&& ./mega1-sample.sh ./cf4u.sh \
+		&& echo "EVERYTHING LOOKS GOOD" \
+		) 2>&1 | tee $@
+.PRECIOUS: cf5u-sample.log cf5u-sample2.log cf5-sample.log cf5-sample2.log
+.PHONY: cf5-logs	
+cf5-logs: cf5
+	echo "cf5.log"   && ./cf5-sample2.sh "./cf5.sh   " CHECK 0 >& cf5.log
+	echo "cf5a.log"  && ./cf5-sample2.sh "./cf5.sh -a" CHECK 0 >& cf5a.log
+	echo "cf5u.log"  && ./cf5-sample2.sh "./cf5.sh   " CHECK 8 >& cf5u.log
+	echo "cf5ua.log" && ./cf5-sample2.sh "./cf5.sh -a" CHECK 8 >& cf5ua.log
+
+cf5-sample.log: Makefile cf5
+	( echo "$@" \
+		&& ./mega1-sample.sh ./cf5.sh CHECK 0 \
+		&& echo "EVERYTHING LOOKS GOOD" \
+		) 2>&1 | tee $@
+cf5-sample2.log: Makefile cf5
+	( echo "$@" \
+		&& ./cf5-sample2.sh ./cf5.sh CHECK 0 \
+		&& echo "EVERYTHING LOOKS GOOD" \
+		) 2>&1 | tee $@
+cf5u-sample.log: Makefile cf5
+	( echo "$@" \
+		&& CLANG_FLAGS="-Wall -Werror" ./mega1-sample.sh ./cf5.sh CHECK 8 \
+		&& echo "EVERYTHING LOOKS GOOD" \
+		) 2>&1 | tee $@
+cf5u-sample2.log: Makefile cf5
+	( echo "$@" \
+		&& CLANG_FLAGS="-Wall -Werror" ./cf5-sample2.sh ./cf5.sh CHECK 8 \
+		&& echo "EVERYTHING LOOKS GOOD" \
+		) 2>&1 | tee $@
+cf5u-sample3.log: Makefile cf5
+	( echo "$@" \
+		&& CLANG_FLAGS="-Wall -Werror" ./cf5-sample3.sh "./cf.sh cf5   " CHECK 8 \
+		&& echo "EVERYTHING LOOKS GOOD" \
+		) 2>&1 | tee $@
+cf5ua-sample3.log: Makefile cf5
+	( echo "$@" \
+		&& CLANG_FLAGS="-Wall -Werror" ./cf5-sample3.sh "./cf.sh cf5 -a" CHECK 8 \
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
 sample1.log: fuse2 Makefile
@@ -766,32 +823,119 @@ tf2-0.log: fuse2 Makefile tf2-3.log
 		&& echo "EVERYTHING LOOKS GOOD" \
 		) 2>&1 | tee $@
 mul_add_shr_div: mul_add_shr_div.cpp ../timer.h ../intutil.h
-	$(GXX) -Wall -std=c++11 -I.. -O3 $< -o $@
+	$(GCXX) -Wall -std=c++11 -I.. -O3 $< -o $@
 mul_add_shr_div-ve: mul_add_shr_div.cpp ../timer.h ../intutil.h
 	$(NCXX) $(CXXFLAGS) -fdiag-vector=2 -Wall -std=c++11 -I.. -O3 $< -o $@
 divrem: divrem.cpp ../timer.h ../intutil.h
-	$(GXX) -Wall -std=c++11 -I.. -O3 $< -o $@
+	$(GCXX) -Wall -std=c++11 -I.. -O3 -fdiag-vector=2 -fdiag-inline=2 $< -o $@
 divrem-ve: divrem.cpp ../timer.h ../intutil.h
 	$(NCXX) $(CXXFLAGS) -fdiag-vector=2 -Wall -std=c++11 -I.. -O3 $< -o $@
+	$(NCXX) -Wall -std=c++11 -I.. -O3 -S $< -o $@.s
 tdivmod: tdivmod.cpp ../timer.h ../intutil.h
-	$(GXX) -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
-	$(GXX) -Wall -std=c++11 -I.. -O3 -S $< -o $@.s
-	$(GXX) -Wall -std=c++11 -I.. -O3 $< -o $@
+	$(GCXX) -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
+	$(GCXX) -Wall -std=c++11 -I.. -O3 -S $< -o $@.s
+	$(GCXX) -Wall -std=c++11 -I.. -O3 $< -o $@
 tdivmod-ve: tdivmod.cpp ../timer.h ../intutil.h
 	clang++ ${CXXLANG_FLAGS} -Wall -std=c++11 -I.. -O3 -S $< -o $@.s
 	$(NCXX) $(CFLAGS) $@.s -o $@
 cfuse: cfuse.cpp ../libjit1-x86.a
-	$(GXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 cfuse2: cfuse2.cpp ../libjit1-x86.a ../fuseloop.hpp ../cblock.hpp ../vechash.hpp ./exechash.hpp
-	$(GXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+
+cf3-%.o: cf3-%.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} -c $< -o $@
+cf3-%-ve.o: cf3-%.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
+	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} -c $< -o $@
+cf3: cf3.cpp cf3-nounroll.o cf3-unroll.o ../libjit1-x86.a ../vechash.hpp ./exechash.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+cf3-ve: cf3.cpp cf3-nounroll-ve.o cf3-unroll-ve.o ../libjit1-ve.a ../vechash.hpp ./exechash.hpp
+	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+
+cf4-%.o: cf4-%.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} -c $< -o $@
+cf4-%-ve.o: cf4-%.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
+	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} -c $< -o $@
+cf4: cf4.cpp cf4-nounroll.o cf4-unroll.o ../libjit1-x86.a ../vechash.hpp ./exechash.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+cf4-ve: cf4.cpp cf4-nounroll-ve.o cf4-unroll-ve.o ../libjit1-ve.a ../vechash.hpp ./exechash.hpp
+	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+
+cf5-%.o: cf5-%.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} -c $< -o $@
+cf5-%-ve.o: cf5-%.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
+	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} -c $< -o $@
+cf5: cf5.cpp cf3-common.o cf5-nounroll.o cf5-unroll.o ../libjit1-x86.a ../vechash.hpp ./exechash.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+cf5-ve: cf5.cpp cf3-common-ve.o cf5-nounroll-ve.o cf5-unroll-ve.o ../libjit1-ve.a ../vechash.hpp ./exechash.hpp
+	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+.PHONY: cf5.log	
+cf5.log:	
+	{  ./cf.sh cf5 16 0:6:8 8 PRINT 0  \
+	&& ./cf.sh cf5 16 4:6:8 8 PRINT 0  \
+	&& ./cf.sh cf5 16 4:6:8 8 PRINT 0  \
+	&& ./cf.sh cf5 16 5:6:9 8 PRINT 0  \
+	&& ./cf.sh cf5 8 0:6:8 16 PRINT 0  \
+	&& ./cf.sh cf5 8 4:6:8 16 PRINT 0  \
+	&& ./cf.sh cf5 8 3:6:8 16 PRINT 0  \
+	&& echo YAY; \
+	} >& $@ && echo YAY || mv cf5.log cf5.err
+	stop here
+	{ ./cf.sh cf5 16 0:8 8 CHECK 0  \
+	&& ./cf.sh cf5 16 4:8 8 CHECK 0  \
+	&& ./cf.sh cf5 16 4:8 8 CHECK 0  \
+	&& ./cf.sh cf5 16 5:9 8 CHECK 0  \
+	&& ./cf.sh cf5 8 0:8 16 CHECK 0  \
+	&& ./cf.sh cf5 8 4:8 16 CHECK 0  \
+	&& ./cf.sh cf5 8 3:8 16 CHECK 0  \
+	&& echo YAY; \
+	} >& $@ && echo YAY || mv cf5.log cf5.err
+
+fl6.hpp: fl6-kernels.hpp ../fuseloop.hpp
+fl6-kernels.hpp: ../cblock.hpp
+fl6-kernels.o: fl6-kernels.cpp fl6-kernels.hpp ../cblock.hpp ../stringutil.hpp ../vechash.hpp ../fuseloop.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} -c $< -o $@
+fl6-%.o: fl6-%.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} -c $< -o $@
+fl6-%-ve.o: fl6-%.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
+	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} -c $< -o $@
+fl6: fl6.cpp fl6-kernels.o cf3-common.o fl6-nounroll.o fl6-unroll.o ../libjit1-x86.a ../vechash.hpp ./exechash.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+fl6-ve: fl6.cpp fl6-kernels-ve.o cf3-common-ve.o fl6-nounroll-ve.o fl6-unroll-ve.o ../libjit1-ve.a ../vechash.hpp ./exechash.hpp
+	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+fl6-bug: fl6-bug.cpp fl6-kernels.o ../libjit1-x86.a ../vechash.hpp ./exechash.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+fl6-bug2: fl6-bug.cpp fl6-kernels.o ../libjit1-x86.a ../vechash.hpp ./exechash.hpp
+	g++ -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+.PHONY:	fl6-prt fl6-run
+fl6-prt: # u~unroll a~alt-VL, This runs quickly since the JIT codes are only printed
+	@l=fl6x.log;   echo -n "$$l ... "; ./cf5-sample2.sh "./fl6 -kCHECK -u0" >& $$l && echo YAY || echo OHOH
+	@l=fl6y.log;   echo -n "$$l ... "; ./cf5-sample3.sh "./fl6 -kCHECK -u0" >& $$l && echo YAY || echo OHOH
+	@l=fl6xu.log;  echo -n "$$l ... "; ./cf5-sample2.sh "./fl6 -kCHECK -u8" >& $$l && echo YAY || echo OHOH
+	@l=fl6yu.log;  echo -n "$$l ... "; ./cf5-sample3.sh "./fl6 -kCHECK -u8" >& $$l && echo YAY || echo OHOH
+	@l=fl6xa.log;  echo -n "$$l ... "; ./cf5-sample2.sh "./fl6 -kCHECK -u0 -a" >& $$l && echo YAY || echo OHOH
+	@l=fl6ya.log;  echo -n "$$l ... "; ./cf5-sample3.sh "./fl6 -kCHECK -u0 -a" >& $$l && echo YAY || echo OHOH
+	@l=fl6xua.log; echo -n "$$l ... "; ./cf5-sample2.sh "./fl6 -kCHECK -u8 -a" >& $$l && echo YAY || echo OHOH
+	@l=fl6yua.log; echo -n "$$l ... "; ./cf5-sample3.sh "./fl6 -kCHECK -u8 -a" >& $$l && echo YAY || echo OHOH
+fl6-run: # u~unroll a~alt-VL
+	@l=fl6x-r.log;   echo -n "$$l ... "; ./cf5-sample2.sh "./fl.sh fl6" CHECK 0 >& $$l && echo YAY || echo OHOH
+	@l=fl6y-r.log;   echo -n "$$l ... "; ./cf5-sample3.sh "./fl.sh fl6" CHECK 0 >& $$l && echo YAY || echo OHOH
+	@l=fl6xu-r.log;  echo -n "$$l ... "; ./cf5-sample2.sh "./fl.sh fl6" CHECK 8 >& $$l && echo YAY || echo OHOH
+	@l=fl6yu-r.log;  echo -n "$$l ... "; ./cf5-sample3.sh "./fl.sh fl6" CHECK 8 >& $$l && echo YAY || echo OHOH
+	@l=fl6xa-r.log;  echo -n "$$l ... "; ./cf5-sample2.sh "./fl.sh fl6 -a" CHECK 0 >& $$l && echo YAY || echo OHOH
+	@l=fl6ya-r.log;  echo -n "$$l ... "; ./cf5-sample3.sh "./fl.sh fl6 -a" CHECK 0 >& $$l && echo YAY || echo OHOH
+	@l=fl6xua-r.log; echo -n "$$l ... "; ./cf5-sample2.sh "./fl.sh fl6 -a" CHECK 8 >& $$l && echo YAY || echo OHOH
+	@l=fl6yua-r.log; echo -n "$$l ... "; ./cf5-sample3.sh "./fl.sh fl6 -a" CHECK 8 >& $$l && echo YAY || echo OHOH
+
+
 cfuse3: cfuse3.cpp ../libjit1-x86.a
-	$(GXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 %: %.cpp
-	$(GXX) -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
-	$(GXX) -Wall -std=c++11 -I.. -O3 $< -o $@
+	$(GCXX) -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
+	$(GCXX) -Wall -std=c++11 -I.. -O3 $< -o $@
 clean:
 	rm -f *.i *.o *.gch a.out fuse2 fuse2lin fuse2-ve fuse3 fuse3-ve repro \
-		cfuse2 tdivmod tdivmod-ve
+		cfuse2 tdivmod tdivmod-ve cf3 cf3u cf3*.o
 	rm -f a.s  cblock cfuse libgcc_lucky.so
 	rm -f *.exe *.exe.stackdump
 realclean: clean	

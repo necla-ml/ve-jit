@@ -18,7 +18,7 @@ I'm surprised it's not more dramatic, as x86 CPU div instructions can have
 latencies as high as 80-90 cycles for 64-bit division on some CPUs, compared to
 mul at 3 cycles and bitwise ops at 1 cycle each.
 
-Proof of concept and timings shown below. series_len refers to the number of
+Proof of concept and timings shown below. vl refers to the number of
 modulus ops performed in series on a single var. That's to prevent the CPU from
 hiding latencies through parallelization.
 */
@@ -50,6 +50,7 @@ typedef long long unsigned llu;
 /* intutil.h FASTDIV (mul+shift) limit so intermediates fit in 64 bits */
 #define MAX_NUM FASTDIV_SAFEMAX
 
+#if 0 // moved to intutil.h
 #ifdef __ve
 struct fastdiv {
     u64 mul;
@@ -65,22 +66,15 @@ struct fastdiv {
     u32 _odiv;  /* save original divisor for modulo calc */
 };
 #endif
+#endif
 
 
-#ifdef __ve
 // based on intutil.hpp method
 struct fastdiv21 {
     u64 mul;
     u32 add;    /* always zero */
     u32 _odiv;  /* save original divisor for modulo calc */
 };
-#else
-struct fastdiv21 {
-    u64 mul;
-    u32 add;    /* always zero */
-    u32 _odiv;  /* save original divisor for modulo calc */
-};
-#endif
 
 static u32 num[NUM_NUMS];
 static u32 den[NUM_NUMS];
@@ -91,17 +85,6 @@ static u64 vfd_mul[NUM_NUMS];
 static u64 vfd_add[NUM_NUMS];
 static u64 vfd_shift[NUM_NUMS];
 static u64 vfd_odiv[NUM_NUMS];
-
-/* required for magic constant generation */
-u32 ulog2(u32 v) {
-    u32 r, shift;
-    r =     (v > 0xFFFF) << 4; v >>= r;
-    shift = (v > 0xFF  ) << 3; v >>= shift; r |= shift;
-    shift = (v > 0xF   ) << 2; v >>= shift; r |= shift;
-    shift = (v > 0x3   ) << 1; v >>= shift; r |= shift;
-                                            r |= (v >> 1);
-    return r;
-}
 
 /* generate constants for implementing a division with multiply-add-shift */
 void fastdiv_make(struct fastdiv *d, u32 divisor) {
@@ -148,18 +131,18 @@ void fastdiv21_make(struct fastdiv21 *d, u32 divisor) {
 #define FASTMOD_BRANCHLESS 0
 
 #if defined(__ve)
-//#define fastdiv(v,d) ((u32)(( (u64)(v)* (u32)((d)->mul) + (d)->add) >> 32) >> (d)->shift)
+//#define FASTDIV(v,d) ((u32)(( (u64)(v)* (u32)((d)->mul) + (d)->add) >> 32) >> (d)->shift)
 // equiv[x86] ~10% faster for VE (1088 ns @ 128)
-//#define fastdiv(v,d) ((u64)(( (u64)(v)* (u64)((d)->mul) + (d)->add) >> 32) >> (d)->shift)
+//#define FASTDIV(v,d) ((u64)(( (u64)(v)* (u64)((d)->mul) + (d)->add) >> 32) >> (d)->shift)
 // --> 995 ns for ve
-//#define fastdiv(v,d) ((u64)(( (u64)(v)* (u64)((d)->mul) + (d)->add) >> (32 + (d)->shift)))
-#define fastdiv(v,d) ((u64)(( (u64)(v)* (u64)((d)->mul) + (d)->add) >> ((d)->shift)))
+//#define FASTDIV(v,d) ((u64)(( (u64)(v)* (u64)((d)->mul) + (d)->add) >> (32 + (d)->shift)))
+#define FASTDIV(v,d) ((u64)(( (u64)(v)* (u64)((d)->mul) + (d)->add) >> ((d)->shift)))
 #else
-//#define fastdiv(v,d) ((u32)(( (u64)(v)* (u32)((d)->mul) + (d)->add) >> 32) >> (d)->shift)
+#define FASTDIV(v,d) ((u32)(( (u64)(v)* (u32)((d)->mul) + (d)->add) >> 32) >> (d)->shift)
 // equiv[x86] ~10% faster for VE (1088 ns @ 128)
-//#define fastdiv(v,d) ((u64)(( (u64)(v)* (u64)((d)->mul) + (d)->add) >> 32) >> (d)->shift)
+//#define FASTDIV(v,d) ((u64)(( (u64)(v)* (u64)((d)->mul) + (d)->add) >> 32) >> (d)->shift)
 #endif
-#define _fastmod(v,d) ((v) - fastdiv((v),(d)) * (d)->_odiv)
+#define _fastmod(v,d) ((v) - FASTDIV((v),(d)) * (d)->_odiv)
 
 //#define fastdiv21(v,d) ((u32)(((u64)(v) * (d)->mul + (d)->add) >> 32) >> 10) // 294 ns
 //#define fastdiv21(v,d) ((u32)(((u64)(v) * (d)->mul + 0) >> 32) >> 10) // 256 ns
@@ -290,21 +273,22 @@ int main(int argc, char **arg) {
     double fd21_npot_cyc;
     double fd21_pot_cyc;
 #if defined(__ve)
-    double vfd21_npot_cyc;
+    double vfdiv_npot_cyc = 0;
+    double vfd21_npot_cyc = 0;
     __vr vcookie=_vel_vbrdl_vsl(0,256);
 #endif
     u64 t0, t1;
     int s, r, i, j;
-    int series_len;
+    int vl;
     printf(" cyc2ns = %f __cycle=%llu, __cycle=%llu\n", cyc2ns, (llu)__cycle(), (llu)__cycle());
 
     builtin_npot_cyc = builtin_pot_cyc = 0;
     branching_npot_cyc = branching_pot_cyc = 0;
     branchless_npot_cyc = branchless_pot_cyc = 0;
-    vfd21_npot_cyc = fd21_npot_cyc = fd21_pot_cyc = 0;
+    fd21_npot_cyc = fd21_pot_cyc = 0;
 
     for (s = 8; s >= 0; --s) {
-        series_len = 1 << s;
+        vl = 1 << s;
         for (r = 0; r < NUM_RUNS; ++r) {
             /* built-in NPOT */
             fill_arrays();
@@ -312,7 +296,7 @@ int main(int argc, char **arg) {
             t0 = __cycle();
             for (i = 0; i < NUM_NUMS; ++i) {
                 u32 v = num[i];
-                for (j = 0; j < series_len; ++j) {
+                for (j = 0; j < vl; ++j) {
                     v %= den[i];
                 }
                 use_value(v);
@@ -326,16 +310,16 @@ int main(int argc, char **arg) {
             t0 = __cycle();
             for (u64 ii = 0; ii < NUM_NUMS; ++ii) {
                 u64 v = num[ii];
-                //for (j = 0; j < series_len; ++j) {
+                //for (j = 0; j < vl; ++j) {
                 //    v = _fastmod21(v, fd21+ii);
                 //    // equiv ?
                 //    //v = fastmod_uB(v,fd[ii].mul,fd[ii]._odiv); // slower for VE
                 //}
                 //  rewrite:
-                //for (j = 0; j < series_len; ++j)
+                //for (j = 0; j < vl; ++j)
                 //    v = v - ((v*fd21[ii].mul)>>FASTDIV_C)*fd21[ii]._odiv;
                 // rewrite: avoid struct, use vectors directly (same VE speed)
-                for (j = 0; j < series_len; ++j)
+                for (j = 0; j < vl; ++j)
                     v = v - ((v*vfd_mul[ii])>>FASTDIV_C) * vfd_odiv[ii];
                 use_value(v);
             }
@@ -343,31 +327,55 @@ int main(int argc, char **arg) {
             fd21_npot_cyc += (double)(t1 - t0) / NUM_NUMS;
 
 #if 1 && defined(__ve)
-            /* fd21 VEC */
-            assert( series_len <= 256 );
+            /* native VDIV VEC */
+            assert( vl <= 256 );
             fill_arrays21();
-			asm volatile ("###VE");
+			asm volatile ("###VEDIV");
             t0 = __cycle();
-            __vr v_mult = _vel_vld_vssl(8,vfd_mul,series_len);
-            __vr v_odiv = _vel_vld_vssl(8,vfd_odiv,series_len);
-            for (u64 ii = 0; ii < NUM_NUMS; ++ii) {
-                u64 n = num[ii];
-                //for (j = 0; j < series_len; ++j) {
-                //    v = _fastmod21(v, fd21+ii);
-                //}
-                __vr v = _vel_vbrdl_vsl(n,series_len);
-#if 0 // naive VDIV  vlen=256 --> 46 ns
-                __vr d = _vel_vdivul_vvvl(v, v_odiv,series_len);
-                __vr m = _vel_vmulul_vvvl(x, v_odiv,series_len);
-                v = _vel_vsubul_vvv(v,m);
-#else // vectorized FASTDIV vlen=256 --> 11 ns
-                __vr x = _vel_vmulul_vvvl(v, v_mult,series_len);
-                __vr y = _vel_vsrl_vvsl(x, FASTDIV_C,series_len);
-                __vr z = _vel_vmulul_vvvl(y, v_odiv,series_len);
-                v = _vel_vsubul_vvvl(v,z,series_len);
-#endif
-                //use_value(v);
-                vcookie = _vel_vxor_vvvl(vcookie,v,series_len);
+            {
+                //__vr const v_mult = _vel_vld_vssl(8,vfd_mul,vl);
+                __vr const v_odiv = _vel_vld_vssl(8,vfd_odiv,vl);
+                for (u64 ii = 0; ii < NUM_NUMS; ++ii) {
+                    u64 n = num[ii];
+                    // naive VDIV  vlen=256 --> 46 ns
+                    //for (j = 0; j < vl; ++j) {
+                    //    v = _fastmod21(v, fd21+ii);
+                    //}
+                    __vr d = _vel_vdivul_vsvl(n, v_odiv, vl);
+                    __vr m = _vel_vmulul_vvvl(d, v_odiv, vl);
+                    __vr v = _vel_vsubul_vsvl(n, m, vl);
+                    vcookie = _vel_vxor_vvvl(vcookie,v, vl);
+                }
+            }
+            t1 = __cycle();
+            vfdiv_npot_cyc += (double)(t1 - t0) / NUM_NUMS;
+
+            /* fd21 VEC */
+            assert( vl <= 256 );
+            fill_arrays21();
+			asm volatile ("###VE21");
+            t0 = __cycle();
+            {
+                //
+                // This modulo calc is 5.9 ns ~ independent of vl
+                // cf. VDIVUL approach of ~ 17 ns
+                // It is always much faster than "builtin %", for any VL
+                // It is beaten by scalar fastdiv for VL=1 (avoid need to set VL register!)
+                //
+                __vr const v_mult = _vel_vld_vssl(8,vfd_mul,vl);
+                __vr v_odiv = _vel_vld_vssl(8,vfd_odiv,vl);
+                for (u64 ii = 0; ii < NUM_NUMS; ++ii) {
+                    u64 n = num[ii];
+                    //for (j = 0; j < vl; ++j) {
+                    //    v = _fastmod21(v, fd21+ii);
+                    //}
+                    // vectorized FASTDIV vlen=256 --> 11 ns
+                    __vr x = _vel_vmulul_vsvl(n, v_mult, vl);
+                    __vr y = _vel_vsrl_vvsl(x, FASTDIV_C, vl);
+                    __vr z = _vel_vmulul_vvvl(y, v_odiv, vl);
+                    __vr v = _vel_vsubul_vsvl(n,z, vl);
+                    vcookie = _vel_vxor_vvvl(vcookie,v,vl);
+                }
             }
             t1 = __cycle();
             vfd21_npot_cyc += (double)(t1 - t0) / NUM_NUMS;
@@ -379,7 +387,7 @@ int main(int argc, char **arg) {
             t0 = __cycle();
             for (i = 0; i < NUM_NUMS; ++i) {
                 u64 v = num[i]; // u64 here is big win for VE
-                for (j = 0; j < series_len; ++j) {
+                for (j = 0; j < vl; ++j) {
                     v = _fastmod(v, fd+i);
                 }
                 use_value(v);
@@ -387,7 +395,7 @@ int main(int argc, char **arg) {
             t1 = __cycle();
             branchless_npot_cyc += (double)(t1 - t0) / NUM_NUMS;
 
-#if 0 // VE "best" for series_len = 128
+#if 0 // VE "best" for vl = 128
             // builtin_npot_cyc    : 1825 ns
             // fd21_npot_cyc       : 713 ns
             // branchless_npot_cyc : 815 ns
@@ -399,7 +407,7 @@ int main(int argc, char **arg) {
             t0 = __cycle();
             for (i = 0; i < NUM_NUMS; ++i) {
                 u32 v = num[i];
-                for (j = 0; j < series_len; ++j) {
+                for (j = 0; j < vl; ++j) {
                     v %= den[i];
                 }
                 use_value(v);
@@ -413,7 +421,7 @@ int main(int argc, char **arg) {
             t0 = __cycle();
             for (i = 0; i < NUM_NUMS; ++i) {
                 u64 v = num[i]; // no spped diff for u64/u32 [x86]
-                for (j = 0; j < series_len; ++j) {
+                for (j = 0; j < vl; ++j) {
                     v = _fastmod21(v, fd+i);
                 }
                 use_value(v);
@@ -427,7 +435,7 @@ int main(int argc, char **arg) {
             t0 = __cycle();
             for (i = 0; i < NUM_NUMS; ++i) {
                 u32 v = num[i];
-                for (j = 0; j < series_len; ++j) {
+                for (j = 0; j < vl; ++j) {
                     v = fastmod(v, fd+i);
                 }
                 use_value(v);
@@ -441,7 +449,7 @@ int main(int argc, char **arg) {
             t0 = __cycle();
             for (i = 0; i < NUM_NUMS; ++i) {
                 u32 v = num[i];
-                for (j = 0; j < series_len; ++j) {
+                for (j = 0; j < vl; ++j) {
                     v = fastmod(v, fd+i);
                 }
                 use_value(v);
@@ -455,7 +463,7 @@ int main(int argc, char **arg) {
             t0 = __cycle();
             for (i = 0; i < NUM_NUMS; ++i) {
                 u32 v = num[i];
-                for (j = 0; j < series_len; ++j) {
+                for (j = 0; j < vl; ++j) {
                     v = _fastmod(v, fd+i);
                 }
                 use_value(v);
@@ -469,7 +477,7 @@ int main(int argc, char **arg) {
             t0 = __cycle();
             for (i = 0; i < NUM_NUMS; ++i) {
                 u32 v = num[i];
-                for (j = 0; j < series_len; ++j) {
+                for (j = 0; j < vl; ++j) {
                     v = _fastmod(v, fd+i);
                 }
                 use_value(v);
@@ -487,10 +495,13 @@ int main(int argc, char **arg) {
         branchless_npot_cyc /= NUM_RUNS;
         branchless_pot_cyc /= NUM_RUNS;
         fd21_npot_cyc /= NUM_RUNS;
+#if defined(__ve)
+        vfdiv_npot_cyc /= NUM_RUNS;
         vfd21_npot_cyc /= NUM_RUNS;
+#endif
         fd21_pot_cyc /= NUM_RUNS;
 
-        printf("series_len = %d\n", series_len);
+        printf("vl = %d\n", vl);
         printf("----------------------------\n");
         if(builtin_npot_cyc    != 0)
             printf("builtin_npot_cyc    : %.1fns\n", to_ns_f(builtin_npot_cyc));
@@ -498,8 +509,12 @@ int main(int argc, char **arg) {
             printf("builtin_pot_cyc     : %.1f ns\n", to_ns_f(builtin_pot_cyc));
         if(fd21_npot_cyc       !=0)
             printf("fd21_npot_cyc       : %.1f ns\n", to_ns_f(fd21_npot_cyc));
+#if defined(__ve)
+        if(vfdiv_npot_cyc      !=0)
+            printf("vfdiv_npot_cyc       : %.1f ns\n", to_ns_f(vfdiv_npot_cyc));
         if(vfd21_npot_cyc      !=0)
             printf("vfd21_npot_cyc       : %.1f ns\n", to_ns_f(vfd21_npot_cyc));
+#endif
         if(fd21_pot_cyc        !=0)
             printf("fd21_pot_cyc        : %.1f ns\n", to_ns_f(fd21_pot_cyc));
         if(branching_npot_cyc  !=0)
@@ -522,7 +537,7 @@ int main(int argc, char **arg) {
 Results
 Intel Core i5 (MacBookAir7,2), macOS 10.11.6, clang 8.0.0
 
-series_len = 32
+vl = 32
 ----------------------------
 builtin_npot_cyc    : 218 ns
 builtin_pot_cyc     : 225 ns
@@ -531,7 +546,7 @@ branching_pot_cyc   : 42 ns
 branchless_npot_cyc : 110 ns
 branchless_pot_cyc  : 110 ns
 
-series_len = 16
+vl = 16
 ----------------------------
 builtin_npot_cyc    : 87 ns
 builtin_pot_cyc     : 89 ns
@@ -540,7 +555,7 @@ branching_pot_cyc   : 19 ns
 branchless_npot_cyc : 45 ns
 branchless_pot_cyc  : 45 ns
 
-series_len = 8
+vl = 8
 ----------------------------
 builtin_npot_cyc    : 32 ns
 builtin_pot_cyc     : 34 ns
@@ -549,7 +564,7 @@ branching_pot_cyc   : 10 ns
 branchless_npot_cyc : 17 ns
 branchless_pot_cyc  : 17 ns
 
-series_len = 4
+vl = 4
 ----------------------------
 builtin_npot_cyc    : 15 ns
 builtin_pot_cyc     : 16 ns
@@ -558,7 +573,7 @@ branching_pot_cyc   : 3 ns
 branchless_npot_cyc : 7 ns
 branchless_pot_cyc  : 7 ns
 
-series_len = 2
+vl = 2
 ----------------------------
 builtin_npot_cyc    : 8 ns
 builtin_pot_cyc     : 7 ns

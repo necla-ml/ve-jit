@@ -18,3 +18,24 @@ tdivmod-ve
 tdivmod
 tdivmod-ve.s
 tdivmod.s
+cfuse2*.log
+cf3
+cf
+cfu
+cf2
+cf*.log
+tmp*-vi
+tmp*-vi.c
+tmp*-vi.s
+cf*-vi.c
+cf3-ve
+cf4
+a-ve
+tmpcf4*
+cf5
+cf5-nounroll.o cf5-unroll.o
+tmpcf*
+*.rej
+fl6
+old
+fl*.log

@@ -255,10 +255,10 @@ ifneq (${BIN_MK_VERBOSE},0)
 	@#ls -l
 endif
 	@#$(MAKE) $*-vi_bin.asm # Why does make not find this rule?
-	$(CLANG) $(filter-out -fPIC,$(CLANG_FLAGS)) -ggdb -S $< -o $*-vi_bin.s
-	$(NCC) $(CFLAGS) -o $*-vi_bin.o -c $*-vi_bin.s
-	nobjdump -DS -j .text $*-vi_bin.o >& $*-vi_bin.asm
-	rm -f $*-vi_bin.s $*-vi_bin.o
+	#$(CLANG) $(filter-out -fPIC,$(CLANG_FLAGS)) -ggdb -S $< -o $*-vi_bin.s
+	#$(NCC) $(CFLAGS) -o $*-vi_bin.o -c $*-vi_bin.s
+	#nobjdump -DS -j .text $*-vi_bin.o >& $*-vi_bin.asm
+	#rm -f $*-vi_bin.s $*-vi_bin.o
 	# the official compile "as is"
 	$(CLANG) $(CLANG_FLAGS) -fPIC -S $< -o $*-vi.s
 	$(NCC) $(CFLAGS) -o $@ -c $*-vi.s
@@ -298,6 +298,8 @@ endif
 	# this one might not be supported?
 	$(CXXLANG) $(CXXLANG_VFLAGS)       -S $< -o $*-vi_cpp.s
 	$(CXXLANG) $(CXXLANG_VFLAGS) -fPIC -c $< -o $@
+%-ve: %-ve.o
+	$(NCXX) $(CXXFLAGS) $< -o $@
 # Aurora assembler.S: cpp->.asm, ncc->.o, nobjcopy->.bin, .bin-->.dump
 ifeq ($(VERBOSE),0)
 %.bin: %.S
