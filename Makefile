@@ -264,8 +264,14 @@ fuseloop-ve.o: fuseloop.cpp fuseloop.hpp
 	$(CXX) $(CXXFLAGS) -Wall -Werror -c $< -o $@
 ve_divmod-ve.o: ve_divmod.cpp
 	$(CXX) $(CXXFLAGS) -Wall -Werror -c $< -o $@
+# recall...
+#libjit1.a: asmfmt-ve.o jitpage-ve.o intutil-ve.o \
+#	vechash-ve.o cblock-ve.o asmblock-ve.o dllbuild-ve.o bin.mk-ve.lo ve-msk-ve.o \
+#	fuseloop-ve.o ve_divmod-ve.o
+# Note: when sources change, it is actually CMakeLists.txt that governs
+#       special compiles for libjit1_omp_ft.so and such (omp ~ OpenMP; ft ~ ftrace support)
 libjit1.so: jitpage.lo intutil.lo bin.mk-ve.lo \
-	asmfmt.lo asmblock-ve.lo cblock-ve.lo dllbuild-ve.lo fuseloop-ve.lo ve_divmod-ve.lo # C++ things
+	vechash.lo asmfmt.lo asmblock-ve.lo cblock-ve.lo dllbuild-ve.lo fuseloop-ve.lo ve_divmod-ve.lo # C++ things
 	$(CXX) -o $@ -shared -Wl,-trace -wL,-verbose $^ #-ldl #-lnc++
 	$(READELF) -h $@
 	$(READELF) -d $@

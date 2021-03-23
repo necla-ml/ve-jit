@@ -1,7 +1,7 @@
 /* Copyright (c) 2019 by NEC Corporation
  * This file is part of ve-jit */
 /** \file
- * vector mask tests
+ * vector mask tests.
  */
 #include <cassert>
 #include <iostream>
@@ -19,6 +19,13 @@
  * - %s13,%s12,%s18,%s19 scratch registers
  * - Assume these assembler inline are non-recursive,
  *   so scratch regs can be re-used. Seq macros OK.
+ * 
+ * Use these macros to generate quit <B>test code</B>.
+ * They encapsulate common asm idioms, perhaps forming a reference
+ * set of useful idioms.
+ *
+ * However, functions built like this aren't too useful, because
+ * they won't be inlined by nc++.
  */
 //@{
 #define STR0(s...) #s
@@ -122,7 +129,9 @@
         /*                   */ STR(and %s13,%s13,(32)1\n\t) \
         /*                   */ STR(lsv V(0),%s13) \
         /*                   */ ,:::"%s13",STR(V))
-/** 0 1 ... 511 +---> 0 0 1 ... 510 */
+/** 0 1 ... 511 +---> 0 0 1 ... 510.
+ * Unfortunately, such VE pipeline ops are often too slow
+ * to be of much use. */
 #define pv_movr_1z(V,Vin, Vrotl2,Snegone) ASM(STR(vmv Vrotl2,Snegone,Vin\n\t) \
         /*                   */ STR(vshf V, Vin,Vrotl2,6\n\t) \
         /*                   */ STR(lvs %s13,V(0)\n\t) \

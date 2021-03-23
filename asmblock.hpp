@@ -116,7 +116,7 @@ struct AsmbmanipBase {
     virtual ~AsmbmanipBase() {}
     Asmunit* getRoot() const;
   protected:
-    friend class Asmblock;
+    friend struct Asmblock;
     AsmbmanipBase() : ab(nullptr) {}
     AsmbmanipBase(Asmblock& ab) : ab(&ab) {}
 };
@@ -275,7 +275,7 @@ struct Asmblock : AsmFmtVe {
      */
     Asmblock& unlink();
   private:
-    friend class AsmbmanipBase;
+    friend struct AsmbmanipBase;
     struct Asmunit * const _root;
     struct Asmblock * _parent;
   private:

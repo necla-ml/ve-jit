@@ -177,7 +177,8 @@ add_library(${LIBJIT} ${LIB_MODE}
     $<TARGET_OBJECTS:jit1_code>
     )
 add_library(jit1_code OBJECT
-    asmfmt.cpp cblock.cpp dllbuild.cpp
+    asmfmt.cpp cblock.cpp dllbuild.cpp # original codes
+    vechash.cpp asmblock.cpp cblock.cpp fuseloop.cpp ve_divmod.cpp # new codes
     jitpage.c bin_mk.c intutil.c
     )
 add_custom_command(
