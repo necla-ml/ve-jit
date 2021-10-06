@@ -859,6 +859,10 @@ void test_cblock_dump(){
 /** based on a very short (slow) direct_default3.c */
 string cjitConvolutionForward00( int const verbosity=0 /*struct param const* const p*/ )
 {
+    //
+    // This is TEST CODE -- it won't run anymore because of usage of _ve_ intrinsics
+    // (Can update with libvednn/test newer version)
+    //
     Cunit pr("program");
     pr["includes"]<<Endl<<CSTR(#include "vednn.h")
         <<Endl<<CSTR(#include "veintrin.h")

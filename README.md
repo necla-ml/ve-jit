@@ -18,6 +18,18 @@ Cblock method that builds up a program as a DAG of snippets.  I want to avoid
 the current hand-stitching of assembler snippets, where you basically have to
 read the output before seeing if it is like you expect.
 
+The following old files need _vel_ updates:
+```
+[aurora-ds08 jit]$ ack -l _ve_ ./*.{h,hpp,c,cpp}
+./timer.h			# OK appears as __ve__
+./fuseloop.hpp			# OK appears in comment as _ve_lvl call
+./cjitConvFwd_parmstr-vi.c	# I think old demo code - unused?
+./cblock.cpp			# demo code only (ignorable)
+./libjit1-cxx.cpp		# a concatenation of various .cpp files
+./ve_divmod.cpp			# NEEDS UPDATE
+./vechash.cpp			# NEEDS UPDATE
+```
+
 ### Build
 ##### First set up your ncc/nc++ environment
 
