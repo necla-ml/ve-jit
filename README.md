@@ -1,7 +1,8 @@
 ### VE JIT support (very alpha!)
 
-I'd like to JIT 'C'+intrinisics, but there are still dynamic loader issues.
-So I'm still producing assembly JIT code.
+We can JIT to 'C' + intrinsics clang code, or to VE assembler.
+Currently, libvednn uses the 'C' + intrinsics approach, since it
+relieves algorithms from having to hand-allocate registers (much easier).
 
 Since there is no built-in assembler yet, I mostly try to make generated
 assembly code fairly readable.  ncc(/nas) with nobjcopy produced executable
