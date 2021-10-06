@@ -147,12 +147,6 @@ jitve_math: jitve_math.c jitpage-ve.o bin.mk
 	$(CC) $(CFLAGS) -O2 $(filter-out bin.mk,$^) -o $@ -ldl
 	$(CC) $(CFLAGS) -Wa,-adhln -c $< >& $(patsubst %.c,%.asm,$<)
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
-# vechash is a prototype kernel that updates a hash of a sequence of
-# 1 or two vector registers. Usable to compare correctness of asm code
-# with an equiv 'C' impl.
-test_vechash-x86: test_vechash.cpp ../vechash.cpp ../asmfmt.cpp ../jitpage.c ../intutil.c
-	g++ ${CXXFLAGS} $(filter %.cpp,$^) $(filter %.c,$^) -o $@ -ldl
-	#{ ./$@; echo "exit status $$?"; }
 # this also can run on host, in seconds rather than minutes,
 # because we do not execute the jit page
 # [we create the jit page string, and then hexdump and disassemble it]
@@ -162,12 +156,22 @@ test_vejitpage_sh: test_vejitpage_sh.cpp vejitpage.sh
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
 test_vejitpage_sh-x86: test_vejitpage_sh.cpp vejitpage.sh
 	g++ ${CXXFLAGS} $< -o $@
+	./$@ 2>&1 | tee $@.log
+test_vejitpage_sh-ve: test_vejitpage_sh.cpp vejitpage.sh
+	$(CXX) ${CXXFLAGS} $< -o $@
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
-test_vechash-ve: test_vechash.cpp ../vechash.cpp ../asmfmt.cpp ../jitpage.c ../intutil.c
+
+# vechash is a prototype kernel that updates a hash of a sequence of
+# 1 or two vector registers. Usable to compare correctness of asm code
+# with an equiv 'C' impl.
+test_vechash-x86: test_vechash.cpp ../cblock.cpp ../vechash.cpp ../asmfmt.cpp ../jitpage.c ../intutil.c
+	g++ ${CXXFLAGS} $(filter %.cpp,$^) $(filter %.c,$^) -o $@ -ldl
+	{ ./$@; echo "exit status $$?"; }
+test_vechash-ve: test_vechash.cpp ../vechash.cpp ../asmfmt.cpp ../cblock.cpp ../jitpage.c ../intutil.c
 	${CXX} ${CXXFLAGS} -E $< -o test_vechash.i
 	${CXX} ${CXXFLAGS} -S $(filter %.cpp,$^) $(filter %.c,$^)
 	${CXX} ${CXXFLAGS} $(filter %.cpp,$^) $(filter %.c,$^) -o $@ -ldl #-L. -ljit1-x86
-	#{ ./$@; echo "exit status $$?"; }
+	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
 
 # see vl-run.sh for running veli_loadreg tests
 # many tests only need veli_loadreg-x86

@@ -1,4 +1,4 @@
-make[2]: Entering directory `/r/home/nlabhpg/kruus/jit/bug'
+make[2]: Entering directory '/r/home/nlabhpg/kruus/jit/bug'
 { \
 	echo '#include <stdio.h>'; \
 	echo 'int main(int argc,char**argv){ if(argc) printf("Goodbye from %s\n",argv[0]); return 0; }'; \
@@ -58,24 +58,25 @@ Goodbye from ./a.out
 YAHOO
 ------------------------------------------------------------ END bug2
 
-make[2]: Leaving directory `/r/home/nlabhpg/kruus/jit/bug'
-make[2]: Entering directory `/r/home/nlabhpg/kruus/jit/bug'
+make[2]: Leaving directory '/r/home/nlabhpg/kruus/jit/bug'
+make[2]: Entering directory '/r/home/nlabhpg/kruus/jit/bug'
 CXX g++
 CXXFLAGS 
 g++ --version
-g++ (GCC) 4.8.5 20150623 (Red Hat 4.8.5-28)
-Copyright (C) 2015 Free Software Foundation, Inc.
+g++ (GCC) 8.4.1 20200928 (Red Hat 8.4.1-1)
+Copyright (C) 2018 Free Software Foundation, Inc.
 This is free software; see the source for copying conditions.  There is NO
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 ls -l
-total 44
--rw-r--r-- 1 nlabhpg 4gi   770 Mar 14 01:51 Makefile
--rwxr-xr-x 1 nlabhpg 4gi  8440 Mar 14 01:51 a.out
--rw-r--r-- 1 nlabhpg 4gi 13472 Mar 14 01:46 bug-ve.log
--rw-r--r-- 1 nlabhpg 4gi  2216 Mar 14 01:51 bug-x86.log
--rw-rw-r-- 1 nlabhpg 4gi  1702 Mar 14 01:43 bugN.mk
--rw-r--r-- 1 nlabhpg 4gi  1362 Mar 14 01:44 bugNc.mk
+total 48
+-rw-r--r-- 1 nlabhpg 4gi   770 Mar 14  2019 Makefile
+-rw-r--r-- 1 nlabhpg 4gi   335 Mar 14  2019 README.md
+-rwxrwxr-x 1 nlabhpg 4gi 17432 Oct  7 00:42 a.out
+-rw-r--r-- 1 nlabhpg 4gi  4375 Mar 14  2019 bug-ve.log
+-rw-r--r-- 1 nlabhpg 4gi  2215 Oct  7 00:42 bug-x86.log
+-rw-rw-r-- 1 nlabhpg 4gi  1702 Mar 14  2019 bugN.mk
+-rw-r--r-- 1 nlabhpg 4gi  1362 Mar 14  2019 bugNc.mk
 { \
 	echo '#include <iostream>'; \
 	echo '#include <iomanip>'; \
@@ -136,4 +137,4 @@ Goodbye
 YAHOO
 ------------------------------------------------------------ END bug2
 
-make[2]: Leaving directory `/r/home/nlabhpg/kruus/jit/bug'
+make[2]: Leaving directory '/r/home/nlabhpg/kruus/jit/bug'

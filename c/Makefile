@@ -11,7 +11,7 @@ CXXFLAGS:=$(CFLAGS) -std=c++11
 VE_EXEC:=time
 OBJDUMP:=objdump
 OBJCOPY:=objcopy
-TARGETS+=test_strMconst-x86
+TARGETS+=test_strMconst-ve
 
 else
 CFLAGS:=-O2 -g2
@@ -29,7 +29,9 @@ CFLAGS+=-std=c99
 CFLAGS+=-I..
 CXXFLAGS+=-I..
 
-all: $(TARGETS)
+all: help $(TARGETS)
+help:
+	echo 'targets: $(TARGETS)'
 
 jitpage-ve.o: $(VEJIT_ROOT)/jitpage.c $(VEJIT_ROOT)/jitpage.h
 	$(CC) $(CFLAGS) -D_GNU_SOURCE -c $< -o $@ -ldl
@@ -43,10 +45,10 @@ test_strMconst-ve: test_strMconst.c jitpage-ve.o
 	$(CC) $(CFLAGS) -O2 $^ -o $@ -ldl
 	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
 test_strMconst-x86: test_strMconst.c jitpage-x86.o
-	$(CC) $(CFLAGS) -O2 $^ -o $@ -ldl
-	$(VE_EXEC) ./$@ 2>&1 | tee $@.log
+	gcc $(CFLAGS) -O2 $^ -o $@ -ldl
+	./$@ 2>&1 | tee $@.log
 
 clean:
 	rm -f *.o *.i tmp*.S a.out ftrace.out *.gch 2
 realclean: clean	
-	rm -f $(TARGETS) *.log
+	rm -f test_strMconst-ve test_strMconst-x86 $(TARGETS) *.log

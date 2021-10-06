@@ -1,4 +1,4 @@
-make[2]: Entering directory `/r/home/nlabhpg/kruus/jit/bug'
+make[2]: Entering directory '/r/home/nlabhpg/kruus/jit/bug'
 { \
 	echo '#include <stdio.h>'; \
 	echo 'int main(int argc,char**argv){ if(argc) printf("Goodbye from %s\n",argv[0]); return 0; }'; \
@@ -58,21 +58,22 @@ Goodbye from ./a.out
 YAHOO
 ------------------------------------------------------------ END bug2
 
-make[2]: Leaving directory `/r/home/nlabhpg/kruus/jit/bug'
-make[2]: Entering directory `/r/home/nlabhpg/kruus/jit/bug'
+make[2]: Leaving directory '/r/home/nlabhpg/kruus/jit/bug'
+make[2]: Entering directory '/r/home/nlabhpg/kruus/jit/bug'
 CXX nc++
 CXXFLAGS 
 nc++ --version
-nc++ (NCC) 2.1.24 (Build 11:08:29 Mar 11 2019)
-Copyright (C) 2018,2019 NEC Corporation.
+nc++ (NCC) 3.3.20 (Build 08:41:17 Aug 31 2021)
+Copyright (C) 2018,2021 NEC Corporation.
 ls -l
-total 48
--rw-r--r-- 1 nlabhpg 4gi   770 Mar 14 01:51 Makefile
--rwxr-xr-x 1 nlabhpg 4gi 24280 Mar 14 01:51 a.out
--rw-r--r-- 1 nlabhpg 4gi  2173 Mar 14 01:51 bug-ve.log
--rw-r--r-- 1 nlabhpg 4gi  4294 Mar 14 01:51 bug-x86.log
--rw-rw-r-- 1 nlabhpg 4gi  1702 Mar 14 01:43 bugN.mk
--rw-r--r-- 1 nlabhpg 4gi  1362 Mar 14 01:44 bugNc.mk
+total 40
+-rw-r--r-- 1 nlabhpg 4gi  770 Mar 14  2019 Makefile
+-rw-r--r-- 1 nlabhpg 4gi  335 Mar 14  2019 README.md
+-rwxrwxr-x 1 nlabhpg 4gi 8416 Oct  7 00:42 a.out
+-rw-r--r-- 1 nlabhpg 4gi 2173 Oct  7 00:42 bug-ve.log
+-rw-r--r-- 1 nlabhpg 4gi 4347 Oct  7 00:42 bug-x86.log
+-rw-rw-r-- 1 nlabhpg 4gi 1702 Mar 14  2019 bugN.mk
+-rw-r--r-- 1 nlabhpg 4gi 1362 Mar 14  2019 bugNc.mk
 { \
 	echo '#include <iostream>'; \
 	echo '#include <iomanip>'; \
@@ -103,8 +104,8 @@ nc++ -o hdrs1.o  -fPIC -O2 -c hdrs1.cpp
 nc++ -o libvehdrs1.so -shared hdrs1.o 
 nc++ -o bug1  -fPIC -Wall -Werror -L. -Wl,-rpath,`pwd` bug0.cpp libvehdrs1.so 
 ./bug1 7 && echo "Exit status $?" || echo "OHOH Exit status $?"
-/bin/sh: line 1: 169584 Illegal instruction     ./bug1 7
-OHOH Exit status 132
+Goodbye
+Exit status 0
 Without library...
 nc++  -fPIC -Wall bug0.cpp && ./a.out && echo YAHOO
 Goodbye
@@ -125,12 +126,12 @@ nc++ -o hdrs2.o  -fPIC -O2 -c hdrs2.cpp
 nc++ -o libvehdrs2.so -shared hdrs2.o 
 nc++ -o bug2  -fPIC -Wall -Werror -L. -Wl,-rpath,`pwd` bug0.cpp libvehdrs2.so 
 ./bug2 7 && echo "Exit status $?" || echo "OHOH Exit status $?"
-/bin/sh: line 1: 170910 Illegal instruction     ./bug2 7
-OHOH Exit status 132
+Goodbye
+Exit status 0
 Without library...
 nc++  -fPIC -Wall bug0.cpp && ./a.out && echo YAHOO
 Goodbye
 YAHOO
 ------------------------------------------------------------ END bug2
 
-make[2]: Leaving directory `/r/home/nlabhpg/kruus/jit/bug'
+make[2]: Leaving directory '/r/home/nlabhpg/kruus/jit/bug'

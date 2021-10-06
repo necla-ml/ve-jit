@@ -56,8 +56,14 @@ void test_strMconst(void){
   assert(nerr==0);
 }
 
+#ifdef(__ve)
+static char const* target = "VE";
+#else
+static char const* target = "x86";
+#endif
+
 int main()
 {
   test_strMconst();      // recognize constants that can be written in (N)M bitstring format
-  printf(__FILE__ "DONE: Goodbye!\n");
+  printf(__FILE__ " for %s DONE: Goodbye!\n", target);
 }
