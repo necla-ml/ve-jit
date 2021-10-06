@@ -9,19 +9,28 @@
 #include <vector>
 #include <cstdio>   // tmpnam, tempnam?
 #include <unistd.h> // close
+#include <sstream>
 #include <iomanip>
 #include <algorithm>    // std::find?
 
-/// \group simple constant outputs
-//@{
-/** format arbitrary '<<' code into ostringstream \c oss, output as a line
- * to CBLOCK, and flush \c oss so it can be reused.
- * \pre there exists a scratch \c oss in current scope. */
-#define CBLK(CBLOCK,...) do{ oss<<__VA_ARGS__; CBLOCK>>oss.str(); oss.str(""); }while(0)
 /** Assuming ostringstream named \c oss, format some stuff returning a string,
  * and flush \c oss so it can be reused.
  * \pre there exists a scratch \c oss in current scope. */
 #define OSSFMT(...) (oss<<__VA_ARGS__, flush(oss))
+/** format arbitrary '<<' code into ostringstream \c oss, output as a line
+ * to CBLOCK, and flush \c oss so it can be reused.
+ * \pre there exists a scratch \c oss in current scope. */
+#define CBLK(CBLOCK,...) do{ oss<<__VA_ARGS__; CBLOCK>>oss.str(); oss.str(""); }while(0)
+/** nicely format instruction and comment to a Cblock.
+ * Ex: `INSCMT(cblk, OSSFMT("i=i+"<<increment<<";"), "jit increment")` */
+#define INSCMT(BLK,INS,CMT) do{ \
+    auto ins=(INS); \
+    auto cmt=(CMT); \
+    (BLK)>>OSSFMT(left<<setw(40)<<ins<<" // "<<cmt); \
+} while(0)
+
+/// \group simple constant outputs
+//@{
 /** Return current string, with side effect of emptying \c oss.
  * Aids ostringstream reuse during formatted string productions. */
 inline std::string flush(std::ostringstream& oss){
@@ -226,6 +235,16 @@ bool isimm(T const t){ // deprecated original name
 template<typename T>
 std::string vecprt(int const n, int const wide, std::vector<T> v, int const vl){
     assert( v.size() >= (size_t)vl );
+    std::ostringstream oss;
+    for(int i=0; i<vl; ++i){
+        if( i < n ){ oss<<" "<<std::setw(wide)<<v[i]; }
+        if( i == n && i < vl-n ){ oss<<" ... "; }
+        if( i >= n && i >= vl-n ){ oss<<" "<<std::setw(wide)<< v[i]; }
+    }
+    return oss.str();
+}
+template<typename T>
+std::string vecprt(int const n, int const wide, T* v, int const vl){
     std::ostringstream oss;
     for(int i=0; i<vl; ++i){
         if( i < n ){ oss<<" "<<std::setw(wide)<<v[i]; }

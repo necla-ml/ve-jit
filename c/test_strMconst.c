@@ -56,7 +56,7 @@ void test_strMconst(void){
   assert(nerr==0);
 }
 
-#ifdef(__ve)
+#if defined(__ve)
 static char const* target = "VE";
 #else
 static char const* target = "x86";

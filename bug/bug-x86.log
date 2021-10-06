@@ -72,9 +72,9 @@ ls -l
 total 48
 -rw-r--r-- 1 nlabhpg 4gi   770 Mar 14  2019 Makefile
 -rw-r--r-- 1 nlabhpg 4gi   335 Mar 14  2019 README.md
--rwxrwxr-x 1 nlabhpg 4gi 17432 Oct  7 00:42 a.out
--rw-r--r-- 1 nlabhpg 4gi  4375 Mar 14  2019 bug-ve.log
--rw-r--r-- 1 nlabhpg 4gi  2215 Oct  7 00:42 bug-x86.log
+-rwxrwxr-x 1 nlabhpg 4gi 17432 Oct  7 04:07 a.out
+-rw-rw-r-- 1 nlabhpg 4gi  4310 Oct  7 02:20 bug-ve.log
+-rw-rw-r-- 1 nlabhpg 4gi  2215 Oct  7 04:07 bug-x86.log
 -rw-rw-r-- 1 nlabhpg 4gi  1702 Mar 14  2019 bugN.mk
 -rw-r--r-- 1 nlabhpg 4gi  1362 Mar 14  2019 bugNc.mk
 { \

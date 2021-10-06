@@ -9,6 +9,14 @@ GCXX=clang++
 # major clean and rebuild tests:
 #   dllbuild
 
+# on Aurora hosts, gcc is extremely old version, with incomplete <regex> impl
+GCXX:=g++
+#GCXX:=clang++
+X86FLAGS?=
+LDFLAGS?=
+X86LIBS?=
+X86LIBS+=-ldl
+
 UNAME_S:=$(shell uname -s)
 OS:=$(patsubst(CYGWIN%,Cygwin,$(UNAME_S))
 ifeq ($(OS),Cygwin)
@@ -17,8 +25,16 @@ else
 READELF:=readelf
 endif
 
-ifneq ($(CC:ncc%=ncc),ncc)
+# The following idiom is fragile ..... :
+#    ifneq ($(CC:ncc%=ncc),ncc)
+# bash counterpart: COMPILE_TYPE=`${CC} --version 2>&1 | awk '{print $$1; exit}'`
+COMPILE_TYPE:=$(word 1,$(shell $(CC) --version 2>&1))
+$(if $(COMPILE_TYPE),,$(error could not determine C compiler type for CC=$(CC))) # VE(ncc) vs x86(gcc or ...)
+# ..... and should be replaceed with something like:
+#    ifneq ($(COMPILE_TYPE),ncc)
 
+ifneq ($(COMPILE_TYPE),ncc)
+$(info Only building a few x86 targets [CC=$(CC)])
 #
 # only a few things can compile for x86...
 #
@@ -31,6 +47,8 @@ SHELL:=/bin/bash
 CFLAGS:=-O2 -g2 -pthread
 CFLAGS+=-Wall -Werror
 CFLAGS+=-Wno-unknown-pragmas
+CFLAGS+=-DNDEBUG
+
 # note 'gnu' is needed to support extended asm in nc++
 #      17 allows assert inside constexpr, but gnu++17 is not ok for both nc++ and g++
 #      (17 not supported by gc++-4.8.5 on ds02)
@@ -40,6 +58,7 @@ LIBJIT1_TARGETS:=libjit1-x86.a libjit1-x86.so
 LIBJIT1_TARGETS+=libjit1-justc-x86.a # temporary
 LDFLAGS+=-ldl
 else
+$(info ncc compiler detected [CC=$(CC)])
 #
 # we may want to generate jit code on host OR ve
 # Ex. 1: Simple tests, libraries of complex kernels precompiled for VE:
@@ -75,11 +94,11 @@ TARGETS=libjit1.a libjit1-x86.a asmfmt-ve\
 #CXX:=nc++-1.6.0
 #CC:=ncc-2.1.28
 #CXX:=nc++-2.1.28
-
-CC:=ncc
-CXX:=nc++
-CFLAGS:=-O2 -g2
+#CC:=ncc
+#CXX:=nc++
+CFLAGS:=-O3 -g2
 CFLAGS+=-Wall -Werror
+CFLAGS+=-DNDEBUG
 #CXXFLAGS:=$(CFLAGS) -std=c++11 # does not allow extended asm -- need 'gnu' extensions...
 CXXFLAGS:=$(CFLAGS) -std=gnu++11
 VE_EXEC:=ve_exec
@@ -124,17 +143,24 @@ force: # force libs to be recompiled
 # for tarball...
 VEJIT_SHARE:=cblock.cpp ve-msk.cpp ve-asm/veli_loadreg.cpp dllbuild.cpp ve_divmod.cpp COPYING
 VEJIT_LIBS:=libjit1-x86.a libveli-x86.a libjit1-x86.so bin.mk-x86.lo
-VEJIT_LIBS+=libjit1-justc-x86.a libjit1-cxx-x86.lo # possible ld.so workaround
-ifeq ($(CC:ncc%=ncc),ncc)
+ifeq ($(COMPILE_TYPE),ncc)
 VEJIT_LIBS+=libjit1.a libveli.a libjit1.so bin.mk-ve.lo
+endif
+
+ifeq (0,1)
+# expanded tarball (old ncc linker issues)
+VEJIT_LIBS+=libjit1-justc-x86.a libjit1-cxx-x86.lo # possible ld.so workaround
+ifeq ($(COMPILE_TYPE),ncc)
 VEJIT_LIBS+=libjit1-justc-ve.a libjit1-cxx-ve.lo # possible ld.so workaround
 endif
+endif
+
 .PHONY: all-vejit-libs
 huh:
 	echo VEJIT_LIBS are $(VEJIT_LIBS)	
 all-vejit-libs:
 	./mklibs.sh 2>&1 | tee mklibs.log	# writes libs into vejit/lib/
-vejit.tar.gz: jitpage.h intutil.h vfor.h \
+vejit.tar.gz: jitpage.h intutil.h vfor.h timer.h \
 		intutil.hpp stringutil.hpp throw.hpp \
 		asmfmt_fwd.hpp asmfmt.hpp codegenasm.hpp velogic.hpp fuseloop.hpp ve_divmod.hpp \
 		cblock.hpp dllbuild.hpp \
@@ -154,13 +180,13 @@ vejit.tar.gz: jitpage.h intutil.h vfor.h \
 	$(MAKE) all-vejit-libs # libjit1[_omp][_ft][-x86].{a|so}
 	cp -av $(filter %.hpp,$^) $(filter %.h,$^) vejit/include/
 	cp -av pstreams-1.0.1 vejit/include/
-	cp -av $(filter %.a,$^) $(filter %.so,$^) $(filter bin.mk%,$^) $(filter %.lo,$^) vejit/lib/
+	cp -av $(filter %.a,$^) $(filter %.so,$^) $(filter %.lo,$^) vejit/lib/
 	cp -av $(filter %.cpp,$^) $(filter %.c,$^) vejit/share/vejit/src/
 	cp -av ${VEJIT_SHARE} vejit/share/vejit/
 	cp -av Makefile.share vejit/share/vejit/Makefile
 	tar czf $@.tmp vejit
 	tar tvzf $@.tmp vejit
-ifneq ($(CC:ncc%=ncc),ncc)
+ifeq ($(COMPILE_TYPE),ncc)
 	mv $@.tmp vejit-x86.tar.gz
 	@echo "created vejit-x86.tar.gz"
 else
@@ -264,24 +290,36 @@ fuseloop-ve.o: fuseloop.cpp fuseloop.hpp
 	$(CXX) $(CXXFLAGS) -Wall -Werror -c $< -o $@
 ve_divmod-ve.o: ve_divmod.cpp
 	$(CXX) $(CXXFLAGS) -Wall -Werror -c $< -o $@
+# ---- old way (master)
 # recall...
 #libjit1.a: asmfmt-ve.o jitpage-ve.o intutil-ve.o \
 #	vechash-ve.o cblock-ve.o asmblock-ve.o dllbuild-ve.o bin.mk-ve.lo ve-msk-ve.o \
 #	fuseloop-ve.o ve_divmod-ve.o
 # Note: when sources change, it is actually CMakeLists.txt that governs
 #       special compiles for libjit1_omp_ft.so and such (omp ~ OpenMP; ft ~ ftrace support)
-libjit1.so: jitpage.lo intutil.lo bin.mk-ve.lo \
-	vechash.lo asmfmt.lo asmblock-ve.lo cblock-ve.lo dllbuild-ve.lo fuseloop-ve.lo ve_divmod-ve.lo # C++ things
-	$(CXX) -o $@ -shared -Wl,-trace -wL,-verbose $^ #-ldl #-lnc++
+#libjit1.so: jitpage.lo intutil.lo bin.mk-ve.lo \
+#	vechash.lo asmfmt.lo asmblock-ve.lo cblock-ve.lo dllbuild-ve.lo fuseloop-ve.lo ve_divmod-ve.lo # C++ things
+#	$(CXX) -o $@ -shared -Wl,-trace -wL,-verbose $^ #-ldl #-lnc++
+# ---- new way (vel)
+libjit1.so: jitpage-ve.lo intutil-ve.lo bin.mk-ve.lo \
+	asmfmt-ve.lo asmblock-ve.lo cblock-ve.lo dllbuild-ve.lo fuseloop-ve.lo \
+	ve_divmod-ve.lo vechash-ve.lo
+	$(CXX) -o $@ -shared -Wl,-trace -Wl,-verbose $^ #-ldl #-lnc++
 	$(READELF) -h $@
 	$(READELF) -d $@
-intutil.lo: intutil.c intutil.h
+intutil-ve.lo: intutil.c intutil.h
 	$(CC) ${CFLAGS} -fPIC -O2 -c $< -o $@
-jitpage.lo: jitpage.c jitpage.h
-	$(CC) $(CFLAGS) -fPIC -O2 -c $< -o $@
-asmfmt.lo: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
+# ---- master
+#jitpage.lo: jitpage.c jitpage.h
+#	$(CC) $(CFLAGS) -fPIC -O2 -c $< -o $@
+#asmfmt.lo: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
+# ---- vel
+jitpage-ve.lo: jitpage.c jitpage.h
+	$(CXX) $(CXXFLAGS) -fPIC -O2 -c $< -o $@ -ldl
+asmfmt-ve.lo: asmfmt.cpp asmfmt.hpp asmfmt_fwd.hpp
+# ----
 	$(CXX) ${CXXFLAGS} -fPIC -O2 -c asmfmt.cpp -o $@
-vechash.lo: vechash.cpp vechash.hpp throw.hpp vfor.h
+vechash-ve.lo: vechash.cpp vechash.hpp throw.hpp vfor.h
 	$(CXX) ${CXXFLAGS} -fPIC -O2 -c vechash.cpp -o $@
 cblock-ve.lo: cblock.cpp cblock.hpp
 	$(CXX) ${CXXFLAGS} -fPIC -c $< -o $@
@@ -560,13 +598,13 @@ bin.mk-ve.lo: bin.mk ftostring
 #	# because the symbols are missing info (and my linker does no have --add-symbol or such)
 #	# use portable 'ftostring.c' and compile (uggh)
 
-.PHONY: dllbuild dllbuild-clean dllbuild-do dllbuild.log dllvebug.log
+.PHONY: dllbuild dllbuild-clean dllbuild-do dllbuild.log dllveok.log
 dllbuild: dllbuild-clean dllbuild-do
 dllbuild-clean:
 	rm -rf tmp-dllbuild
 	rm -f dllbuild-{x86,x86b,ve,veb} *.o *.lo
 	#rm -f libjit1{,-x86}.{a,so}
-dllbuild-do: dllbuild.log dllvebug.log
+dllbuild-do: dllbuild.log dllveok.log
 dllbuild.log:
 	# It is important to demo bin.mk basic correctness for the different build methods
 	# So now dllbuild puts multiple named builds into tmpdllbuild/ ,
@@ -586,14 +624,14 @@ dllbuild.log:
 		echo ""; echo "TEST dllbuild ve clang++"; ./dllbuild-ve 7 -clang.cpp; \
 		} ; } >& dllbuild.log && echo "dllbuild.log seems OK" || echo "dllbuild.log Huh?"
 	# NOTE -clang.cpp expected to fail becase clang++ does not understand "-std=c++11"
-dllvebug.log:
+dllveok.log: # c++ and shared objects now work (used to be called dllvebug.log)
 	{ $(MAKE) VERBOSE=1 dllbuild-veb && { \
 		echo ""; echo "TEST dllbuild ve dll ncc";     ./dllbuild-veb 7; \
 		echo ""; echo "TEST dllbuild ve dll clang";   ./dllbuild-veb 7 -clang.c; \
 		echo ""; echo "TEST dllbuild ve dll nc++";    ./dllbuild-veb 7 -ncc.cpp; \
 		echo ""; echo "TEST dllbuild ve dll clang++"; ./dllbuild-veb 7 -clang.cpp; \
 		echo ""; echo "TEST dllbuild ve dll clang C+intrinsics"; ./dllbuild-veb 7 -vi.c; \
-		} ; } >& dllvebug.log && echo "dllvebug.log seems OK" || echo "dllvebug.log Huh?"
+		} ; } >& dllveok.log && echo "dllveok.log seems OK" || echo "dllveok.log Huh?"
 	# NOTE **all** above fail because dllbuild-veb is linked with a shared C++ library.
 dllbuild-x86: dllbuild.cpp libjit1-x86.a
 	$(GCXX) -o $@ $(CXXFLAGS) -Wall -Werror -DDLLBUILD_MAIN $< -L. libjit1-x86.a -ldl
@@ -614,6 +652,49 @@ dllbuild-veb: dllbuild.cpp
 dllbuild-vec: dllbuild.cpp libjit1.so
 	$(CXX) -o $@ $(CXXFLAGS) -fPIC -pthread -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1.so
 	nreadelf -d $@
+cjitDemo: cjitDemo.cpp cblock.hpp dllbuild.hpp jitpipe.hpp libjit1-x86.so
+	@# hello world multiple function dllbuild example (cblock,dllbuild,jitpipe)
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+
+VECC:=ncc
+VECXX:=nc++
+ve_fastdiv-ve.o: ve_fastdiv.c
+	$(VECC) ${CFLAGS} -O2 -E $< -o ve_fastdiv.i
+	$(VECC) ${CFLAGS} -O2 -S $< -o ve_fastdiv.S
+	$(VECC) ${CFLAGS} -O2 -c $< -o $@
+ve_fastdiv-ve.lo:
+	$(VECC) ${CFLAGS} -fPIC -O2 -c $< -o $@
+ve_fastdiv-x86.o: ve_fastdiv.c
+	g++ ${CXXFLAGS} -O2 -c asmfmt.cpp -o $@
+ve_fastdiv-x86.lo:
+	g++ ${CXXFLAGS} -fPIC -O2 -c asmfmt.cpp -o $@
+ve_fastdiv-ve.lo: ve_fastdiv.c
+test_ve_fastdiv-x86: test_ve_fastdiv.cpp ve_fastdiv-x86.o ve_fastdiv.h timer.h
+	$(VECXX) -std=gnu++11 -O3 -o $@ test_ve_fastdiv.cpp ve_fastdiv.c
+test_ve_fastdiv-ve: test_ve_fastdiv.cpp ve_fastdiv-ve.o ve_fastdiv.h timer.h
+	$(VECXX) -std=gnu++11 -O3 -E test_ve_fastdiv.cpp -o test_ve_fastdiv.i
+	$(VECXX) -std=gnu++11 -O3 -o $@ $(filter-out %.h,$^)
+test_ve_fastdiv-speed-x86: test_ve_fastdiv.cpp ve_fastdiv-x86.o ve_fastdiv.h timer.h
+	$(VECXX) -std=gnu++11 -DSPEED=1 -O3 -S test_ve_fastdiv.cpp -o test_ve_fastdiv-x86.S
+	$(VECXX) -std=gnu++11 -DSPEED=1 -O3 -o $@ test_ve_fastdiv.cpp ve_fastdiv.c
+test_ve_fastdiv-speed-ve: test_ve_fastdiv.cpp ve_fastdiv-ve.o ve_fastdiv.h timer.h
+	$(VECXX) -std=gnu++11 -DSPEED=1 -O3 -S test_ve_fastdiv.cpp -o test_ve_fastdiv.S
+	$(VECXX) -std=gnu++11 -DSPEED=1 -O3 -o $@ $(filter-out %.h,$^)
+jload_demo: jload_demo.cpp libjit1.a
+	$(CXX) -o $@ $(CXXFLAGS) -fPIC -Wall -DDLLBUILD_MAIN $< \
+		libjit1.a -ldl
+easm_demo: easm_demo.cpp
+	-nc++ easm_demo.cpp -Wall -o easm_demo && ./easm_demo
+	-clang++ -std=gnu++14 -target linux-ve -O3 -mllvm \
+		-show-spill-message-vec -fno-vectorize -fno-unroll-loops \
+		-fno-slp-vectorize -fno-crash-diagnostics \
+		-S easm_demo.cpp -Wall -o easm_demo.cpp.s
+	clang++ -std=gnu++14 -target linux-ve -O3 -mllvm \
+		-show-spill-message-vec -fno-vectorize -fno-unroll-loops \
+		-fno-slp-vectorize -fno-crash-diagnostics \
+		easm_demo.cpp -Wall -o easm_demo \
+		&& ./easm_demo
+
 # next test show how to dynamically *compile* and load a dll given
 # a std::string containing 'C' code.
 clean:

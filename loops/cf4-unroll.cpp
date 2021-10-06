@@ -28,6 +28,7 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
     Cunit pr(call,"C",0/*verbose*/);
     auto& inc = pr.root["includes"];
     inc >>"#include \"veintrin.h\""
+        >>"#include \"velintrin.h\""
         >>"#include <stdint.h>";
 
     // create a somewhat generic tree
@@ -114,9 +115,9 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
 
     auto& cf4_defs = outer;
     cf4_defs .DEF(pfx) .DEF(vl0) .DEF(ii) .DEF(jj) ;
-    fc>>OSSFMT("_ve_lvl(vl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0<<" iijj%vl0="<<iijj%vl0);
+    fc>>OSSFMT(" /* XXX veSetVLENvl0)) */ ;  // VL="<<vl0<<" jj%vl0="<<jj%vl0<<" iijj%vl0="<<iijj%vl0);
     if(iijj%vl0){
-        fd>>OSSFMT("_ve_lvl(vl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0<<" iijj%vl0="<<iijj%vl0);
+        fd>>OSSFMT(" /* XXX veSetVLENvl0)) */ ;  // VL="<<vl0<<" jj%vl0="<<jj%vl0<<" iijj%vl0="<<iijj%vl0);
     }
 
     //
@@ -128,9 +129,9 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
     auto use_sq = [&fc,&fd,have_sq,have_sqij,&oss](){
         // if nec, define const sequence register "sq"
         if(!have_sq()){
-            fc["first"]["sq"]>>OSSFMT(left<<setw(40)<<"__vr const sq = _ve_vseq_v();")<<" // sq[i]=i";
+            fc["first"]["sq"]>>OSSFMT(left<<setw(40)<<"__vr const sq = _vel_vseq_vl(vl0);")<<" // sq[i]=i";
             fc["have_sq"].setType("TAG");
-            if(have_sqij()){ // just in case it was _ve_vseq_v()...
+            if(have_sqij()){ // just in case it was _vel_vseq_vl(vl0)...
                 fd["last"]["sqij"].set(OSSFMT(left<<setw(40)<<"__vr sqij = sq;"<<" // sqij[i]=i"));
             }
         }
@@ -141,7 +142,7 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
             if(have_sq())
                 fd["last"]["sqij"]>>OSSFMT(left<<setw(40)<<"__vr sqij = sq;"<<" // sqij[i]=i");
             else
-                fd["last"]["sqij"]>>OSSFMT(left<<setw(40)<<"__vr sqij = _ve_vseq_v();")
+                fd["last"]["sqij"]>>OSSFMT(left<<setw(40)<<"__vr sqij = _vel_vseq_vl(vl0);")
                     <<" // sqij[i]=i";
             fd["have_sqij"].setType("TAG");
         }
@@ -149,7 +150,7 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
     auto equ_sq = [have_sq,have_sqij](std::string v){
         return v+(have_sq() ? " = sq;          "
                 : have_sqij() ? " = sqij;        " // only OK pre-loop !
-                : " = _ve_vseq_v();"); };
+                : " = _vel_vseq_vl(vl0);"); };
     auto use_iijj = [&fc,&iijj,&ii,&jj,&vl0,&oss](){
         if(!fc.find("have_iijj")){
             fc["first"]["iijj"]>>OSSFMT(left<<setw(40)
@@ -167,6 +168,7 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
             fd["have_vl"].setType("TAG");
         }
     };
+    auto vlR = [&fd](){ return fd.find("have_vl")? "vl": "vl0"; };
     //
     // --------- END helper lambdas ------------
     //
@@ -225,13 +227,13 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
                 if( jj==1 ){
                     assert(false); // XXX TODO
                     fcp>>equ_sq("__vr "+ac)<<"         // a[i] = i";
-                    fcp>>"__vr "<<bc<<" = _ve_vbrd_vs_i64(0LL); // b[i] = 0"; // libvednn way
-                    //fcp>>"__vr "<<bc<<"; "<<bc<<" = _ve_vxor_vvv("<<bc<<","<<bc<<");"; // typically "best way"
+                    fcp>>"__vr "<<bc<<" = _vel_vbrdl_vsl(0LL, vl0); // b[i] = 0"; // libvednn way
+                    //fcp>>"__vr "<<bc<<"; "<<bc<<" = _vel_vxor_vvvl("<<bc<<","<<bc<<", vl0);"; // typically "best way"
                 }else if(jj>=vl0){
                     assert(false);
                     assert(jj%vl0==0);
                     use_sq();
-                    fcp>>"__vr "<<ac<<" = _ve_vbrd_vs_i64(0LL); // a[i]=0,b[i]=sq";
+                    fcp>>"__vr "<<ac<<" = _vel_vbrdl_vsl(0LL, vl0); // a[i]=0,b[i]=sq";
                     fcp>>"// update as 'if(++tmod==cyc)++a,b=sq; else b+=vl0;'";
                     //fcp>>equ_sq("__vr "+bc)<<"         // b[i] = i";
                 }else{ // note: mk_divmod also optimizes positivePow2(jj) case
@@ -240,25 +242,25 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
                     uint64_t nCyc = nloop/cyc; // + (c < nloop%cyc? 1: 0);
                     cout<<"unroll%cyc="<<unroll%cyc<<" nloop%cyc="<<nloop%cyc<<" nCyc="<<nCyc<<endl;
                     if( nloop%cyc == 0 ){
-                        auto instr=OSSFMT("__vr cycsqij = _ve_vaddul_vsv("<<(nCyc-1)*cyc_aincr*jj<<",sq);");
+                        auto instr=OSSFMT("__vr cycsqij = _vel_vaddul_vsvl("<<(nCyc-1)*cyc_aincr*jj<<",sq, vl0);");
                         fcp>>OSSFMT(left<<setw(40)<<instr<<" // init at penultimate values");
                     }else{
                         fcp  >>equ_sq("__vr cycsqij");
                     }
-                    auto divmod = OSSFMT("DIVMOD_"<<jj<<"(cycsqij, "<<ac<<", __vr const "<<bc<<");");
+                    auto divmod = OSSFMT("DIVMOD_"<<jj<<"(cycsqij,"<<vl0<<", "<<ac<<", __vr const "<<bc<<");");
                     fcp>>OSSFMT(left<<setw(40)<<divmod<<" // "<<ac<<"[]=cycsqij/"<<jj<<" "<<bc<<"[]=cycsqij%"<<jj);
                 }
             }else{
                 if( jj==1 ){
                     assert(false); // XXX TODO
                 }else if(jj>=vl0){
-                    fcp>>"cycsqij = _ve_vaddul_vsv(vl0,cycsqij);";
-                    auto divmod = OSSFMT("DIVMOD_"<<jj<<"(cycsqij, "<<ac<<", __vr const "<<bc<<");");
+                    fcp>>"cycsqij = _vel_vaddul_vsvl(vl0,cycsqij, vl0);";
+                    auto divmod = OSSFMT("DIVMOD_"<<jj<<"(cycsqij,vl0,"<<ac<<", __vr const "<<bc<<");");
                     fcp>>OSSFMT(left<<setw(40)<<divmod
                             <<" // "<<ac<<"=sq/"<<jj<<" "<<bc<<"=sq%"<<jj);
                 }else{ // note: mk_divmod also optimizes positivePow2(jj) case
-                    fcp>>"cycsqij = _ve_vaddul_vsv(vl0,cycsqij);";
-                    auto divmod = OSSFMT("DIVMOD_"<<jj<<"(cycsqij, "<<ac<<", __vr const "<<bc<<");");
+                    fcp>>"cycsqij = _vel_vaddul_vsvl(vl0,cycsqij, vl0);";
+                    auto divmod = OSSFMT("DIVMOD_"<<jj<<"(cycsqij,vl0, "<<ac<<", __vr const "<<bc<<");");
                     fcp>>OSSFMT(left<<setw(40)<<divmod
                             <<" // "<<ac<<"=sq/"<<jj<<" "<<bc<<"=sq%"<<jj);
                 }
@@ -269,7 +271,7 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
             for(uint32_t c=0U; c<cyc; ++c){
                 string ac = OSSFMT("acyc_"<<c);
                 uint64_t nCyc = nloop/cyc + (c < nloop%cyc? 1: 0);
-                auto instr = OSSFMT(ac<<" =_ve_vaddul_vsv("<<(nCyc-1U)*cyc_aincr<<", "<<ac<<");");
+                auto instr = OSSFMT(ac<<" =_vel_vaddul_vsvl("<<(nCyc-1U)*cyc_aincr<<", "<<ac<<", vl0);");
                 fcp>>OSSFMT(left<<setw(40)<<instr);
                 if(c==0U) fcp<<OSSFMT(" // nloop="<<nloop/cyc<<"*(cyc="<<cyc<<")+"<<nloop%cyc<<", cyc_aincr="<<cyc_aincr);
             }
@@ -279,7 +281,7 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
         for(uint32_t c=0U; c<cyc; ++c){
             string ac = OSSFMT("acyc_"<<c);
             uint64_t nCyc = nloop/cyc + (c < nloop%cyc? 1: 0);
-            auto instr = OSSFMT(ac<<" =_ve_vaddul_vsv(-"<<nCyc*cyc_aincr<<", "<<ac<<");");
+            auto instr = OSSFMT(ac<<" =_vel_vaddul_vsvl(-"<<nCyc*cyc_aincr<<", "<<ac<<", vl0);");
             fp>>OSSFMT(left<<setw(40)<<instr);
             if(c==0U) fp<<OSSFMT(" // nloop="<<nloop/cyc<<"*(cyc="<<cyc<<")+"<<nloop%cyc<<", cyc_aincr="<<cyc_aincr);
         }
@@ -291,16 +293,16 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
         std::string vREG=(nloop<=1?"__vr const ":"__vr ");
         if( jj==1 ){
             fp>>equ_sq(vREG+"a")<<"         // a[i] = i";
-            fp>>vREG<<"b = _ve_vbrd_vs_i64(0LL); // b[i] = 0"; // libvednn way
-            //fp>>vREG<<"b; b=_ve_vxor_vvv(b,b);"; // typically "best way"
+            fp>>vREG<<"b = _vel_vbrdl_vsl(0LL, vl0); // b[i] = 0"; // libvednn way
+            //fp>>vREG<<"b; b=_vel_vxor_vvvl(b,b, vl0);"; // typically "best way"
         }else if(jj>=vl0){
-            fp>>vREG<<"a = _ve_vbrd_vs_i64(0LL); // a[i] = 0";
+            fp>>vREG<<"a = _vel_vbrdl_vsl(0LL, vl0); // a[i] = 0";
             fp>>equ_sq(vREG+"b")<<"         // b[i] = i";
         }else{ // note: mk_divmod also optimizes positivePow2(jj) case
             mk_divmod();
             use_sq();
             fp>>"__vr a,b;";
-            auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sq, a, b);");
+            auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sq,vl0, a, b);");
             fp>>OSSFMT(left<<setw(40)<<divmod<<" // a[]=sq/"<<jj<<" b[]=sq%"<<jj);
         }
     }else{
@@ -390,13 +392,13 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
 
             // ff
             if(!fp_sets_ab && cycpre){ // this MUST be before VL check, in this case
-                auto instr=OSSFMT(ac<<" = _ve_vaddul_vsv("<<cyc_aincr<<", "<<ac<<");");
+                auto instr=OSSFMT(ac<<" = _vel_vaddul_vsvl("<<cyc_aincr<<", "<<ac<<", vl0);");
                 ff>>OSSFMT(left<<setw(40)<<instr<<" // a~"<<ac<<", b~"<<bc);
             }
             if(last_iter_check && iijj%vl0 ){ // last iter has reduced VL
                 if(nloop == unroll){
                     auto final_vl = iijj % vl0;
-                    auto instr=OSSFMT("_ve_lvl("<<(fd.find("have_vl")?"vl=":"")<<final_vl<<");");
+                    auto instr=OSSFMT(" /* XXX veSetVLEN"<<(fd.find("have_vl")?"vl=":"")<<final_vl<<") */ ;");
                     ff>>OSSFMT(left<<setw(40)<<instr<<" // iijj="<<iijj/vl0<<"*vl0+"<<final_vl);
                 }else{ // must check whether, this time through, vl changes
                     use_vl();
@@ -406,7 +408,7 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
                             //<<"// vl = min(vl0,remain)"
                             <<" // iijj="<<iijj/vl0<<"*vl0+"<<iijj%vl0
                             );
-                    ff>>"_ve_lvl(vl);";
+                    ff>>" /* XXX veSetVLENvl)) */ ;";
                 }
             }
             if(fp_sets_ab){
@@ -416,7 +418,7 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
                 mk_divmod();
                 if(!cycpre){ // recalc usually can be after VL reduction check
                     use_sqij();
-                    auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);");
+                    auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sqij,"<<vlR()<<", a,b);");
                     ff>>OSSFMT(left<<setw(40)<<divmod<<" //  a[]=sq/"<<jj<<" b[]=sq%"<<jj<<" BBB");
                 }
             }
@@ -442,11 +444,11 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
                         cf4_defs.DEF(vlojj);
                         cf4_defs["have_vlojj"].setType("TAG");
                     }
-                    fi  >>OSSFMT(left<<setw(40)<<"a =_ve_vadduw_vsv(vlojj, a);"
+                    fi  >>OSSFMT(left<<setw(40)<<"a =_vel_vadduw_vsvl(vlojj, a, vl);"
                             <<" // a[i]+="<<vlojj<<", b[] same");
                 }else if(jj%vl0==0){
                     if(nloop<=jj/vl0){ // !have_jjMODvl_reset
-                        auto instr = OSSFMT("b = _ve_vadduw_vsv("<<vl0<<",b);");
+                        auto instr = OSSFMT("b = _vel_vadduw_vsvl("<<vl0<<",b, vl);");
                         fi>>OSSFMT(left<<setw(40)<<instr<<" // b[] += vl0, a[] const");
                     }else{ // various nice ways to do periodic reset... [potentially better with unroll!]
                         // Every (jj/vl0) we do a special reset...
@@ -454,9 +456,9 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
                         // cyclic unroll can inline the "tmod" periodic reset
                         if(cyc && (unroll%cyc==0 || (nFull==1 && nPart==0))){ // other corner cases XXX ???
                             if((u+1)%cyc){
-                                fi  >>"b = _ve_vadduw_vsv(vl0,b);           // b[] += vl0 (cyc="<<jitdec((u+1)%cyc)<<", a[] unchanged)";
+                                fi  >>"b = _vel_vadduw_vsvl(vl0,b, vl);           // b[] += vl0 (cyc="<<jitdec((u+1)%cyc)<<", a[] unchanged)";
                             }else{
-                                fi  >>"a = _ve_vadduw_vsv(1,a);             // a[] += 1"
+                                fi  >>"a = _vel_vadduw_vsvl(1,a, vl);             // a[] += 1"
                                     >>"b = sq;                              // b[] = sq[] (cyc reset)";
                             }
                         }else{ //generic update explicitly tracks a separate 'tmod' cyclic counter
@@ -475,9 +477,9 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
                                 fi>>OSSFMT(left<<setw(40)<<instr<<" // cmov reset tmod=0?");
                             }
                             fi  >>"if(tmod){" // using mk_scope or CBLOCK_SCOPE is entirely optional...
-                                >>"    b = _ve_vadduw_vsv(vl0,b);           // b[] += vl0 (easy, a[] unchanged)"
+                                >>"    b = _vel_vadduw_vsvl(vl0,b, vl);           // b[] += vl0 (easy, a[] unchanged)"
                                 >>"}else{"
-                                >>"    a = _ve_vadduw_vsv(1,a);             // a[] += 1"
+                                >>"    a = _vel_vadduw_vsvl(1,a, vl);             // a[] += 1"
                                 >>"    b = sq;                              // b[] = sq[] (reset case)"
                                 >>"}";
                         }
@@ -488,18 +490,18 @@ std::string cfuse2_unroll(loop::Lpi const vl0, loop::Lpi const ii, Lpi const jj,
                     // both mul-shr and jj=2^N cases can use DIVMOD macro
                     //
                     // induction from prev a,b is longer than full recalc!
-                    //  sqij = _ve_vaddul_vsv(vl0,sqij);
-                    //  a = _ve_vsrl_vvs(sqij, jj_shift);              // a[i]=sq[i]/jj
-                    //  b = _ve_vand_vsv("<<jithex(jj_minus_1)<<",sq); // b[i]=sq[i]%jj
+                    //  sqij = _vel_vaddul_vsvl(vl0,sqij, vl);
+                    //  a = _vel_vsrl_vvsl(sqij, jj_shift, vl);              // a[i]=sq[i]/jj
+                    //  b = _vel_vand_vsvl("<<jithex(jj_minus_1)<<",sq, vl); // b[i]=sq[i]%jj
                 }else{
                     if(fp_sets_ab){ // if pre-loop sets ab, recalc goes to fi (not ff)
-                        auto instr = "sqij = _ve_vaddul_vsv(vl0,sqij);";
+                        auto instr = "sqij = _vel_vaddul_vsvl(vl0,sqij, vl);";
                         fi>>OSSFMT(left<<setw(40)<<instr<<" // sqij[i] += "<<vl0);
-                        auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);");
+                        auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sqij,"<<vl0<<", a,b);");
                         fi  >>OSSFMT(left<<setw(40)<<divmod
                                 <<" //  a[]=sq/"<<jj<<" b[]=sq%"<<jj<<" AAA");
                     }else if(!cycpre){
-                        auto instr = "sqij = _ve_vaddul_vsv(vl0,sqij);";
+                        auto instr = "sqij = _vel_vaddul_vsvl(vl0,sqij, vl);";
                         fi>>OSSFMT(left<<setw(40)<<instr<<" // sqij[i] += "<<vl0);
                     }
                 }

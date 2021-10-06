@@ -2,7 +2,9 @@ VEJIT_ROOT:=..
 SHELL:=/bin/bash
 TARGETS:=
 
-ifneq ($(CC:ncc%=ncc),ncc)
+COMPILE_TYPE:=$(word 1,$(shell $(CC) --version 2>&1))
+$(if $(COMPILE_TYPE),,$(error could not determine C compiler type for CC=$(CC))) # VE(ncc) vs x86(gcc or ...)
+ifneq ($(COMPILE_TYPE),ncc)
 CFLAGS:=-O2 -g2 -pthread
 CFLAGS+=-Wall -Werror
 CFLAGS+=-Wno-unknown-pragmas
@@ -41,21 +43,25 @@ LDFLAGS+=-ldl
 CFLAGS+=-I..
 CXXFLAGS+=-I..
 
-all: $(TARGETS)
+all:
 
 #
 # we do not use libjit code here, except for some standalones:
 # - lowest-of-low utilities from jitpage.h
 # - pretty assembler formatting (AsmFmtCols C++ class)
 #
+VEJIT_ROOT:=..
 jitpage-ve.o: $(VEJIT_ROOT)/jitpage.c $(VEJIT_ROOT)/jitpage.h
 	$(CC) $(CFLAGS) -D_GNU_SOURCE -c $< -o $@ -ldl
 asmfmt-ve.o: $(VEJIT_ROOT)/asmfmt.cpp $(VEJIT_ROOT)/asmfmt.hpp $(VEJIT_ROOT)/asmfmt_fwd.hpp
 	$(CXX) ${CXXFLAGS} -O2 -c $< -o $@
 intutil-ve.o: $(VEJIT_ROOT)/intutil.c $(VEJIT_ROOT)/intutil.h
 	$(CC) ${CFLAGS} -O2 -c $< -o $@
-bin.mk:	
-	ln -sf ${VEJIT_ROOT}/bin.mk bin.mk
+bin.mk:	${VEJIT_ROOT}/bin.mk
+	@#ln -sf ${VEJIT_ROOT}/bin.mk bin.mk # link does NOT work with system(...make -f bin.mk...)
+	@cp -v ${VEJIT_ROOT}/bin.mk bin.mk
+VEJIT_STUFF:=jitpage-ve.o asmfmt-ve.o intutil-ve.o bin.mk
+all: $(VEJIT_STUFF) $(TARGETS)
 
 #
 # Oh. now I have a target that does want parent libraries to be

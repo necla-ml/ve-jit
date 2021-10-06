@@ -13,12 +13,6 @@ using namespace cprog;
 //#define DBG(WHAT) cout<<" DBG:"<<WHAT<<endl
 #define DBG(WHAT)
 
-#define INSCMT(BLK,INS,CMT) do{ \
-    auto ins=(INS); \
-    auto cmt=(CMT); \
-    (BLK)>>OSSFMT(left<<setw(40)<<ins<<" // "<<cmt); \
-} while(0)
-
 static bool tag_once(Cblock &cb, std::string const& sub){
     Cblock *found = cb.find(sub);
     if(!found) cb[sub].setType("TAG");
@@ -183,13 +177,13 @@ void fl6_unroll_split_ii(
         // first call initializes vector length [maybe save/restore?]
         // 'vl_is(vl0)' might cut a useless LVL op
         if(!vl_is(vl0)){
-            fd>>OSSFMT("_ve_lvl(vl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0
+            fd>>OSSFMT(" /* XXX veSetVLENvl0)) */ ;  // VL="<<vl0<<" jj%vl0="<<jj%vl0
                     <<" iijj%vl0="<<iijj%vl0);
             vl_remember(vl0);
             assert(vl_is(vl0));
         }
     }else if(!vl_is(vl0)){
-        fd>>OSSFMT("_ve_lvl(vl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0
+        fd>>OSSFMT(" /* XXX veSetVLENvl0)) */ ;  // VL="<<vl0<<" jj%vl0="<<jj%vl0
             <<" iijj%vl0="<<iijj%vl0<<" VL was "<<vl_str());
         vl_remember(vl0);
     }else{
@@ -319,7 +313,7 @@ void fl6_unroll_split_ii(
         fcp>>OSSFMT("// Cyclic precalc, pfx="<<pfx<<", cyc="<<cyc<<", for["<<ilo<<","<<ihi
                 <<")for["<<jlo<<","<<jhi<<")"<<" VL="<<vl0);
         if(!oldpfx.empty()) fcp<<", matches vl jj cyc from oldpfx "<<pfx;
-        //fcp>>OSSFMT("_ve_lvl("<<vl0<<");");
+        //fcp>>OSSFMT(" /* XXX veSetVLEN"<<vl0<<")) */ ;");
         vl_remember(vl0);
 
         if(oldpfx.empty()){ // usual case
@@ -330,12 +324,13 @@ void fl6_unroll_split_ii(
                     if( jj==1 ){
                         assert(false); // XXX TODO
                         INSCMT(fcp,OSSFMT("__vr "<<ac<<" = sq;"),"a[i] = i");
-                        INSCMT(fcp,OSSFMT("__vr "<<bc<<" = _vel_vbrdl_vsl(0LL,vl0);"),"b[i] = 0"); // libvednn way
+                        INSCMT(fcp,OSSFMT("__vr "<<bc<<" = _vel_vbrdl_vsl(0LL,vl0);"),
+                                "b[i] = 0"); // libvednn way
                         // vxor is typical "best way"
                     }else if(jj>=vl0){
                         assert(false);
                         assert(jj%vl0==0);
-                        fcp>>"__vr "<<ac<<" = _ve_vbrd_vs_i64(0LL); // a[i]=0,b[i]=sq";
+                        fcp>>"__vr "<<ac<<" = _vel_vbrdl_vsl(0LL, vl0); // a[i]=0,b[i]=sq";
                         fcp>>"// update as 'if(++tmod==cyc)++a,b=sq; else b+=vl0;'";
                         //fcp>>equ_sq("__vr "+bc)<<"         // b[i] = i";
                     }else{ // note: mk_divmod also optimizes positivePow2(jj) case
@@ -349,14 +344,14 @@ void fl6_unroll_split_ii(
                                     ?string("cycsqij = sq;")
                                     :OSSFMT("cycsqij = _vel_vaddul_vsvl("<<cyc00<<"/*init*/,sq,"<<vl0<<");")),
                                 OSSFMT("nloop%cyc="<<nloop%cyc<<" nCyc="<<nCyc<<" cyc00="<<cyc00));
-                        INSCMT(fcp,OSSFMT("DIVMOD_"<<jj<<"(cycsqij, "<<ac<<", __vr const "<<bc<<");"),
+                        INSCMT(fcp,OSSFMT("DIVMOD_"<<jj<<"(cycsqij,"<<vl0<<", "<<ac<<", __vr const "<<bc<<");"),
                                 OSSFMT(ac<<"[]=cycsqij/"<<jj<<" "<<bc<<"[]=cycsqij%"<<jj));
                     }
                 }else{
                     mk_divmod(); // note: mk_divmod also optimizes positivePow2(jj) case
-                    //fcp>>OSSFMT("cycsqij = _ve_vaddul_vsv("<<vl0<<"/*VL*/,cycsqij);");
+                    //fcp>>OSSFMT("cycsqij = _vel_vaddul_vsvl("<<vl0<<"/*VL*/,cycsqij, "<<vl0<<");");
                     fcp>>OSSFMT("cycsqij = _vel_vaddul_vsvl("<<vl0<<"/*VL*/,cycsqij,"<<vl0<<");");
-                    fcp>>OSSFMT("DIVMOD_"<<jj<<"(cycsqij, "<<ac<<", __vr const "<<bc<<");");
+                    fcp>>OSSFMT("DIVMOD_"<<jj<<"(cycsqij,"<<vl0<<", "<<ac<<", __vr const "<<bc<<");");
                 }
             }
             //uint64_t cyc_aincr = cyc*vl0/jj;
@@ -366,7 +361,7 @@ void fl6_unroll_split_ii(
                 // to reuse the DIVMOD results prior to these adjustments
                 for(uint32_t c=0U; c<nloop%cyc; ++c){
                     string ac = OSSFMT(pfx<<"_acyc_"<<c);
-                    //auto instr = OSSFMT(ac<<" =_ve_vaddul_vsv("<<cyc_aincr<<", "<<ac<<");");
+                    //auto instr = OSSFMT(ac<<" =_vel_vaddul_vsvl("<<cyc_aincr<<", "<<ac<<", "<<vl0<<");");
                     auto instr = OSSFMT(ac<<" =_vel_vaddul_vsvl("<<cyc_aincr<<", "<<ac<<","<<vl0<<");");
                     fcq>>OSSFMT(left<<setw(40)<<instr);
                     if(c==0U) fcq<<OSSFMT(" // nloop="<<nloop/cyc<<"*(cyc="<<cyc<<")"
@@ -392,7 +387,7 @@ void fl6_unroll_split_ii(
                 // roll in the (c < nloop%cyc) correction (both are additive)
                 uint64_t corr = corr0 + (c<nloop%cyc? cyc_aincr: 0);
                 if(corr==0) fcp>>OSSFMT(ac<<" = "<<oac<<";");
-                //else fcp>>OSSFMT(ac<<" = _ve_vaddul_vsv("<<corr<<","<<oac<<");");
+                //else fcp>>OSSFMT(ac<<" = _vel_vaddul_vsvl("<<corr<<","<<oac<<", "<<vl0<<");");
                 else fcp>>OSSFMT(ac<<" = _vel_vaddul_vsvl("<<corr<<","<<oac
                         <<","<<vl0<<");");
                 if(c<nloop%cyc) fcp<<OSSFMT(" // +"<<cyc_aincr);
@@ -409,7 +404,7 @@ void fl6_unroll_split_ii(
         for(uint32_t c=0U; c<cyc; ++c){
             string ac = OSSFMT(pfx<<"_acyc_"<<c);
             uint64_t nCyc = nloop/cyc + (c < nloop%cyc? 1: 0);
-            //auto instr = OSSFMT(ac<<" =_ve_vaddul_vsv(-"<<nCyc*cyc_aincr<<", "<<ac<<");");
+            //auto instr = OSSFMT(ac<<" =_vel_vaddul_vsvl(-"<<nCyc*cyc_aincr<<", "<<ac<<", "<<vl0<<");");
             auto instr = OSSFMT(ac<<" =_vel_vaddul_vsvl(-"<<nCyc*cyc_aincr<<", "<<ac<<",vl0);");
             fp>>OSSFMT(left<<setw(40)<<instr);
             if(c==0U) fp<<OSSFMT(" // nloop="<<nloop/cyc<<"*(cyc="<<cyc<<")+"<<nloop%cyc<<", cyc_aincr="<<cyc_aincr);
@@ -450,9 +445,9 @@ void fl6_unroll_split_ii(
             // because an identical statement is seen
             // and clang does not realize the VL has INCREASED.
             //    The _vel_ form informs the compiler that the 2nd time it
-            //    CANNOT simply re-use the register "b = _ve_vbrd_vs_i64(0LL);" 
+            //    CANNOT simply re-use the register "b = _vel_vbrdl_vsl(0LL, "<<vl0<<");" 
             //cb>>OSSFMT(left<<setw(40)<<"b = _vel_vbrdl_vsl(0LL,vl0);"<<" // b[i] = 0");
-            //cb>>vREG<<"b; b=_ve_vxor_vvv(b,b);"; // typically "best way"
+            //cb>>vREG<<"b; b=_vel_vxor_vvvl(b,b, "<<vl0<<");"; // typically "best way"
             INSCMT(cb,"b = _vel_vbrdl_vsl(0LL,vl0);","b[i] = 0");
         }else if(jj>=vl0){
             //cb  >>OSSFMT(left<<setw(40)<<"a = _vel_vbrdl_vs_i64(ilo,vl0);"<<" // a[i]="<<ilo)
@@ -464,16 +459,11 @@ void fl6_unroll_split_ii(
             use_sq();
             string divmod;
             if(ilo==0){
-                //divmod = OSSFMT("DIVMOD_"<<jj<<"(sq, a, b);");
-                //cb>>OSSFMT(left<<setw(40)<<divmod<<" // a[]=sq/"<<jj<<" b[]=sq%"<<jj);
-                INSCMT(cb,OSSFMT("DIVMOD_"<<jj<<"(sq, a, b);"),
+                INSCMT(cb,OSSFMT("DIVMOD_"<<jj<<"(sq,"<<vl0<<", a, b);"),
                         OSSFMT("a[]=sq/"<<jj<<" b[]=sq%"<<jj));
             }else{
-                //divmod = OSSFMT("DIVMOD_"<<jj<<"(_ve_vaddul_vsv(ilo*jj,sq), a, b);");
-                //cb>>OSSFMT(left<<setw(40)<<divmod<<" // a[]=(sq+"<<ilo*jj<<")/"<<jj<<" b[]=(sq+"<<ilo*jj<<")%"<<jj);
-                //INSCMT(cb,OSSFMT("DIVMOD_"<<jj<<"(_ve_vaddul_vsv(ilo*jj,sq), a, b);"),
-                //        OSSFMT("a[]=(sq+"<<ilo*jj<<")/"<<jj<<" b[]=(sq+"<<ilo*jj<<")%"<<jj));
-                INSCMT(cb,OSSFMT("DIVMOD_"<<jj<<"(_ve_vaddul_vsv(ilo*jj,sq), a, b);"),
+                cb>>OSSFMT("b/*tmp*/ = _vel_vaddul_vsvl(ilo*jj,sq, "<<vl0<<");");
+                INSCMT(cb,OSSFMT("DIVMOD_"<<jj<<"(b,"<<vl0<<", a, b);"),
                         OSSFMT("a[]=(sq+"<<ilo*jj<<")/"<<jj<<" b[]=(sq+"<<ilo*jj<<")%"<<jj));
             }
         }
@@ -570,7 +560,7 @@ void fl6_unroll_split_ii(
             // ff
             if(!fp_sets_ab && cycpre){ // this MUST be before VL check, in this case
                 // XXX BUG without vel_FOO **HERE**
-                //INSCMT(ff,OSSFMT(ac<<" = _ve_vaddul_vsv("<<cyc_aincr<<", "<<ac<<");"),
+                //INSCMT(ff,OSSFMT(ac<<" = _vel_vaddul_vsvl("<<cyc_aincr<<", "<<ac<<", "<<vl0<<");"),
                 //        OSSFMT("a~"<<ac<<", b~"<<bc));
                 INSCMT(ff,OSSFMT(ac<<" = _vel_vaddul_vsvl("<<cyc_aincr<<", "<<ac
                             <<","<<(have_vl()?"vl":"vl0")<<");"),
@@ -579,7 +569,7 @@ void fl6_unroll_split_ii(
             if(last_iter_check && iijj%vl0 ){ // last iter has reduced VL
                 if(nloop == unroll){
                     auto final_vl = iijj % vl0;
-                    auto instr=OSSFMT("_ve_lvl("<<(have_vl()?"vl=":"")<<final_vl<<");");
+                    auto instr=OSSFMT(" /* XXX veSetVLEN"<<(have_vl()?"vl=":"")<<final_vl<<") */ ;");
                     ff>>OSSFMT(left<<setw(40)<<instr<<" // iijj="<<iijj/vl0<<"*vl0+"<<final_vl);
                 }else{ // must check whether, this time through, vl changes
                     use_vl(); // vl = min(vl0,remain)
@@ -587,22 +577,22 @@ void fl6_unroll_split_ii(
                                 ?"vl = (vl0<iijj-cnt? vl0: iijj-cnt);"
                                 :"vl = (cnt<vl0? cnt: vl0);"),
                             OSSFMT(" // iijj="<<iijj/vl0<<"*vl0+"<<iijj%vl0));
-                    ff>>"_ve_lvl(vl);";
+                    ff>>" /* XXX veSetVLENvl)) */ ;";
                 }
             }else if(0 && iijj%vl0){ // XXX DEBUG
                 if(nloop == unroll){
-                    ff>>"//_ve_lvl(vl0);";
+                    ff>>"// /* XXX veSetVLENvl0)) */ ;";
                 }else{
                     use_vl();
-                    ff>>OSSFMT("_ve_lvl(vl0); // XXX DEBUG");
+                    ff>>OSSFMT(" /* XXX veSetVLENvl0)) */ ; // XXX DEBUG");
                 }
             }
             if(!fp_sets_ab){ // if no pre-loop a,b calc, do it right before kernel call
                 if(!cycpre){ // recalc usually can be after VL reduction check
                     mk_divmod();
                     use_sqij();
-                    auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);");
-                    ff>>OSSFMT(left<<setw(40)<<divmod<<" //  a[]=sq/"<<jj<<" b[]=sq%"<<jj<<" BBB");
+                    auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sqij,"<<(have_vl()?"vl":"vl0")<<", a,b);");
+                    INSCMT(ff,divmod,OSSFMT("a[]=sq/"<<jj<<" b[]=sq%"<<jj<<" BBB"));
                 }
             }
 
@@ -634,11 +624,11 @@ void fl6_unroll_split_ii(
                         fl6_defs.DEF(vlojj);
                         fl6_defs["have_vlojj"].setType("TAG");
                     }
-                    fi  >>OSSFMT(left<<setw(40)<<"a =_ve_vadduw_vsv(vlojj, a);"
+                    fi  >>OSSFMT(left<<setw(40)<<"a =_vel_vadduw_vsvl(vlojj, a, vl0);"
                             <<" // a[i]+="<<vlojj<<", b[] same");
                 }else if(jj%vl0==0){
                     if(nloop<=jj/vl0){ // !have_jjMODvl_reset
-                        auto instr = OSSFMT("b = _ve_vadduw_vsv("<<vl0<<",b);");
+                        auto instr = OSSFMT("b = _vel_vadduw_vsvl("<<vl0<<",b, vl0);");
                         fi>>OSSFMT(left<<setw(40)<<instr<<" // b[] += vl0, a[] const");
                     }else{ // various nice ways to do periodic reset... [potentially better with unroll!]
                         // Every (jj/vl0) we do a special reset...
@@ -646,9 +636,9 @@ void fl6_unroll_split_ii(
                         // cyclic unroll can inline the "tmod" periodic reset
                         if(cyc && (unroll%cyc==0 || (nFull==1 && nPart==0))){ // other corner cases XXX ???
                             if((u+1)%cyc){
-                                fi  >>"b = _ve_vadduw_vsv(vl0,b);           // b[] += vl0 (cyc="<<jitdec((u+1)%cyc)<<", a[] unchanged)";
+                                fi  >>"b = _vel_vadduw_vsvl(vl0,b, vl0);           // b[] += vl0 (cyc="<<jitdec((u+1)%cyc)<<", a[] unchanged)";
                             }else{
-                                fi  >>"a = _ve_vadduw_vsv(1,a);             // a[] += 1"
+                                fi  >>"a = _vel_vadduw_vsvl(1,a, vl0);             // a[] += 1"
                                     >>"b = sq;                              // b[] = sq[] (cyc reset)";
                             }
                         }else{ //generic update explicitly tracks a separate 'tmod' cyclic counter
@@ -667,9 +657,9 @@ void fl6_unroll_split_ii(
                                 fi>>OSSFMT(left<<setw(40)<<instr<<" // cmov reset tmod=0?");
                             }
                             fi  >>"if(tmod){" // using mk_scope or CBLOCK_SCOPE is entirely optional...
-                                >>"    b = _ve_vadduw_vsv(vl0,b);           // b[] += vl0 (easy, a[] unchanged)"
+                                >>"    b = _vel_vadduw_vsvl(vl0,b, vl0);           // b[] += vl0 (easy, a[] unchanged)"
                                 >>"}else{"
-                                >>"    a = _ve_vadduw_vsv(1,a);             // a[] += 1"
+                                >>"    a = _vel_vadduw_vsvl(1,a, vl0);             // a[] += 1"
                                 >>"    b = sq;                              // b[] = sq[] (reset case)"
                                 >>"}";
                         }
@@ -680,22 +670,21 @@ void fl6_unroll_split_ii(
                     // both mul-shr and jj=2^N cases can use DIVMOD macro
                     //
                     // induction from prev a,b is longer than full recalc!
-                    //  sqij = _ve_vaddul_vsv(vl0,sqij);
-                    //  a = _ve_vsrl_vvs(sqij, jj_shift);              // a[i]=sq[i]/jj
-                    //  b = _ve_vand_vsv("<<jithex(jj_minus_1)<<",sq); // b[i]=sq[i]%jj
+                    //  sqij = _vel_vaddul_vsvl(vl0,sqij, vl0);
+                    //  a = _vel_vsrl_vvsl(sqij, jj_shift, vl0);              // a[i]=sq[i]/jj
+                    //  b = _vel_vand_vsvl("<<jithex(jj_minus_1)<<",sq, vl0); // b[i]=sq[i]%jj
                 }else{
                     if(fp_sets_ab){ // if pre-loop sets ab, recalc goes to fi (not ff)
                         use_sqij();
                         mk_divmod();
-                        auto instr = "sqij = _ve_vaddul_vsv(vl0,sqij);//A";
+                        auto instr = "sqij = _vel_vaddul_vsvl(vl0,sqij, vl0);//A";
                         fi>>OSSFMT(left<<setw(40)<<instr<<" // sqij[i] += "<<vl0);
-                        auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);");
-                        fi  >>OSSFMT(left<<setw(40)<<divmod
-                                <<" //  a[]=sq/"<<jj<<" b[]=sq%"<<jj<<" AAA");
+                        auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sqij,vl0,a,b);");
+                        INSCMT(fi,divmod,OSSFMT(" a[]=sq/"<<jj<<" b[]=sq%"<<jj<<" AAA"));
                     }else if(!cycpre){
                         use_sqij();
-                        auto instr = "sqij = _ve_vaddul_vsv(vl0,sqij);//B";
-                        fi>>OSSFMT(left<<setw(40)<<instr<<" // sqij[i] += "<<vl0);
+                        auto instr = "sqij = _vel_vaddul_vsvl(vl0,sqij, vl0);//B";
+                        INSCMT(fi,instr,OSSFMT("sqij[i] += "<<vl0));
                     }
                 }
             }
@@ -935,13 +924,13 @@ void fl6_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
         // first call initializes vector length [maybe save/restore?]
         // 'vl_is(vl0)' might cut a useless LVL op
         if(!vl_is(vl0)){
-            fd>>OSSFMT("_ve_lvl(vl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0
+            fd>>OSSFMT(" /* XXX veSetVLENvl0)) */ ;  // VL="<<vl0<<" jj%vl0="<<jj%vl0
                     <<" iijj%vl0="<<iijj%vl0);
             vl_remember(vl0);
             assert(vl_is(vl0));
         }
     }else if(!vl_is(vl0)){
-        fd>>OSSFMT("_ve_lvl(vl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0
+        fd>>OSSFMT(" /* XXX veSetVLENvl0)) */ ;  // VL="<<vl0<<" jj%vl0="<<jj%vl0
             <<" iijj%vl0="<<iijj%vl0<<" VL was "<<vl_str());
         vl_remember(vl0);
     }else{
@@ -1067,7 +1056,7 @@ void fl6_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
         fcp>>OSSFMT("// Cyclic precalc, pfx="<<pfx<<", cyc="<<cyc<<", for["<<ilo<<","<<ihi
                 <<")for["<<jlo<<","<<jhi<<")"<<" VL="<<vl0);
         if(!oldpfx.empty()) fcp<<", matches vl jj cyc from oldpfx "<<pfx;
-        //fcp>>OSSFMT("_ve_lvl("<<vl0<<");");
+        //fcp>>OSSFMT(" /* XXX veSetVLEN"<<vl0<<")) */ ;");
         vl_remember(vl0);
 
         if(oldpfx.empty()){ // usual case
@@ -1083,7 +1072,7 @@ void fl6_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
                     }else if(jj>=vl0){
                         assert(false);
                         assert(jj%vl0==0);
-                        fcp>>"__vr "<<ac<<" = _ve_vbrd_vs_i64(0LL); // a[i]=0,b[i]=sq";
+                        fcp>>"__vr "<<ac<<" = _vel_vbrdl_vsl(0LL, "<<vl0<<"); // a[i]=0,b[i]=sq";
                         fcp>>"// update as 'if(++tmod==cyc)++a,b=sq; else b+=vl0;'";
                         //fcp>>equ_sq("__vr "+bc)<<"         // b[i] = i";
                     }else{ // note: mk_divmod also optimizes positivePow2(jj) case
@@ -1097,14 +1086,14 @@ void fl6_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
                                     ?string("cycsqij = sq;")
                                     :OSSFMT("cycsqij = _vel_vaddul_vsvl("<<cyc00<<"/*init*/,sq,"<<vl0<<");")),
                                 OSSFMT("nloop%cyc="<<nloop%cyc<<" nCyc="<<nCyc<<" cyc00="<<cyc00));
-                        INSCMT(fcp,OSSFMT("DIVMOD_"<<jj<<"(cycsqij, "<<ac<<", __vr const "<<bc<<");"),
+                        INSCMT(fcp,OSSFMT("DIVMOD_"<<jj<<"(cycsqij,"<<vl0<<", "<<ac<<", __vr const "<<bc<<");"),
                                 OSSFMT(ac<<"[]=cycsqij/"<<jj<<" "<<bc<<"[]=cycsqij%"<<jj));
                     }
                 }else{
                     mk_divmod(); // note: mk_divmod also optimizes positivePow2(jj) case
-                    //fcp>>OSSFMT("cycsqij = _ve_vaddul_vsv("<<vl0<<"/*VL*/,cycsqij);");
+                    //fcp>>OSSFMT("cycsqij = _vel_vaddul_vsvl("<<vl0<<"/*VL*/,cycsqij, "<<vl0<<");");
                     fcp>>OSSFMT("cycsqij = _vel_vaddul_vsvl("<<vl0<<"/*VL*/,cycsqij,"<<vl0<<");");
-                    fcp>>OSSFMT("DIVMOD_"<<jj<<"(cycsqij, "<<ac<<", __vr const "<<bc<<");");
+                    fcp>>OSSFMT("DIVMOD_"<<jj<<"(cycsqij,"<<vl0<<", "<<ac<<", __vr const "<<bc<<");");
                 }
             }
             //uint64_t cyc_aincr = cyc*vl0/jj;
@@ -1114,7 +1103,7 @@ void fl6_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
                 // to reuse the DIVMOD results prior to these adjustments
                 for(uint32_t c=0U; c<nloop%cyc; ++c){
                     string ac = OSSFMT(pfx<<"_acyc_"<<c);
-                    //auto instr = OSSFMT(ac<<" =_ve_vaddul_vsv("<<cyc_aincr<<", "<<ac<<");");
+                    //auto instr = OSSFMT(ac<<" =_vel_vaddul_vsvl("<<cyc_aincr<<", "<<ac<<", "<<vl0<<");");
                     auto instr = OSSFMT(ac<<" =_vel_vaddul_vsvl("<<cyc_aincr<<", "<<ac<<","<<vl0<<");");
                     fcq>>OSSFMT(left<<setw(40)<<instr);
                     if(c==0U) fcq<<OSSFMT(" // nloop="<<nloop/cyc<<"*(cyc="<<cyc<<")"
@@ -1141,7 +1130,7 @@ void fl6_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
                 // roll in the (c < nloop%cyc) correction (both are additive)
                 uint64_t corr = corr0 + (c<nloop%cyc? cyc_aincr: 0);
                 if(corr==0) fcp>>OSSFMT(ac<<" = "<<oac<<";");
-                //else fcp>>OSSFMT(ac<<" = _ve_vaddul_vsv("<<corr<<","<<oac<<");");
+                //else fcp>>OSSFMT(ac<<" = _vel_vaddul_vsvl("<<corr<<","<<oac<<", "<<vl0<<");");
                 else fcp>>OSSFMT(ac<<" = _vel_vaddul_vsvl("<<corr<<","<<oac
                         <<","<<vl0<<");");
                 if(c<nloop%cyc) fcp<<OSSFMT(" // +"<<cyc_aincr);
@@ -1158,7 +1147,7 @@ void fl6_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
         for(uint32_t c=0U; c<cyc; ++c){
             string ac = OSSFMT(pfx<<"_acyc_"<<c);
             uint64_t nCyc = nloop/cyc + (c < nloop%cyc? 1: 0);
-            //auto instr = OSSFMT(ac<<" =_ve_vaddul_vsv(-"<<nCyc*cyc_aincr<<", "<<ac<<");");
+            //auto instr = OSSFMT(ac<<" =_vel_vaddul_vsvl(-"<<nCyc*cyc_aincr<<", "<<ac<<", "<<vl0<<");");
             auto instr = OSSFMT(ac<<" =_vel_vaddul_vsvl(-"<<nCyc*cyc_aincr<<", "<<ac<<",vl0);");
             fp>>OSSFMT(left<<setw(40)<<instr);
             if(c==0U) fp<<OSSFMT(" // nloop="<<nloop/cyc<<"*(cyc="<<cyc<<")+"<<nloop%cyc<<", cyc_aincr="<<cyc_aincr);
@@ -1201,9 +1190,9 @@ void fl6_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
             // because an identical statement is seen
             // and clang does not realize the VL has INCREASED.
             //    The _vel_ form informs the compiler that the 2nd time it
-            //    CANNOT simply re-use the register "b = _ve_vbrd_vs_i64(0LL);" 
+            //    CANNOT simply re-use the register "b = _vel_vbrdl_vsl(0LL, "<<vl0<<");" 
             //cb>>OSSFMT(left<<setw(40)<<"b = _vel_vbrdl_vsl(0LL,vl0);"<<" // b[i] = 0");
-            //cb>>vREG<<"b; b=_ve_vxor_vvv(b,b);"; // typically "best way"
+            //cb>>vREG<<"b; b=_vel_vxor_vvvl(b,b, "<<vl0<<");"; // typically "best way"
             INSCMT(cb,"b = _vel_vbrdl_vsl(0LL,vl0);","b[i] = 0");
         }else if(jj>=vl0){
             //cb  >>OSSFMT(left<<setw(40)<<"a = _vel_vbrdl_vs_i64(ilo,vl0);"<<" // a[i]="<<ilo)
@@ -1215,16 +1204,11 @@ void fl6_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
             use_sq();
             string divmod;
             if(ilo==0){
-                //divmod = OSSFMT("DIVMOD_"<<jj<<"(sq, a, b);");
-                //cb>>OSSFMT(left<<setw(40)<<divmod<<" // a[]=sq/"<<jj<<" b[]=sq%"<<jj);
-                INSCMT(cb,OSSFMT("DIVMOD_"<<jj<<"(sq, a, b);"),
+                INSCMT(cb,OSSFMT("DIVMOD_"<<jj<<"(sq,"<<vl0<<", a, b);"),
                         OSSFMT("a[]=sq/"<<jj<<" b[]=sq%"<<jj));
             }else{
-                //divmod = OSSFMT("DIVMOD_"<<jj<<"(_ve_vaddul_vsv(ilo*jj,sq), a, b);");
-                //cb>>OSSFMT(left<<setw(40)<<divmod<<" // a[]=(sq+"<<ilo*jj<<")/"<<jj<<" b[]=(sq+"<<ilo*jj<<")%"<<jj);
-                //INSCMT(cb,OSSFMT("DIVMOD_"<<jj<<"(_ve_vaddul_vsv(ilo*jj,sq), a, b);"),
-                //        OSSFMT("a[]=(sq+"<<ilo*jj<<")/"<<jj<<" b[]=(sq+"<<ilo*jj<<")%"<<jj));
-                INSCMT(cb,OSSFMT("DIVMOD_"<<jj<<"(_ve_vaddul_vsv(ilo*jj,sq), a, b);"),
+                cb>>OSSFMT("b/*tmp*/ = _vel_vaddul_vsvl(ilo*jj,sq, "<<vl0<<");");
+                INSCMT(cb,OSSFMT("DIVMOD_"<<jj<<"(b,"<<vl0<<", a, b);"),
                         OSSFMT("a[]=(sq+"<<ilo*jj<<")/"<<jj<<" b[]=(sq+"<<ilo*jj<<")%"<<jj));
             }
         }
@@ -1318,7 +1302,7 @@ void fl6_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
             // ff
             if(!fp_sets_ab && cycpre){ // this MUST be before VL check, in this case
                 // XXX BUG without vel_FOO **HERE**
-                //INSCMT(ff,OSSFMT(ac<<" = _ve_vaddul_vsv("<<cyc_aincr<<", "<<ac<<");"),
+                //INSCMT(ff,OSSFMT(ac<<" = _vel_vaddul_vsvl("<<cyc_aincr<<", "<<ac<<", "<<vl0<<");"),
                 //        OSSFMT("a~"<<ac<<", b~"<<bc));
                 INSCMT(ff,OSSFMT(ac<<" = _vel_vaddul_vsvl("<<cyc_aincr<<", "<<ac
                             <<","<<(have_vl()?"vl":"vl0")<<");"),
@@ -1327,7 +1311,7 @@ void fl6_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
             if(last_iter_check && iijj%vl0 ){ // last iter has reduced VL
                 if(nloop == unroll){
                     auto final_vl = iijj % vl0;
-                    auto instr=OSSFMT("_ve_lvl("<<(have_vl()?"vl=":"")<<final_vl<<");");
+                    auto instr=OSSFMT(" /* XXX veSetVLEN"<<(have_vl()?"vl=":"")) */ <<final_vl<<");");
                     ff>>OSSFMT(left<<setw(40)<<instr<<" // iijj="<<iijj/vl0<<"*vl0+"<<final_vl);
                 }else{ // must check whether, this time through, vl changes
                     use_vl(); // vl = min(vl0,remain)
@@ -1335,22 +1319,22 @@ void fl6_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
                                 ?"vl = (vl0<iijj-cnt? vl0: iijj-cnt);"
                                 :"vl = (cnt<vl0? cnt: vl0);"),
                             OSSFMT(" // iijj="<<iijj/vl0<<"*vl0+"<<iijj%vl0));
-                    ff>>"_ve_lvl(vl);";
+                    ff>>" /* XXX veSetVLENvl)) */ ;";
                 }
             }else if(0 && iijj%vl0){ // XXX DEBUG
                 if(nloop == unroll){
-                    ff>>"//_ve_lvl(vl0);";
+                    ff>>"// /* XXX veSetVLENvl0)) */ ;";
                 }else{
                     use_vl();
-                    ff>>OSSFMT("_ve_lvl(vl0); // XXX DEBUG");
+                    ff>>OSSFMT(" /* XXX veSetVLENvl0)) */ ; // XXX DEBUG");
                 }
             }
             if(!fp_sets_ab){ // if no pre-loop a,b calc, do it right before kernel call
                 if(!cycpre){ // recalc usually can be after VL reduction check
                     mk_divmod();
                     use_sqij();
-                    auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);");
-                    ff>>OSSFMT(left<<setw(40)<<divmod<<" //  a[]=sq/"<<jj<<" b[]=sq%"<<jj<<" BBB");
+                    auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sqij,"<<(have_vl()?"vl":"vl0")<<", a,b);");
+                    INSCMT(ff,divmod,OSSFMT("a[]=sq/"<<jj<<" b[]=sq%"<<jj<<" BBB"));
                 }
             }
 
@@ -1381,11 +1365,11 @@ void fl6_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
                         fl6_defs.DEF(vlojj);
                         fl6_defs["have_vlojj"].setType("TAG");
                     }
-                    fi  >>OSSFMT(left<<setw(40)<<"a =_ve_vadduw_vsv(vlojj, a);"
+                    fi  >>OSSFMT(left<<setw(40)<<"a =_vel_vadduw_vsvl(vlojj, a, vl0);"
                             <<" // a[i]+="<<vlojj<<", b[] same");
                 }else if(jj%vl0==0){
                     if(nloop<=jj/vl0){ // !have_jjMODvl_reset
-                        auto instr = OSSFMT("b = _ve_vadduw_vsv("<<vl0<<",b);");
+                        auto instr = OSSFMT("b = _vel_vadduw_vsvl("<<vl0<<",b, vl0);");
                         fi>>OSSFMT(left<<setw(40)<<instr<<" // b[] += vl0, a[] const");
                     }else{ // various nice ways to do periodic reset... [potentially better with unroll!]
                         // Every (jj/vl0) we do a special reset...
@@ -1393,9 +1377,9 @@ void fl6_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
                         // cyclic unroll can inline the "tmod" periodic reset
                         if(cyc && (unroll%cyc==0 || (nFull==1 && nPart==0))){ // other corner cases XXX ???
                             if((u+1)%cyc){
-                                fi  >>"b = _ve_vadduw_vsv(vl0,b);           // b[] += vl0 (cyc="<<jitdec((u+1)%cyc)<<", a[] unchanged)";
+                                fi  >>"b = _vel_vadduw_vsvl(vl0,b, vl0);           // b[] += vl0 (cyc="<<jitdec((u+1)%cyc)<<", a[] unchanged)";
                             }else{
-                                fi  >>"a = _ve_vadduw_vsv(1,a);             // a[] += 1"
+                                fi  >>"a = _vel_vadduw_vsvl(1,a, vl0);             // a[] += 1"
                                     >>"b = sq;                              // b[] = sq[] (cyc reset)";
                             }
                         }else{ //generic update explicitly tracks a separate 'tmod' cyclic counter
@@ -1414,9 +1398,9 @@ void fl6_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
                                 fi>>OSSFMT(left<<setw(40)<<instr<<" // cmov reset tmod=0?");
                             }
                             fi  >>"if(tmod){" // using mk_scope or CBLOCK_SCOPE is entirely optional...
-                                >>"    b = _ve_vadduw_vsv(vl0,b);           // b[] += vl0 (easy, a[] unchanged)"
+                                >>"    b = _vel_vadduw_vsvl(vl0,b, vl0);           // b[] += vl0 (easy, a[] unchanged)"
                                 >>"}else{"
-                                >>"    a = _ve_vadduw_vsv(1,a);             // a[] += 1"
+                                >>"    a = _vel_vadduw_vsvl(1,a, vl0);             // a[] += 1"
                                 >>"    b = sq;                              // b[] = sq[] (reset case)"
                                 >>"}";
                         }
@@ -1427,22 +1411,21 @@ void fl6_unroll_split_ii( Cblock& outer, Cblock& inner, string pfx,
                     // both mul-shr and jj=2^N cases can use DIVMOD macro
                     //
                     // induction from prev a,b is longer than full recalc!
-                    //  sqij = _ve_vaddul_vsv(vl0,sqij);
-                    //  a = _ve_vsrl_vvs(sqij, jj_shift);              // a[i]=sq[i]/jj
-                    //  b = _ve_vand_vsv("<<jithex(jj_minus_1)<<",sq); // b[i]=sq[i]%jj
+                    //  sqij = _vel_vaddul_vsvl(vl0,sqij, vl0);
+                    //  a = _vel_vsrl_vvsl(sqij, jj_shift, vl0);              // a[i]=sq[i]/jj
+                    //  b = _vel_vand_vsvl("<<jithex(jj_minus_1)<<",sq, vl0); // b[i]=sq[i]%jj
                 }else{
                     if(fp_sets_ab){ // if pre-loop sets ab, recalc goes to fi (not ff)
                         use_sqij();
                         mk_divmod();
-                        auto instr = "sqij = _ve_vaddul_vsv(vl0,sqij);//A";
-                        fi>>OSSFMT(left<<setw(40)<<instr<<" // sqij[i] += "<<vl0);
-                        auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);");
-                        fi  >>OSSFMT(left<<setw(40)<<divmod
-                                <<" //  a[]=sq/"<<jj<<" b[]=sq%"<<jj<<" AAA");
+                        auto instr = OSSFMT("sqij = _vel_vaddul_vsvl(vl0,sqij, "<<vl0<<");//A");
+                        INSCMT(fi,instr,"sqij[i] += vl0");
+                        auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sqij,"<<vl0<<", a,b);");
+                        INSCMT(fi,divmod,OSSFMT("a[]=sq/"<<jj<<" b[]=sq%"<<jj<<" AAA"));
                     }else if(!cycpre){
                         use_sqij();
-                        auto instr = "sqij = _ve_vaddul_vsv(vl0,sqij);//B";
-                        fi>>OSSFMT(left<<setw(40)<<instr<<" // sqij[i] += "<<vl0);
+                        auto instr = "sqij = _vel_vaddul_vsvl(vl0,sqij, vl0);//B";
+                        INSCMT(fi,instr,"sqij[i] += vl0");
                     }
                 }
             }

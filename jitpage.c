@@ -377,6 +377,7 @@ void dl_dump(void * const handle){
     // Get the link map
     const struct link_map * link_map = 0;
     const int ret = dlinfo(handle, RTLD_DI_LINKMAP, &link_map);
+    if(ret) printf(" dlinfo status=%d\n",ret);
     const struct link_map * const loaded_link_map = link_map;
     assert(ret == 0);
     assert(link_map != 0);

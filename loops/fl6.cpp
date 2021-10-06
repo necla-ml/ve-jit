@@ -55,7 +55,7 @@ Fl6test::Fl6test(FusedLoopKernel& krn, int const v/*=0,verbose*/)
     // upper-level tree structure, above the fused-loop.
     pr.root["first"];                           // reserve room for preamble, comments
     auto& inc = pr.root["includes"];
-    inc["veintrin.h"]>>"#include \"veintrin.h\"";
+    inc["velintrin.h"]>>"#include \"veintrin.h\"";
     inc["velintrin.h"]>>"#include \"velintrin.h\"";
     inc["stdint.h"]>>"#include <stdint.h>";
     inc["stdio.h"]>>"#include <stdio.h>";
@@ -102,7 +102,7 @@ Fl6test::Fl6test(int const which, int const v/*=0,verbose*/)
     // upper-level tree structure, above the fused-loop.
     pr.root["first"];                           // reserve room for preamble, comments
     auto& inc = pr.root["includes"];
-    inc["veintrin.h"]>>"#include \"veintrin.h\"";
+    inc["velintrin.h"]>>"#include \"veintrin.h\"";
     inc["velintrin.h"]>>"#include \"velintrin.h\"";
     inc["stdint.h"]>>"#include <stdint.h>";
     inc["stdio.h"]>>"#include <stdio.h>";
@@ -209,7 +209,7 @@ void cf5_kernel(cprog::Cblock& bOuter, cprog::Cblock& bDef,
         // state variables at end of bDef
         auto& bDefState = bDef["last"]["vechash"];
         if(bDefState.code_str().empty()){
-            string vSeq = (vSEQ0.empty()? "_ve_vseq_v()": vSEQ0);
+            string vSeq = (vSEQ0.empty()? "_vel_vseq_vl(None)": vSEQ0);
             VecHash2::kern_C_begin(bOuter,bOuter,bDefConst, vSeq.c_str(), vl);
             auto instr = OSSFMT("int64_t "<<vh2<<" = 0;");
             bDefState>>OSSFMT(left<<setw(40)<<instr)
@@ -254,7 +254,7 @@ void cf5_kernel(cprog::Cblock& bOuter, cprog::Cblock& bDef,
                 >>"    if(terse && vl>=16) linesep=(vl>16 && i==7? \" ...\": \"\");"
                 >>"    if(terse && vl>16 && i>=8 && i<vl-8) continue;"
                 >>"    printf(\"%3llu%s\",\n"
-                >>"      (long long unsigned)_ve_lvs_svs_u64(a,i),"
+                >>"      (long long unsigned)_vel_lvsl_svs(a,i),"
                 >>"      (i%16==15? linesep: \" \")); }"
                 >>"printf(\"}\\n\");"
                 >>"linesep=\"\\n   \";"
@@ -263,7 +263,7 @@ void cf5_kernel(cprog::Cblock& bOuter, cprog::Cblock& bDef,
                 >>"    if(terse && vl>=16) linesep=(vl>16 && i==7? \" ...\": \"\");"
                 >>"    if(terse && vl>16 && i>=8 && i<vl-8) continue;"
                 >>"    printf(\"%3llu%s\",\n"
-                >>"      (long long unsigned)_ve_lvs_svs_u64(b,i),"
+                >>"      (long long unsigned)_vel_lvsl_svs(b,i),"
                 >>"      (i%16==15? linesep: \" \")); }"
                 >>"printf(\"}\\n\");"
                 ;
@@ -298,8 +298,8 @@ void cf5_kernel(cprog::Cblock& bOuter, cprog::Cblock& bDef,
                     >>"if(v){ printf(\"cf5_kernel_check vl=%d cnt=%d jj=%d ilo=%d jlo=%d\\n\",(int)vl,(int)cnt,(int)jj,(int)ilo,(int)jlo);">>"    fflush(stdout); }"
                     >>"for(uint64_t i=0;i<vl;++i){"
                     >>"    if(v){ printf(\"expect a[%lu]=%lu b[%lu]=%lu\\n\",i,ilo+(cnt+i)/jj,i,jlo+(cnt+i)%jj);">>"        fflush(stdout); }"
-                    >>"    assert( _ve_lvs_svs_u64(a,i) == ilo+(cnt+i)/jj );"
-                    >>"    assert( _ve_lvs_svs_u64(b,i) == jlo+(cnt+i)%jj );"
+                    >>"    assert( _vel_lvsl_svs(a,i) == ilo+(cnt+i)/jj );"
+                    >>"    assert( _vel_lvsl_svs(b,i) == jlo+(cnt+i)%jj );"
                     >>"}"
                     ;
 #else
@@ -308,8 +308,8 @@ void cf5_kernel(cprog::Cblock& bOuter, cprog::Cblock& bDef,
                         >>"fflush(stdout);";
                 cf5_kernel_check
                     >>"for(uint64_t i=0;i<vl;++i){"
-                    >>"    int64_t const a_i = _ve_lvs_svs_u64(a,i);"
-                    >>"    int64_t const b_i = _ve_lvs_svs_u64(b,i);"
+                    >>"    int64_t const a_i = _vel_lvsl_svs(a,i);"
+                    >>"    int64_t const b_i = _vel_lvsl_svs(b,i);"
                     >>"    int const aok = (a_i == ilo+(cnt+i)/jj);"
                     >>"    int const bok = (b_i == jlo+(cnt+i)%jj);";
                 cf5_kernel_check
@@ -330,12 +330,12 @@ void cf5_kernel(cprog::Cblock& bOuter, cprog::Cblock& bDef,
             auto& chk=bKrn["chk"];
             chk>>OSSFMT("for(uint64_t "<<pfx<<"_i=0; "<<pfx<<"_i<"<<sVL<<"; ++"<<pfx<<"_i){");
             if(v){ chk>>OSSFMT(""
-                    <<"\n    int64_t a_i=_ve_lvs_svs_u64("<<vA<<","<<pfx<<"_i)"
-                    <<            ", b_i=_ve_lvs_svs_u64("<<vB<<","<<pfx<<"_i);"
+                    <<"\n    int64_t a_i=_vel_lvsl_svs("<<vA<<","<<pfx<<"_i)"
+                    <<            ", b_i=_vel_lvsl_svs("<<vB<<","<<pfx<<"_i);"
                     <<"\n    printf(\"i=%lu got %ld %ld expect %lu %lu\\n\", "<<pfx<<"_i"<<",a_i,b_i, ilo+(cnt+"<<pfx<<"_i)/jj, jlo+(cnt+"<<pfx<<"_i)/jj );");
             }
-            chk>>OSSFMT("    assert( _ve_lvs_svs_u64("<<vA<<","<<pfx<<"_i) == ilo+(cnt+"<<pfx<<"_i)/jj );");
-            chk>>OSSFMT("    assert( _ve_lvs_svs_u64("<<vB<<","<<pfx<<"_i) == jlo+(cnt+"<<pfx<<"_i)%jj );");
+            chk>>OSSFMT("    assert( _vel_lvsl_svs("<<vA<<","<<pfx<<"_i) == ilo+(cnt+"<<pfx<<"_i)/jj );");
+            chk>>OSSFMT("    assert( _vel_lvsl_svs("<<vB<<","<<pfx<<"_i) == jlo+(cnt+"<<pfx<<"_i)%jj );");
             chk>>"}";
         }
         if(!bOut.find("out_once")){
@@ -346,7 +346,7 @@ void cf5_kernel(cprog::Cblock& bOuter, cprog::Cblock& bDef,
         }
     }else if( which==KERNEL_SQIJ ){
         bKrn["beg"]>>OSSFMT("// KERNEL("<<vA<<"["<<vl<<"],"<<vB<<"["<<vl<<"],sqij="<<vA<<"*jj+"<<vB<<")");
-        bKrn["prt"]>>"__vr const x = STORE(0, _ve_addul_vsv(ptr,_ve_vmulul_vsv(stride,sqij)));";
+        bKrn["prt"]>>"__vr const x = STORE(0, _vel_addul_vsvl(ptr,_vel_vmulul_vsvl(stride,sqij,"<<sVL<<"),"<<sVL<<"));";
         if(!extraComment.empty()) bKrn["prt"]<<" // "<<extraComment;
     }else{
         THROW(OSSFMT("unknown kernel type "<<which<<" in "<<__FUNCTION__));
@@ -436,7 +436,7 @@ int main(int argc,char**argv){
                     else if(kern=="HASH") which=KERNEL_HASH;
                     else if(kern=="PRINT") which=KERNEL_PRINT;
                     else if(kern=="CHECK") which=KERNEL_CHECK;
-                    else if(kern=="SQIJ") which=KERNEL_HASH;
+                    else if(kern=="SQIJ") which=KERNEL_SQIJ;
                     else{
                         cout<<"-kKERN "<<c<<" not supported (stays at "<<kernel_name(which)<<")"<<endl;
                     }

@@ -28,6 +28,20 @@
 # It controls things different from VERBOSE (make command-echo)
 BIN_MK_VERBOSE?=1
 
+# hack: if any OBJECTS are -x86.o, use 'ar' instead of 'nar'
+$(info bin.mk OBJECTS ${OBJECTS})
+ifeq ($(filter %-x86.o,$(OBJECTS)),)
+$(info bin.mk VE library ${LIBNAME})
+TARGET:=ve
+AR:=nar
+NM:=nnm
+else
+$(info bin.mk x86 library ${LIBNAME})
+TARGET:=x86
+AR:=ar
+NM:=nm
+endif
+
 ifeq ($(ARCHIVE),)
 ARCHIVE:=$(patsubst %.so,%.a,$(LIBNAME))
 endif
@@ -36,7 +50,7 @@ endif
 mkfile_path := $(realpath $(lastword $(MAKEFILE_LIST)))
 mkfile_dir := $(dir $(mkfile_path))
 MEGA_ARCHIVE?=$(abspath $(mkfile_dir)/../libmegajit.a)
-
+MEGA_ARCHIVE_SO?=$(abspath $(mkfile_dir)/../libmegajit.a)
 
 # Example of how to compile a [local copy of] a jit '-vi.c' file
 #        [copied from ../vednn-ek/test/tmp_cjitConv01/cjitConvFwd_parmstr-vi.c]
@@ -47,10 +61,13 @@ MEGA_ARCHIVE?=$(abspath $(mkfile_dir)/../libmegajit.a)
 #LDFLAGS?=
 #  Warning: this produces a LOT of output...
 #  Also, not really sure if --copy-dt-needed-entries does anything with nld
+LIBFLAGS?=
+ifeq (${TARGET},ve)
 ifeq (${BIN_MK_VERBOSE},0)
-LIBFLAGS?=-Wl,--copy-dt-needed-entries
+LIBFLAGS+=-Wl,--copy-dt-needed-entries
 else
-LIBFLAGS?=-Wl,--verbose -Wl,--trace -Wl,--copy-dt-needed-entries
+LIBFLAGS+=-Wl,--verbose -Wl,--trace -Wl,--copy-dt-needed-entries
+endif
 endif
 
 ifeq (${BIN_MK_VERBOSE},0)
@@ -94,18 +111,20 @@ AT_OBJECTS_FILE:=
 REAL_OBJECTS_FILE:=
 EXTRA_ARCHIVE_OBJECTS:=$(OBJECTS)
 endif
+$(info EXTRA_ARCHIVE_OBJECTS=$(EXTRA_ARCHIVE_OBJECTS))
+
 .PRECIOUS: $(ARCHIVE)
 # Remember, any OBJECTS_FILE should **duplicate** the 'make' OBJECTS dependencies
 $(ARCHIVE): $(REAL_OBJECTS_FILE) $(OBJECTS)
-	nar rcs $@ $(AT_OBJECTS_FILE) $(EXTRA_ARCHIVE_OBJECTS) \
+	$(AR) rcs $@ $(AT_OBJECTS_FILE) $(EXTRA_ARCHIVE_OBJECTS) \
 		&& echo 'created $@' || echo 'Trouble creating $@ (continuing)'
-	nnm $@ | wc
+	$(NM) $@ | wc
 ifneq (${BIN_MK_VERBOSE},0)
 	-ls -l $@; echo 'nnm wordcount: ' `nnm $@ | wc`
 endif
 ifneq ($(MEGA_ARCHIVE),)
 	#	$(MAKE) $(MEGA_ARCHIVE)
-	nar rcs $(MEGA_ARCHIVE) $(AT_OBJECTS_FILE) $(ARCHIVE_OBJECTS) \
+	$(AR) rcs $(MEGA_ARCHIVE) $(AT_OBJECTS_FILE) $(ARCHIVE_OBJECTS) \
 		&& echo ' updated $(MEGA_ARCHIVE)' || echo 'Trouble updating $(MEGA_ARCHIVE) (continuing)'
 ifneq (${BIN_MK_VERBOSE},0)
 	-ls -l lib* $(MEGA_ARCHIVE); echo 'nnm $(MEGA_ARCHIVE) wordcount: ' `nnm $(MEGA_ARCHIVE) | wc`
@@ -117,7 +136,7 @@ $(MEGA_ARCHIVE)_first_version: # this created a nested archive, not good
 	-@if [ -f "$(MEGA_ARCHIVE)" ]; then \
 		echo ' updating MEGA_ARCHIVE $(MEGA_ARCHIVE)'; \
 		{ echo "open $(MEGA_ARCHIVE)"; echo "replace $(ARCHIVE)"; echo "save"; echo "end"; } \
-		| nar -M; \
+		| $(AR) -M; \
 	else \
 		echo ' creating MEGA_ARCHIVE $(MEGA_ARCHIVE)'; \
 		cp -av $@ $(MEGA_ARCHIVE); \
@@ -137,7 +156,7 @@ $(MEGA_ARCHIVE)_tiny: $(ARCHIVE)
 	             echo 'addlib $(patsubst %.a,%-megaT.a,$(ARCHIVE))'; \
 		     echo 'save'; \
 		     echo 'end'; } \
-		   | nar -M; \
+		   | $(AR) -M; \
 	else \
 		echo ' creating MEGA_ARCHIVE $(MEGA_ARCHIVE)'; \
 		cp -av $@ $(MEGA_ARCHIVE); \
@@ -146,27 +165,41 @@ ifneq (${BIN_MK_VERBOSE},0)
 	-ls -l lib*; echo 'nnm wordcount: ' `nnm $@ | wc`
 endif
 
-$(LIBNAME): $(OBJECTS)
+# ve attempts
+#ncc -o $@ $(LDFLAGS) $(LIBFLAGS) $(filter %-ve.o,$^)
+# did not work echo '$(OBJECTS)' | gawk 'BEGIN{RS=" "}//' > $@.objects
+#  did not create file $(file >$@.objects,$(filter %-ve.o,$^))
+#ncc -o $@ $(LDFLAGS) $(LIBFLAGS) @$@.objects
+#ls -l OBJECTS-ve.list
+#
+# ncc does not support @FILE for long command lines
+#ncc -o $@ $(LDFLAGS) $(LIBFLAGS) @OBJECTS-ve.list
+#
+$(LIBNAME): $(OBJECTS) ${OBJECTS_FILE}
 ifneq (${BIN_MK_VERBOSE},0)
 	echo "-------- Linking --------"
 	echo "LDFLAGS = $${LDFLAGS}"
+	echo "LIBFLAGS = $${LIBFLAGS}"
+	echo "ARCHIVE         $(ARCHIVE)"
+	echo "LIBNAME         $(LIBNAME)"
+	echo "AT_OBJECTS_FILE $(AT_OBJECTS_FILE)"
+	echo "MEGA_ARCHIVE    $(MEGA_ARCHIVE)"
 endif
-	@#ncc -o $@ $(LDFLAGS) $(LIBFLAGS) $(filter %-ve.o,$^)
-	@# did not work echo '$(OBJECTS)' | gawk 'BEGIN{RS=" "}//' > $@.objects
-	@#  did not create file $(file >$@.objects,$(filter %-ve.o,$^))
-	@#ncc -o $@ $(LDFLAGS) $(LIBFLAGS) @$@.objects
-	@#ls -l OBJECTS-ve.list
-	@#
-	@# ncc does not support @FILE for long command lines
-	@#ncc -o $@ $(LDFLAGS) $(LIBFLAGS) @OBJECTS-ve.list
-	@#
+ifeq (${TARGET},ve)
+	@echo "ncc -shared -o $@ $(LDFLAGS) $(LIBFLAGS) -Wl,--whole-archive $(ARCHIVE) -Wl,--no-whole-archive"
 	ncc -shared -o $@ $(LDFLAGS) $(LIBFLAGS) -Wl,--whole-archive $(ARCHIVE) -Wl,--no-whole-archive
+else # much simple for x86, gcc supports @file
+	gcc -shared -o $@ $(LDFLAGS) $(LIBFLAGS) ${AT_OBJECTS_FILE}
+endif
 ifneq (${BIN_MK_VERBOSE},0)
 	echo "-------- Linking DONE --------"
 	# This would assume VE library target !!! -nreadelf -hds $@
 	echo "-------- Library $(LIBNAME) created in `pwd`"
-	-ls -l $@; echo 'nnm wordcount: ' `nnm $@ | wc`
+	-ls -l $@; echo 'nnm wordcount: ' `$(NM) $@ | wc`
 endif
+#if [ -s "$(MEGA_ARCHIVE_SO)" ]; then \
+#  ncc -shared -o $(MEGA_ARCHIVE_SO) $(LIBFLAGS)  -Wl,--whole-archive $@  $(MEGA_ARCHIVE_SO); \
+#fi
 
 # Allow override of default compiler (maybe particular version is required)
 # NCC   must be used for .S files (nas possibly, if you don't use cpp preprocessor)
@@ -179,6 +212,8 @@ NCC?=ncc
 NCXX?=nc++
 CLANG?=clang
 CXXLANG?=clang++
+GCC?=gcc
+GCXX?=g++
 # Flags can be added to from environment
 # clang flags are adjust also by CFLAGS and CXXFLAGS, but
 # can be totally overridden from environment if nec.
@@ -186,12 +221,18 @@ CFLAGS?=
 CXXFLAGS?=
 CLANG_FLAGS?=
 CXXLANG_FLAGS?=
+C86FLAGS?=
+CXX86FLAGS?=
+
 $(bin_mk_info Begin with CFLAGS        = $(CFLAGS))
 $(bin_mk_info Begin with CXXFLAGS      = $(CXXFLAGS))
 $(bin_mk_info Begin with CLANG_FLAGS   = $(CLANG_FLAGS))
 $(bin_mk_info Begin with CXXLANG_FLAGS = $(CXXLANG_FLAGS))
 CFLAGS:=-O2 -fPIC $(CFLAGS)
 CXXFLAGS:=-std=c++11 -O2 -fPIC $(CXXFLAGS)
+
+C86FLAGS:=-O2 $(C86FLAGS)
+CXX86FLAGS:=-std=c++11 -O2 $(CXX86FLAGS)
 
 CLANG_FLAGS:=$(CLANG_FLAGS) $(CFLAGS)
 CXXLANG_FLAGS:=$(CXXLANG_FLAGS) $(CXXFLAGS)
@@ -225,6 +266,7 @@ $(bin_mk_info Ending with CXXLANG_FLAGS = $(CXXLANG_FLAGS))
 # Aurora C: %-ncc.c      via ncc (scalar code, extended asm, nas/link frontend)
 #       and %-clang.c    via clang scalar code (want good optimizer)
 #       and %-vi.c       via clang VECTOR INTRINSICS
+# x86 C: %-x86.c         via gcc, also LIBNAME -x86.so ?
 #
 # All with CFLAGS/CXXFLAGS
 # Assembler outputs are for show, and can omit -fPIC for clarity.
@@ -240,6 +282,9 @@ $(bin_mk_info Ending with CXXLANG_FLAGS = $(CXXLANG_FLAGS))
 %-ve.o: %-clang.c
 	$(CLANG) $(CLANG_FLAGS)       -c $< -o $*-clang.s
 	$(CLANG) $(CLANG_FLAGS) -fPIC -c $< -o $@
+%-x86.o: %-x86.c
+	$(GCC) $(C86FLAGS)       -c $< -o $*-x86.s
+	$(GCC) $(C86FLAGS) -fPIC -c $< -o $@
 # OK $(CLANG) -target ve -O3 -mllvm -show-spill-message-vec -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics -fPIC -o $@ -c $<
 # OK $(CLANG) -target ve -mllvm $(CLANG_VI_FLAGS) -fPIC -o $@ -c $<
 
@@ -288,6 +333,8 @@ ifneq (${BIN_MK_VERBOSE},0)
 	nnm $@
 endif
 	rm -f $*_unroll-ve.o.tmp
+# Begin by cancelling the default rule -- we REQUIRE a special suffix
+%.o: %.cpp
 %-ve.o: %-ncc.cpp
 	$(NCXX) $(CXXFLAGS) -fPIC -S $< -o $*-ncc_cpp.s
 	$(NCXX) $(CXXFLAGS) -fPIC -c $< -o $@
@@ -298,8 +345,14 @@ endif
 	# this one might not be supported?
 	$(CXXLANG) $(CXXLANG_VFLAGS)       -S $< -o $*-vi_cpp.s
 	$(CXXLANG) $(CXXLANG_VFLAGS) -fPIC -c $< -o $@
+%-x86.o: %-x86.cpp
+	# this one might not be supported?
+	$(GCXX) $(CXX86FLAGS)       -S $< -o $*-x86_cpp.s
+	$(GCXX) $(CXX86FLAGS) -fPIC -c $< -o $@
 %-ve: %-ve.o
 	$(NCXX) $(CXXFLAGS) $< -o $@
+%-x86: %-x86.o
+	$(GCXX) $(CXX86FLAGS) $< -o $@
 # Aurora assembler.S: cpp->.asm, ncc->.o, nobjcopy->.bin, .bin-->.dump
 ifeq ($(VERBOSE),0)
 %.bin: %.S
