@@ -70,6 +70,21 @@ static std::string bin_mk_file_to_string(){
 
 static std::string getPath();
 
+enum FileCmp { FILECMP_ABSENT, FILECMP_SAMESIZE, FILECMP_DIFFSIZE };
+/** check if file is absent, samesize, or diffsize */
+static enum FileCmp filecmp(std::string abspath, size_t const match_size){
+    enum FileCmp ret = FILECMP_ABSENT;
+    struct stat st;
+    if(stat(abspath.c_str(), &st)){
+        if((size_t)st.st_size == match_size){ // file size matches => "same" (hack)
+            ret = FILECMP_SAMESIZE;
+        }else{
+            ret = FILECMP_DIFFSIZE;
+        }
+    }
+    return ret;
+}
+
 class FileLocn {
     std::string subdir;
     std::string basename;
@@ -141,7 +156,7 @@ std::vector<std::string> DllFile::obj(std::string fname){
 /** \b new: if file exists and "same", don't rewrite it */
 std::string DllFile::write(SubDir const& subdir){
     int const v = 1;
-    string myfile;
+    string myfile; // entire generated source file
     {
         std::ostringstream oss;
         oss <<"//Dllfile: basename = "<<basename
@@ -155,9 +170,23 @@ std::string DllFile::write(SubDir const& subdir){
         myfile = oss.str();
     }
 
+    // nitpick: '/' -> os path separator?
     this->abspath = subdir.abspath + "/" + this->basename + this->suffix;
 
     // check file existence, and whether we can skip the rewrite
+    // quick'n'dirty check for file edit via size mismatch
+#if 1 // XXX readable helper fn (perhaps extend with hash of file content?)
+    auto const fcmp = filecmp(abspath, myfile.size());
+    bool const writeit = (fcmp != FILECMP_SAMESIZE);
+    if (v>1){
+        if (fcmp == FILECMP_SAMESIZE) cout<<
+            " file samesize as code string, so NOT overwriting";
+        else if (fcmp == FILECMP_DIFFSIZE) cout<<
+            " file differs from code string size "<<myfile.size();
+        else cout << // FILECMP_ABSENT
+            " target file does not exist";
+    }
+#else // original
     bool writeit = true;
     {
         struct stat st;
@@ -174,6 +203,7 @@ std::string DllFile::write(SubDir const& subdir){
             if(v>1) cout<<" and target file does not exist";
         }
     }
+#endif
 
     if(writeit){
         try{
@@ -352,7 +382,7 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
             if( it->basename.empty() ){
                 it = erase(it);
             }else{
-                cout<<" Keeping: "<<it->basename<<"."<<it->suffix<<endl;
+                cout<<" Keeping: "<<it->basename<<""<<it->suffix<<endl;
                 ++it;
             }
         }
@@ -505,7 +535,11 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
     }
     // sometimes the 'make' does nothing ??? check that files are really there.
     {
-        auto ls = "ls -l "+dir.abspath+" *.mk lib*";
+        // dir.abspath might have literally thousands of files (too much output)
+        //auto ls = "ls -l "+dir.abspath+" *.mk lib*";
+        cout<<" *.mk and lib* in directory "<<dir.abspath
+            <<" as DllBuild::prep finishes:"<<endl;
+        auto ls = "cd "+dir.abspath+" && ls -l *.mk lib*";
         if(system(ls.c_str())!=0) cout<<"Issues with command `"<<ls<<"`"<<endl;
     }
     prepped = true;
