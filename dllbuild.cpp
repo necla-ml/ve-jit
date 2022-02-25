@@ -10,7 +10,7 @@
 #include <unistd.h>     // getcwd, sysconf, pathconf, access
 #include <sys/stat.h>   // stat (possibly faster than 'access') and I check size
 
-#define PSTREAMS 0
+#define PSTREAMS 1
 #if PSTREAMS
 #include "pstreams-1.0.1/pstream.h"
 #endif
@@ -44,9 +44,11 @@ static std::string bin_mk_file_to_string(){
     //cout<<" binary_bin_mk_end   @ "<<(void*)&_binary_bin_mk_end<<endl;
     //cout<<" binary_bin_mk_size    "<<(size_t)&_binary_bin_mk_size<<endl;
     //return std::string((char*)&_binary_bin_mk_start, (size_t)&_binary_bin_mk_size);
+#if 0
     cout<<" bin_mk @ "<<(void*)&bin_mk[0]<<endl;
     cout<<" bin_mk_size "<<bin_mk_size<<endl;
     cout.flush();
+#endif
     return std::string(&bin_mk[0], (size_t)bin_mk_size);
 }
 #else
@@ -112,11 +114,11 @@ std::string DllFile::short_descr() const {
 }
 /** Unfortunately, multiple compilations rely on bin.mk file rule details,
  * so now we return a vector of objects. */
-std::vector<std::string> DllFile::obj(std::string fname){
+std::vector<std::string> DllFile::obj(std::string fname, int const v/*=0,quiet*/){
     std::vector<std::string> ret;
     size_t p, pp=0;
     std::vector<char const*> alts;
-    cout<<" Dllfile::obj(\""<<fname<<"\")..."<<endl; cout.flush();
+    if(v) cout<<" Dllfile::obj(\""<<fname<<"\")..."<<endl; cout.flush();
     if((p=fname.rfind('-'))!= std::string::npos){
         if(0){ ;
         }else if((p=fname.rfind("-vi.c"))==fname.size()-5){
@@ -154,8 +156,7 @@ std::vector<std::string> DllFile::obj(std::string fname){
     return ret;
 }
 /** \b new: if file exists and "same", don't rewrite it */
-std::string DllFile::write(SubDir const& subdir){
-    int const v = 1;
+std::string DllFile::write(SubDir const& subdir, int const v/*=0,quiet*/){
     string myfile; // entire generated source file
     {
         std::ostringstream oss;
@@ -293,7 +294,7 @@ std::string const & DllBuild::getLibName() const {
  */
 void DllBuild::prep(string basename, string subdir/*="."*/){
     if(empty()){
-        cout<<" Nothing to do for dll "<<basename<<endl;
+        if(verbose) cout<<" Nothing to do for dll "<<basename<<endl;
         return;
     }
     this->dir      = SubDir(subdir);
@@ -379,10 +380,11 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
     }
     if(DLLBUILD_ERASE_SUSPICIOUS) { // fully remove the DllFile?
         for(auto it=begin(); it!=end(); ){
+            if(verbose) cout<<(it->basename.empty()? " Removing: ":" Keeping: ")
+                <<it->basename<<""<<it->suffix<<endl;
             if( it->basename.empty() ){
                 it = erase(it);
             }else{
-                cout<<" Keeping: "<<it->basename<<""<<it->suffix<<endl;
                 ++it;
             }
         }
@@ -509,7 +511,7 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
             cout<<" Trouble writing file "<<absmkfile<<endl;
             throw;
         }
-        cout<<" makefile written: "<<absmkfile<<endl;
+        if(verbose) cout<<" makefile written: "<<absmkfile<<endl;
     }
 
     // NOTE alternate is to write the @FILE as a series of 'echo' commands, right
@@ -531,10 +533,10 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
             cout<<" Trouble writing file "<<absatfile<<endl;
             throw;
         }
-        cout<<" @FILE list of object files written: "<<absatfile<<endl;
+        if(verbose>0) cout<<" @FILE list of object files written: "<<absatfile<<endl;
     }
     // sometimes the 'make' does nothing ??? check that files are really there.
-    {
+    if(verbose>0) {
         // dir.abspath might have literally thousands of files (too much output)
         //auto ls = "ls -l "+dir.abspath+" *.mk lib*";
         cout<<" *.mk and lib* in directory "<<dir.abspath
@@ -546,38 +548,41 @@ void DllBuild::prep(string basename, string subdir/*="."*/){
 }
 void DllBuild::skip_prep(string basename, string subdir/*="."*/){
     if(empty()){
-        cout<<" Nothing to do for dll "<<basename<<endl;
+        if(verbose>0) cout<<" Nothing to do for dll "<<basename<<endl;
         return;
     }
     this->dir      = SubDir(subdir);
     this->basename = basename;
     this->libname  = "lib"+this->basename+".so";
-    string archive = "lib"+this->basename+".a";  // NEW
+    //string archive = "lib"+this->basename+".a";  // NEW
     this->mkfname  = this->basename+".mk";
     this->fullpath = dir.abspath+"/"+libname;
     std::string absmkfile = dir.abspath+"/"+mkfname;
     if(access(absmkfile.c_str(),R_OK)){
-        cout<<" Oh-oh. Cannot skip generating "<<mkfname;
+        if(verbose) cout<<" Oh. Cannot skip generating "<<mkfname;
         this->prep(basename,subdir);
     }else{
-        cout<<" Re-using "<<absmkfile<<endl;
+        if(verbose) cout<<" Re-using "<<absmkfile<<endl;
         prepped = true;
     }
 }
 static int try_make( std::string mk, std::string mklog, int const v/*verbose*/ ){
     string mk_cmd = mk;
-#if 1
-    auto ret = system(mk_cmd.c_str());
-    if(ret){
-        //THROW(" Build error: "+mk);
-        cout<<" Build error: "<<mk_cmd<<endl;
-        cout<<" Build ret  : "<<ret<<endl;
+    if( PSTREAMS==0 || mklog.empty() || v>1 )
+    {
+        auto ret = system(mk_cmd.c_str());
+        if(ret){
+            //THROW(" Build error: "+mk);
+            cout<<" Build error: "<<mk_cmd<<endl;
+            cout<<" Build ret  : "<<ret<<endl;
+        }
+        return ret;
     }
-    return ret;
-#else // pstreams to capture stdout, stderr into log files etc.
+#if PSTREAMS
+    // else pstreams to capture stdout, stderr into log files etc.
     if(!mklog.empty())
         mk_cmd.append(" >& ").append(mklog);
-    cout<<" Build command: "<<mk_cmd<<endl;
+    if(v) cout<<" Build command: "<<mk_cmd<<endl;
 
     using namespace redi;
     redi::pstream mkstream(mk_cmd,
@@ -603,35 +608,31 @@ static int try_make( std::string mk, std::string mklog, int const v/*verbose*/ )
     status = mkstream.rdbuf()->status();
     error  = mkstream.rdbuf()->error();
     if(error || status){
-        cout<<" Please check build log in "<<mklog<<endl;
+        cout<<" exit status or error! Please check build log in "<<mklog<<endl;
     }
-    if(0){ //Is following correct?
-        // even in quiet mode mode: write 'make' output into a file:
+#if 0
+    { // even in quiet mode mode: write 'make' output into a file:
         std::ofstream ofs(mklog, ios_base::app);
         ofs<<string(40,'-')<<" stdout:"<<endl<<out<<endl;
         ofs<<string(40,'-')<<" stderr:"<<endl<<err<<endl;
         ofs.flush();
         ofs.close();
     }
-    if(v>0 || error || status){
-        cout<<string(40,'-')<<" stdout:"<<endl<<out<<endl;
-    }
-    if(v>1 || error || status){
-        cout<<string(40,'-')<<" stderr:"<<endl<<err<<endl;
-        cout<<" Make error  = "<<error <<endl;
-        cout<<" Make status = "<<status<<endl;
-    }
-    if(error||status){
-        //THROW(" Make failed! status="<<status<<" error="<<error);
-        // no we will retry, and try to keep going...
-        cout<<"\n\n WARNING: please check build logs for more info"
+#endif
+    if(error || status){
+        cout<<"\n\n WARNING: see build log "<<mklog<<" for more info"
             <<"\n            We will try to continue anyways.\n"<<endl;
+        cout<<" Build command: "<<mk_cmd<<endl;
+        cout<<" Make    error: "<<error <<endl;
+        cout<<" Make   status: "<<status<<endl;
+        if(v>1) cout<<string(40,'-')<<" stdout:"<<endl<<out<<endl;
+        if(v>0) cout<<string(40,'-')<<" stderr:"<<endl<<err<<endl;
     }
     return status | error;
 #endif
 }
 void DllBuild::make(std::string env){
-    int const v = 0;
+    int const v = this->verbose;
     if(!prepped)
         THROW("Please prep(basename,dir) before make()");
     std::string mklog = dir.abspath+"/"+mkfname+".log";
@@ -641,8 +642,8 @@ void DllBuild::make(std::string env){
     int bad = try_make(mk,mklog,v);
     if(bad){
         mklog.append("2");
-        cout<<"Trying make once again..."<<endl;
-        bad = try_make(mk, mklog, 2);
+        if(v>0) cout<<"Trying make once again... "<<endl;
+        bad = try_make(mk, mklog, this->verbose);
         if(bad){
             cout<<"BUILD ERROR! see "<<mklog<<endl;
             THROW("Build error");
@@ -654,19 +655,24 @@ void DllBuild::make(std::string env){
 void DllBuild::skip_make(std::string env){
     if(!prepped)
         THROW("Please prep(basename,dir), or at least skip_prep(), before make()");
-    string mk = env+" make VERBOSE=1 -C "+dir.abspath+" -f "+mkfname;
-    cout<<" Make command: "<<mk<<endl; cout.flush();
+    //string mk = env+" make VERBOSE=1 -C "+dir.abspath+" -f "+mkfname;
+    //if(verbose) {cout<<" Make command: "<<mk<<endl; cout.flush();}
     if(access(this->fullpath.c_str(),R_OK)){
-        cout<<" Oh-oh. library "<<fullpath<<" is not there.  Attempting rebuild"<<endl;
-        cout.flush();
+        if(verbose) {
+            cout<<" Oh. library "<<fullpath<<" is not there."
+               " Attempting rebuild"<<endl;
+            cout.flush();
+        }
         this->make(env);
     }else{
-        cout<<" Re-using existing library "<<fullpath<<endl;
+        if(verbose) cout<<" Re-using existing library "<<fullpath<<endl;
     }
     made = true;
 }
 DllOpen::DllOpen() : basename(), libHandle(nullptr), dlsyms(), libname(), files() {
+#if 0
     cout<<" +DllOpen"; cout.flush();
+#endif
 }
 DllOpen::~DllOpen() {
     int const v = 0;
@@ -708,7 +714,7 @@ static std::ostream& prefix_lines(std::ostream& os, std::string code,
     return os;
 }
 std::unique_ptr<DllOpen> DllBuild::dllopen(){
-    int const v = 1;
+    int const v = this->verbose;
     //using cprog::prefix_lines;
     if(v)cout<<"*** DllBuild::dllopen() BEGINS"<<endl;
     if(!(prepped and made))
@@ -992,6 +998,7 @@ int main(int argc,char**argv){
     unique_ptr<DllOpen> pLib;
     {
         DllBuild dllbuild;
+        dllbuild.verbose = 0;       //<-- NEW: Feb 2022
         dllbuild.push_back(tmplucky);
 
         if(1) { // test subdir creation and tmpluck.write
@@ -1005,6 +1012,7 @@ int main(int argc,char**argv){
             }
             if(access("subdir1/subdir2",W_OK))
                 THROW(" Still no write access to template file subdir1/subdir2");
+            cout<<"\nTest setup..."<<endl;
             cout<<" GOOD. subdir seems there"<<endl;
             // DllFile tmplucky
             // --> file at abspath
@@ -1015,12 +1023,12 @@ int main(int argc,char**argv){
                 cout<<abspath<<" not there yet? sleep(1) ..."; cout.flush();
                 sleep(1);
             }
-            cout<<" abspath = "<<abspath.c_str()<<endl; cout.flush();
+            //cout<<" abspath = "<<abspath.c_str()<<endl; cout.flush();
             if(access(abspath.c_str(),R_OK)){
                 cout<<" still no access!"<<endl; cout.flush();
                 THROW(" Still no read access to template file subdir1/subdir2");
             }
-            cout<<" abspath = "<<abspath<<endl; cout.flush();
+            //cout<<" abspath = "<<abspath<<endl; cout.flush();
             cout<<" GOOD. apparently have read access to tmplucky.write(...) path"<<endl; cout.flush();
             cout<<" GOOD. created abspath = "<<abspath<<endl; cout.flush();
             cout<<" system commands ... "<<endl; cout.flush();
@@ -1040,10 +1048,14 @@ int main(int argc,char**argv){
             system("rm -rf subdir1");           // clean up this test
         }
 
+        cout<<"\ntest dllbuild prep(...):"<<endl;
         //DllOpen lib = dllbuild.create( libBase, "tmp-dllbuild");
         // let's do it step by step...
         dllbuild.prep( libBase, "tmp-dllbuild"/*build subdirectory*/ );
+        cout<<"\ntest dllbuild make():"<<endl;
         dllbuild.make();
+
+        cout<<"\ntest: what dllbuild library and symbols?"<<endl;
         if(1){
             cout<<"\nExpected symbols...\n";
             cout<<"Library: "<<dllbuild.getLibName()<<endl;
@@ -1056,6 +1068,8 @@ int main(int argc,char**argv){
                 }
             }
         }
+
+        cout<<"\ntest dllbuild.create()"<<endl;
         pLib = dllbuild.create();
     }
     if( !pLib ){
@@ -1065,6 +1079,8 @@ int main(int argc,char**argv){
         THROW(" dllopen failed");
 #endif
     }
+
+    cout<<"\ntest: load dll and call the function"<<endl;
     DllOpen& lib = *pLib;
     typedef int (*LuckyNumberFn)();
     void * luckySymbol = lib["myLuckyNumber"]; // create stores symbols as void*

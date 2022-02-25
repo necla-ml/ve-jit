@@ -122,8 +122,8 @@ struct DllFile {
 	std::string comment;
     /** write comment+code to <subdir.abspath>/<basename><suffix>.
      * \return \c abspath */
-    std::string  write(SubDir const& subdir);
-    static std::vector<std::string> obj(std::string fname);   ///< %.{c,cpp,s,S} --> %.o \throw on err
+    std::string  write(SubDir const& subdir, int v=0);
+    static std::vector<std::string> obj(std::string fname, int const v=0);   ///< %.{c,cpp,s,S} --> %.o \throw on err
     std::string const& getFilePath() const {return this->abspath;}
     std::string short_descr() const;
   private:
@@ -138,16 +138,16 @@ struct DllFile {
  */
 struct DllBuild : std::vector<DllFile> {
     DllBuild() : std::vector<DllFile>(), prepped(false), made(false),
-    dir(), basename(), libname(), mkfname(), fullpath()
+    dir(), basename(), libname(), mkfname(), fullpath(), verbose(0)
     {
 #ifndef NDEBUG
-        std::cout<<" +DllBuild"<<std::endl;
+        if(verbose) std::cout<<" +DllBuild"<<std::endl;
 #endif
     }
     ~DllBuild()
     {
 #ifndef NDEBUG
-        std::cout<<" -DllBuild"<<std::endl;
+        if(verbose) std::cout<<" -DllBuild"<<std::endl;
 #endif
     }
     /** Create source files and Makefile.
@@ -201,6 +201,8 @@ struct DllBuild : std::vector<DllFile> {
     std::string libname;        ///< libbasename.so
     std::string mkfname;        ///< basename.mk
     std::string fullpath;       ///< absolute path to libname {dir.abspath}/{libname}
+  public:
+    int verbose;
 };
 // vim: ts=4 sw=4 et cindent cino=^=l0,\:.5s,=-.5s,N-s,g.5s,b1 cinkeys=0{,0},0),\:,0#,!^F,o,O,e,0=break
 #endif // DLLBUILD_HPP

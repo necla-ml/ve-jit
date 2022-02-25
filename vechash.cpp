@@ -24,7 +24,7 @@ static std::vector<std::pair<int,int>> const vechash_vector_order{{40,63},{39,0}
 
 /** custom register assignment order, hopefully distinctive from ve_propose_reg defaults */
 static void vechash_scalar(std::string variable, AsmScope& block, AsmFmtCols const& a){
-    ve_propose_reg(variable,block,a,"%s",vechash_vector_order);
+    ve_propose_reg(variable,block,a,"%s",vechash_scalar_order);
 }
 static void vechash_vector(std::string variable, AsmScope& block, AsmFmtCols const& a){
     ve_propose_reg(variable,block,a,"%v",vechash_vector_order);
