@@ -1,8 +1,10 @@
 cmake_minimum_required(VERSION 3.0)
 
 # 1.7.x cannot compile libveli
-set(NCC "/opt/nec/ve/bin/ncc" CACHE FILEPATH "Path of ncc")
-set(NCXX "/opt/nec/ve/bin/nc++" CACHE FILEPATH "Path of nc++")
+set(ncc "/opt/nec/ve/bin/ncc")
+set(ncxx "/opt/nec/ve/bin/nc++")
+#set(ncc "/opt/nec/ve/bin/ncc-2.1.28" cache filepath "path of ncc")
+#set(ncxx "/opt/nec/ve/bin/nc++-2.1.28" cache filepath "path of nc++")
 
 option(USE_GCC      "Use gcc (target x86)" OFF)
 option(USE_NCLANG   "Use clang (target VE)" OFF)
@@ -36,13 +38,15 @@ if(USE_GCC)
     set(CMAKE_C_COMPILER gcc)
     set(CMAKE_CXX_COMPILER g++)
 elseif(USE_NCC)
-    set(CMAKE_C_COMPILER /opt/nec/ve/bin/ncc)
-    set(CMAKE_CXX_COMPILER /opt/nec/ve/bin/nc++)
+    set(CMAKE_C_COMPILER ${ncc})
+    set(CMAKE_CXX_COMPILER ${ncxx})
 endif()
 if(USE_NCLANG)
-    set(CMAKE_C_COMPILER /opt/nec/ve/bin/ncc)
-    set(CMAKE_CXX_COMPILER /opt/nec/ve/bin/nc++)
+    set(CMAKE_C_COMPILER ${ncc})
+    set(CMAKE_CXX_COMPILER ${ncxx})
 endif()
+message(STATUS "CMAKE_C_COMPILER   ${CMAKE_C_COMPILER}")
+message(STATUS "CMAKE_CXX_COMPILER ${CMAKE_CXX_COMPILER}")
 
 
 if(LOCAL_LLVM)

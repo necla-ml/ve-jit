@@ -265,12 +265,14 @@ int main(int argc, char **arg) {
 
         printf("series_len = %d\n", series_len);
         printf("----------------------------\n");
-        printf("builtin_npot_ns    : %llu ns\n", builtin_npot_ns);
-        printf("builtin_pot_ns     : %llu ns\n", builtin_pot_ns);
-        printf("branching_npot_ns  : %llu ns\n", branching_npot_ns);
-        printf("branching_pot_ns   : %llu ns\n", branching_pot_ns);
-        printf("branchless_npot_ns : %llu ns\n", branchless_npot_ns);
-        printf("branchless_pot_ns  : %llu ns\n\n", branchless_pot_ns);
+#define LLU(x) (long long unsigned)(x)
+        printf("builtin_npot_ns    : %llu ns\n", LLU(builtin_npot_ns));
+        printf("builtin_pot_ns     : %llu ns\n", LLU(builtin_pot_ns));
+        printf("branching_npot_ns  : %llu ns\n", LLU(branching_npot_ns));
+        printf("branching_pot_ns   : %llu ns\n", LLU(branching_pot_ns));
+        printf("branchless_npot_ns : %llu ns\n", LLU(branchless_npot_ns));
+        printf("branchless_pot_ns  : %llu ns\n\n", LLU(branchless_pot_ns));
+#undef LLU
     }
     printf("cookie=%u\n", cookie);
 }

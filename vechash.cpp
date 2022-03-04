@@ -195,14 +195,14 @@ void VecHash2::kern_C( cprog::Cblock &parent,
         >>OSSFMT("//  const: rnd64a, rnd64b, rnd64c, vh_vs")
         >>OSSFMT("//  scratch: vh2_r, vh2_vx, vh2_vy, vh2_vz")
         ;
-    vh  >>OSSFMT("__vr vh2_vx = _ve_vmulul_vsv(rnd64b,"<<va<<");")
-        >>"__vr vh2_vy = _ve_vaddul_vsv(vh2_j,vh_vs); // init state j"
-        >>OSSFMT("__vr vh2_vz = _ve_vmulul_vsv(rnd64b,"<<vb<<");")
-        >>"vh2_vy = _ve_vmulul_vsv(rnd64a,vh2_vy);"
-        >>"vh2_vx = _ve_vaddul_vvv(vh2_vx,vh2_vz);"
-        >>"vh2_vz = _ve_vaddul_vvv(vh2_vx,vh2_vy);    // vz ~ sum of xyz scrambles"
-        >>"vh2_vx = _ve_vsuml_vv(vh2_vz);             // vrxor missing"
-        >>"uint64_t vh2_r = _ve_lvs_svs_u64(vh2_vx,0);"
+    vh  >>OSSFMT("__vr vh2_vx = _vel_vmulul_vsvl(rnd64b,"<<va<<","<<vl<<");")
+        >>"__vr vh2_vy = _vel_vaddul_vsvl(vh2_j,vh_vs,"<<vl<<"); // init state j"
+        >>OSSFMT("__vr vh2_vz = _vel_vmulul_vsvl(rnd64b,"<<vb<<","<<vl<<");")
+        >>"vh2_vy = _vel_vmulul_vsvl(rnd64a,vh2_vy,"<<vl<<");"
+        >>"vh2_vx = _vel_vaddul_vvvl(vh2_vx,vh2_vz,"<<vl<<");"
+        >>"vh2_vz = _vel_vaddul_vvvl(vh2_vx,vh2_vy,"<<vl<<");    // vz ~ sum of xyz scrambles"
+        >>"vh2_vx = _vel_vsuml_vvl(vh2_vz,"<<vl<<");             // vrxor missing"
+        >>"uint64_t vh2_r = _vel_lvsl_svs(vh2_vx,0);"
         //>>OSSFMT(hash<<" = "<<hash<<" ^ vh2_r")
         >>OSSFMT("vh2_hash = vh2_hash ^ vh2_r")
         >>OSSFMT("vh2_j += "<<vl)
@@ -222,15 +222,15 @@ std::pair<std::string,std::string> VecHash2::kern_C_macro(std::string macname)
         "    /*  const: rnd64a, rnd64b, rnd64c, vh_vs */ \\\n"
         "    /*  scratch vectors: vh2_vx, vh2_vy, vh2_vz */ \\\n"
         "    /*  scratch scalars: vh2_r */ \\\n"
-        "    __vr vh2_vx = _ve_vmulul_vsv(rnd64b,VA); \\\n"
-        "    __vr vh2_vy = _ve_vaddul_vsv(vh2_j,vh_vs); /* init state j */ \\\n"
-        "    __vr vh2_vz = _ve_vmulul_vsv(rnd64b,VB); \\\n"
-        "    vh2_vy = _ve_vmulul_vsv(rnd64a,vh2_vy); \\\n"
-        "    vh2_vx = _ve_vaddul_vvv(vh2_vx,vh2_vz); \\\n"
-        "    vh2_vz = _ve_vaddul_vvv(vh2_vx,vh2_vy);    /* vz~sum xyz */ \\\n"
-        "    /*vh2_vx = _ve_vrxor_vv(vh2_vz);*/         /* missing op */ \\\n"
-        "    vh2_vx = _ve_vsuml_vv(vh2_vz);             /* ..instead */ \\\n"
-        "    uint64_t vh2_r = _ve_lvs_svs_u64(vh2_vx,0); \\\n"
+        "    __vr vh2_vx = _vel_vmulul_vsvl(rnd64b,VA,VL); \\\n"
+        "    __vr vh2_vy = _vel_vaddul_vsvl(vh2_j,vh_vs,VL); /* init state j */ \\\n"
+        "    __vr vh2_vz = _vel_vmulul_vsvl(rnd64b,VB,VL); \\\n"
+        "    vh2_vy = _vel_vmulul_vsvl(rnd64a,vh2_vy,VL); \\\n"
+        "    vh2_vx = _vel_vaddul_vvvl(vh2_vx,vh2_vz,VL); \\\n"
+        "    vh2_vz = _vel_vaddul_vvvl(vh2_vx,vh2_vy,VL);    /* vz~sum xyz */ \\\n"
+        "    /*vh2_vx = _vel_vrxor_vvl(vh2_vz,VL);*/         /* missing op */ \\\n"
+        "    vh2_vx = _vel_vsuml_vvl(vh2_vz,VL);             /* ..instead */ \\\n"
+        "    uint64_t vh2_r = _vel_lvsl_svs(vh2_vx,0); \\\n"
         "    vh2_j += VL; \\\n"
         "    HASH = HASH ^ vh2_r; \\\n"
         //"    asm(\"# vechash2 END\"); \\\n"

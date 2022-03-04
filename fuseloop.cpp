@@ -23,7 +23,9 @@ static char const* unrollSuggestNames[] = {
     "UNR_NLOOP",
     "UNR_CYC",
     "UNR_DIVMOD" };
+#ifndef NDEBUG // for range assertion
 static int const nNames = sizeof(unrollSuggestNames) / sizeof(char const*);
+#endif
 static char const* unrollSuggestDescr[] = {
     "uninitialized",
     "no loop [precalc, never unroll]",
@@ -274,6 +276,7 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int b_pe
     char const * b_period_pow2 = (b_period > 1 && positivePow2(b_period)? " 2^k": "");
     // opt: if nloop is low, can also precalc (whether or not it is periodic)
     int const bcyc_regs = (nloop<b_period? nloop: b_period);
+#ifndef NDEBUG // for assertion only
     bool const have_b_period = true //jj>1 /*&& jj>=b_period*/
         && bcyc_regs > 1 && bcyc_regs < b_period_max
         && !(nloop>1 && vl%jj==0)
@@ -281,6 +284,7 @@ UnrollSuggest unroll_suggest( int const vl, int const ii, int const jj, int b_pe
         && !(nloop>1 && vl%jj!=0 && jj%vl!=0) // ???
         && !(b_period>1 && !(nloop>1 && jj%vl==0) && jj_pow2 && bcyc_regs<b_period_max)
         ;
+#endif
     // Adjust default values:
     //ret.vll [0]
     //ret.nloop
@@ -699,7 +703,7 @@ UnrollSuggest unroll_suggest( UnrollSuggest& u, int vl_min/*=0*/, int const v/*=
     if(vl==MVL && u.vll==0 && vl_equ_min<=vl_max){
         // opsave==0 picks up many of these cases via best_vll,
         // but we still might catch some 'auto-skipped' cases, I think.
-        int const vl_equ = ve_vlen_suggest(u.ii*u.jj);
+        int const vl_equ = ve_vlen_suggest((int64_t)u.ii*u.jj);
         if(vl_equ<=vl_max)          u.vll = vl_equ;      // VE latency-adjusted work balance
         else if(vl_equ_min<=vl_max) u.vll = vl_equ_min;  // else work balance only (not mult of 32)
         if(u.vll != 0){

@@ -43,3 +43,15 @@ divrem-ve
 divrem-ve.s
 mul_add_shr_div-ve
 mega2-uniz
+*.cpp.ve
+fl7
+genBlock
+tmpScaffold.*
+genBlock1
+a-vi.s
+tdiv*.s
+mul_add_shr_div
+tdivmod0
+tdivmod0-ve
+divrem
+mega2-uniq

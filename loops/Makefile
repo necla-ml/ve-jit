@@ -1,6 +1,5 @@
 SHELL=/bin/bash	
 NCXX:=nc++
-# on Aurora hosts, gcc is extremely old version, with incomplete <regex> impl, also missing iosfwd
 GCXX:=clang++
 # however, clang++ seems still to have ABI bugs.
 GCC:=clang
@@ -15,7 +14,21 @@ all: fuse2 fuse2lin fuse3 mega1-sample.log cfuse2 cf3 cf4 cf5 fl6
 	@echo '    mega1 mega1.log mega2 mega2.log mega1-sample.log'
 more: all tf2-1.log tf2-2.log tf2-3.log tf2-4.log tf2-0.log tf2-5.log tf2-m.log mega1-sample.log
 # These targets need access to ncc and VE hardware
-ve: cf3-sample.log cf3u-sample.log	
+ve: cf3-sample.log cf3u-sample.log
+test_logs: test_divmod.log test_divrem.log test_mul_add_shr_div.log
+test_divmod.log: tdivmod tdivmod-ve tdivmod-ncc tdivmod0 tdivmod0-ve
+	./tdivmod >& $@
+	./tdivmod-ve >> $@
+	./tdivmod-ncc >> $@
+	./tdivmod0 >> $@
+	./tdivmod0-ve >> $@
+	#./tdivmod0-ncc >> $@ # removed because it depends on velintrin.h
+test_divrem.log: divrem divrem-ve
+	./divrem >& $@
+	./divrem-ve >> $@
+test_mul_add_shr_div.log: mul_add_shr_div mul_add_shr_div-ve
+	./mul_add_shr_div >& $@
+	./mul_add_shr_div-ve >> $@
 
 # This may be somewhat lengthy
 force: force-lib
@@ -35,7 +48,9 @@ LDLIBS?=
 X86FLAGS:=
 X86LIBS:=
 X86LIBS+=-ldl
-ifneq ($(CC:ncc%=ncc),ncc)
+COMPILE_TYPE:=$(word 1,$(shell $(CC) --version 2>&1))
+$(if $(COMPILE_TYPE),,$(error could not determine C compiler type for CC=$(CC))) # VE(ncc) vs x86(gcc or ...)
+ifneq ($(COMPILE_TYPE),ncc)
 LDLIBS+=${X86LIBS}
 endif
 
@@ -827,10 +842,22 @@ mul_add_shr_div: mul_add_shr_div.cpp ../timer.h ../intutil.h
 mul_add_shr_div-ve: mul_add_shr_div.cpp ../timer.h ../intutil.h
 	$(NCXX) $(CXXFLAGS) -fdiag-vector=2 -Wall -std=c++11 -I.. -O3 $< -o $@
 divrem: divrem.cpp ../timer.h ../intutil.h
-	$(GCXX) -Wall -std=c++11 -I.. -O3 -fdiag-vector=2 -fdiag-inline=2 $< -o $@
+	$(GCXX) -Wall -std=c++11 -I.. -O3 $< -o $@
 divrem-ve: divrem.cpp ../timer.h ../intutil.h
 	$(NCXX) $(CXXFLAGS) -fdiag-vector=2 -Wall -std=c++11 -I.. -O3 $< -o $@
 	$(NCXX) -Wall -std=c++11 -I.. -O3 -S $< -o $@.s
+tdivmod0: tdivmod0.cpp ../timer.h ../intutil.h
+	$(GCXX) -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
+	$(GCXX) -Wall -std=c++11 -I.. -O3 -S $< -o $@.s
+	$(GCXX) -Wall -std=c++11 -I.. -O3 $< -o $@
+tdivmod0-ve: tdivmod0.cpp ../timer.h ../intutil.h
+	clang++ ${CXXLANG_FLAGS} -Wall -std=c++11 -I.. -O3 -S $< -o $@.s
+	$(NCXX) $(CFLAGS) $@.s -o $@
+# not set up for ncc compilation...
+#tdivmod0-ncc: tdivmod0.cpp ../timer.h ../intutil.h
+#	$(NCXX) -Wall -std=gnu++11 -I.. -O3 -E $< -o $@.i
+#	$(NCXX) -Wall -std=gnu++11 -I.. -O3 -S $< -o $@.s
+#	$(NCXX) -Wall -std=gnu++11 -I.. -O3 $< -o $@
 tdivmod: tdivmod.cpp ../timer.h ../intutil.h
 	$(GCXX) -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
 	$(GCXX) -Wall -std=c++11 -I.. -O3 -S $< -o $@.s
@@ -838,6 +865,10 @@ tdivmod: tdivmod.cpp ../timer.h ../intutil.h
 tdivmod-ve: tdivmod.cpp ../timer.h ../intutil.h
 	clang++ ${CXXLANG_FLAGS} -Wall -std=c++11 -I.. -O3 -S $< -o $@.s
 	$(NCXX) $(CFLAGS) $@.s -o $@
+tdivmod-ncc: tdivmod.cpp ../timer.h ../intutil.h
+	$(NCXX) -Wall -std=gnu++11 -I.. -O3 -E $< -o $@.i
+	$(NCXX) -Wall -std=gnu++11 -I.. -O3 -S $< -o $@.s
+	$(NCXX) -Wall -std=gnu++11 -I.. -O3 $< -o $@
 cfuse: cfuse.cpp ../libjit1-x86.a
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 cfuse2: cfuse2.cpp ../libjit1-x86.a ../fuseloop.hpp ../cblock.hpp ../vechash.hpp ./exechash.hpp
@@ -927,15 +958,63 @@ fl6-run: # u~unroll a~alt-VL
 	@l=fl6xua-r.log; echo -n "$$l ... "; ./cf5-sample2.sh "./fl.sh fl6 -a" CHECK 8 >& $$l && echo YAY || echo OHOH
 	@l=fl6yua-r.log; echo -n "$$l ... "; ./cf5-sample3.sh "./fl.sh fl6 -a" CHECK 8 >& $$l && echo YAY || echo OHOH
 
+# fl7 switches to _vel_ intrinsics
+fl7.hpp: fl7-kernels.hpp ../fuseloop.hpp
+fl7-kernels.hpp: ../cblock.hpp
+fl7-kernels.o: fl7-kernels.cpp fl7-kernels.hpp ../cblock.hpp ../stringutil.hpp ../vechash.hpp ../fuseloop.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} -c $< -o $@
+fl7-%.o: fl7-%.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} -c $< -o $@
+fl7-%-ve.o: fl7-%.cpp cf3.hpp ../fuseloop.hpp ../cblock.hpp ../stringutil.hpp ../ve_divmod.hpp
+	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} -c $< -o $@
+fl7: fl7.cpp fl7-kernels.o cf3-common.o fl7-nounroll.o fl7-unroll.o ../libjit1-x86.a ../vechash.hpp ./exechash.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+fl7-ve: fl7.cpp fl7-kernels-ve.o cf3-common-ve.o fl7-nounroll-ve.o fl7-unroll-ve.o ../libjit1-ve.a ../vechash.hpp ./exechash.hpp
+	$(NCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${CXXFLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+fl7-run: # u~unroll a~alt-VL
+	@l=fl7x-r.log;   echo -n "$$l ... "; ./cf5-sample2.sh "./fl.sh fl7" CHECK 0 >& $$l && echo YAY || echo OHOH
+	@l=fl7y-r.log;   echo -n "$$l ... "; ./cf5-sample3.sh "./fl.sh fl7" CHECK 0 >& $$l && echo YAY || echo OHOH
+	@l=fl7xu-r.log;  echo -n "$$l ... "; ./cf5-sample2.sh "./fl.sh fl7" CHECK 8 >& $$l && echo YAY || echo OHOH
+	@l=fl7yu-r.log;  echo -n "$$l ... "; ./cf5-sample3.sh "./fl.sh fl7" CHECK 8 >& $$l && echo YAY || echo OHOH
+	@l=fl7xa-r.log;  echo -n "$$l ... "; ./cf5-sample2.sh "./fl.sh fl7 -a" CHECK 0 >& $$l && echo YAY || echo OHOH
+	@l=fl7ya-r.log;  echo -n "$$l ... "; ./cf5-sample3.sh "./fl.sh fl7 -a" CHECK 0 >& $$l && echo YAY || echo OHOH
+	@l=fl7xua-r.log; echo -n "$$l ... "; ./cf5-sample2.sh "./fl.sh fl7 -a" CHECK 8 >& $$l && echo YAY || echo OHOH
+	@l=fl7yua-r.log; echo -n "$$l ... "; ./cf5-sample3.sh "./fl.sh fl7 -a" CHECK 8 >& $$l && echo YAY || echo OHOH
+
 
 cfuse3: cfuse3.cpp ../libjit1-x86.a
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+genBlock0: genBlock0.cpp ../stringutil.hpp ../fuseloop.hpp ../libjit1-x86.so
+	g++ -std=c++11 -fPIC $^ ../libjit1-x86.so -ldl -o $@
+genBlock-kernels.hpp: ../cblock.hpp
+genBlock-kernels.o: genBlock-kernels.cpp genBlock-kernels.hpp ../stringutil.hpp ../vechash.hpp ../fuseloop.hpp
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} -c $< -o $@
+genBlock1: genBlock1.cpp genBlock-kernels.o ../stringutil.hpp ../fuseloop.hpp ../cblock.hpp ../libjit1-x86.so
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+genBlock: genBlock.cpp genBlock-kernels.o ../stringutil.hpp ../fuseloop.hpp ../cblock.hpp ../libjit1-x86.so
+	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+tmpScaffold1.c: genBlock1
+	./$^ 13 13 13
+tmpScaffold1: tmpScaffold1.c
+	@# using g++ implies c11 standard
+	@# rm -f tmpScaffold; { make VERBOSE=1 tmpScaffold; } >& x.log
+	g++ -O3 $^ -L.. -Wl,-rpath=.. -ljit1-x86 -ldl -o $@
+	./$@
+tmpScaffold.cpp: genBlock
+	./$^ -kCHECK 13 13 13 # genBlock generates tmpScaffold.cpp
+# rm -f tmpScaffold genBlock;
+# { make VERBOSE=1 genBlock && ./genBlock -kPRINT 9 9 9 && make VERBOSE=1 tmpScaffold && ./tmpScaffold; } >& x.log
+tmpScaffold: tmpScaffold.cpp
+	@# rm -f tmpScaffold; { make VERBOSE=1 tmpScaffold; } >& x.log
+	g++ -O3 -std=c++11 $^ -Wall -Werror -L.. -Wl,-rpath=.. -ljit1-x86 -ldl -o $@
 %: %.cpp
 	$(GCXX) -Wall -std=c++11 -I.. -O3 -E $< -o $@.i
 	$(GCXX) -Wall -std=c++11 -I.. -O3 $< -o $@
 clean:
 	rm -f *.i *.o *.gch a.out fuse2 fuse2lin fuse2-ve fuse3 fuse3-ve repro \
-		cfuse2 tdivmod tdivmod-ve cf3 cf3u cf3*.o
+		cfuse2 tdivmod tdivmod-ve cf3 cf3u cf3*.o \
+	       	genBlock tmpScaffold tmpScaffold.* \
+		cf5 fl6 fl7 tdivmod-ncc tmp-vi
 	rm -f a.s  cblock cfuse libgcc_lucky.so
 	rm -f *.exe *.exe.stackdump
 realclean: clean	

@@ -318,6 +318,9 @@ OpLoadregStrings opLoadregStrings( uint64_t const parm );
  *
  * \p context  is for future use (ex. supply an instruction types of surrounding
  * instruction[s] so we can better overlap execution units)
+ *
+ * TODO: util for optimal load constant to 'C' variable with inline asm
+ * (use string replacement of OUT and T0?)
  */
 std::string choose(OpLoadregStrings const& ops, void* context=nullptr);
 
@@ -346,8 +349,10 @@ std::string ve_load64_opt0(std::string s, uint64_t v);
  */
 std::string ve_load64(std::string s, uint64_t v);
 
+#if 0
 /** set vector length (local \c tmp register used iff immN out of 0-127 range). */
 std::string ve_set_vector_length(uint64_t immN, std::string tmp);
+#endif
 
 /** A common pattern is to pre-select any required registers into an \c AsmScope block,
  * and then shove all the assignments into AsmFmtCols::scope(block,name) */

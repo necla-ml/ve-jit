@@ -116,7 +116,7 @@ struct DllFile {
     int tag;                        ///< up to user (test number? parameter set?)
     std::string basename;
     std::string suffix;             ///< *.{c|cpp|s|S}
-	std::string code;
+    std::string code;
     std::vector<SymbolDecl> syms;   ///< just the public API symbols
     // optional...
 	std::string comment;
@@ -150,6 +150,27 @@ struct DllBuild : std::vector<DllFile> {
         if(verbose) std::cout<<" -DllBuild"<<std::endl;
 #endif
     }
+    /** debug: show some state */
+    void dump(std::ostream& os);
+
+    /**  NEW \b recommended create, but on error dump and throw.
+     * \todo DllBuild `env` parm in \c DllBuild::create / \c safe_create not implemented?
+     * \post return value `true` (usable DllOpen pointer).
+     * */
+    std::unique_ptr<DllOpen> safe_create(
+            std::string basename,
+            std::string dir=".",
+            std::string env="");
+    // (probably enough to handle random compiler segfaults by
+    // just calling safe_create again)
+
+    /** return \c libname, or \throw if not \c prepped */
+    std::string const & getLibName() const;
+
+    /// @group Individual steps
+    /// You could also call individual steps yourself, for more control.
+    /// For example, `safe_create` won't use `skip_prep`.
+    //@{
     /** Create source files and Makefile.
      *  ok for host- or cross-compile
      * /post \c dir is left with all files necessary to build the library
@@ -184,11 +205,10 @@ struct DllBuild : std::vector<DllFile> {
             std::string dir=".",
             std::string env=""){
         if(!prepped){prep(basename,dir); prepped=true;}
-        if(!made){make(); made=true;}
+        if(!made){make(env); made=true;}
         return dllopen();
     }
-    /** return \c libname, or \throw if not \c prepped */
-    std::string const & getLibName() const;
+    //@}
   private:
     /** during \c prep weed out tests that might create duplicate symbols? */
     //void remove_duplicate_files();

@@ -124,7 +124,7 @@ UnrollSuggest unroll_suggest( UnrollSuggest & u, int vl_min=0, int v=0/*verbosit
  * int64_t const vl_init = ve_vlen_suggest(nitems);
  * bool const vl_chklast = nitems>vl_init && nitems%vl_init != 0;
  * ```
- * followed by a loop that might resemble:
+ * followed by a <em>old-style veintrin.h</em> loop that might resemble:
  * ```
  * _ve_lvl(vl_init);
  * for(int i=0; i<nitems; i+=vl_init){
@@ -145,8 +145,21 @@ UnrollSuggest unroll_suggest( UnrollSuggest & u, int vl_min=0, int v=0/*verbosit
  * \sa DEFINE_UNROLL for a related task of dividing a loop upper
  * limit equitably for purposes of unrolling, where the best value
  * is the lowest equitable split [fewer constraints].
+ *
+ * \c (int64_t)nitems should be positive (api changed to use unsigned arith)
  */
-int64_t ve_vlen_suggest(int64_t const nitems);
+//int64_t ve_vlen_suggest(int64_t const nitems);
+uint64_t ve_vlen_suggest(uint64_t const nitems);
+/** jit \c ve_vlen_suggest with known \c 0--nitems loop limit.
+ * \return \c "var = CONSTANT;" statement. This is fast. */
+std::string vej_vlen_suggest(std::string var, uint64_t const nitems);
+/** jit \c ve_vlen_suggest with variable loop limit, as inline code block
+ * setting value of \c var.
+ * \return code block that calculates \c var.
+ * This is slower than if \c nitems value is known!
+ * TODO if string holds a single integer value, parse it and precalculate result.
+ * */
+std::string vej_vlen_suggest(std::string var, std::string nitems);
 
 /** ve_vlen_suggest without the 'roundup up to mult of 32' step. */
 int64_t ve_vlen_suggest_equ(int64_t const nitems);

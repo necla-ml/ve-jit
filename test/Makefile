@@ -2,7 +2,9 @@ VEJIT_ROOT:=..
 SHELL:=/bin/bash
 TARGETS:=
 
-ifneq ($(CC:ncc%=ncc),ncc)
+COMPILE_TYPE:=$(word 1,$(shell $(CC) --version 2>&1))
+$(if $(COMPILE_TYPE),,$(error could not determine C compiler type for CC=$(CC))) # VE(ncc) vs x86(gcc or ...)
+ifneq ($(COMPILE_TYPE),ncc)
 CFLAGS:=-O2 -g2 -pthread
 CFLAGS+=-Wall -Werror
 CFLAGS+=-Wno-unknown-pragmas
@@ -50,18 +52,22 @@ dltest1.log:
 	# recreate and run dltest1 versions x86+gcc and VE+ncc
 	rm -f dltest1 dltest1-x86 tmp_*.c lib*_lucky.so
 	@# '13' has been hard-wired to produce incorrect std::string ccode
-	-{ $(MAKE) VERBOSE=1 dltest1-x86 && $(VE_EXEC) ./dltest1-x86 13 && echo YAY; } >& $@ || echo "Ohoh, continuing anyway"
-ifeq ($(CC),ncc)
+	echo "dltest1-x86..."
+	-{ $(MAKE) VERBOSE=1 dltest1-x86 && ./dltest1-x86 13 && echo YAY; } >& $@ || echo "Ohoh, continuing anyway"
+ifeq ($(COMPILE_TYPE),ncc)
+	echo "dltest1-ve..."
 	@# '7' should return the correct value from the JIT function.
 	-{ echo ""; echo ""; $(MAKE) VERBOSE=1 dltest1-ve && \
-		$(VE_EXEC) ve_exec ./dltest1-ve 7 && echo YAY; } \
+		$(VE_EXEC) ./dltest1-ve 7 && echo YAY; } \
 		&>> $@ || echo "Ohoh, continuing anyway"
 endif
 	# Attempting JIT-via-clang (compile and cross-compile),
 	# even though you might not have them installed...
-	-{ $(MAKE) VERBOSE=1       dltest1-clang && $(VE_EXEC) ./dltest1-clang 123 \
+	echo "dltest1-clang..."
+	-{ $(MAKE) VERBOSE=1       dltest1-clang && ./dltest1-clang 123 \
 		&& echo YAY; } &>> $@ || echo "Ohoh, continuing anyway"
-	-{ $(MAKE) VERBOSE=1       dltest1-nclang && $(VE_EXEC) ./dltest1-nclang -1 \
+	echo "dltest1-nclang..."
+	-{ $(MAKE) VERBOSE=1       dltest1-nclang && ./dltest1-nclang -1 \
 		&& echo YAY; } &>> $@ || echo "Ohoh, continuing anyway"
 	-ls -l tmp_*.c lib*lucky*.so
 	-ls -l tmp_*.c lib*lucky*.so &>> $@
@@ -71,7 +77,7 @@ endif
 #libclang_lucky.so   this code(can be gcc) and jit code from clang run on host
 #libnclang_lucky.so  this code(can be ncc) and jist code from clang -target ve-linux on VE
 dltest1-ve: dltest1.cpp ../jitpipe.hpp Makefile
-	$(CXX) $(CXXFLAGS) -o $@ -Wall -Werror $< 
+	$(CXX) $(CXXFLAGS) -o $@ -Wall -Werror -ldl $< 
 # Note: following binaries run on x86 so g++ is OK,
 #       but the JIT portion uses different compilers
 dltest1-x86: dltest1.cpp ../jitpipe.hpp Makefile
@@ -87,4 +93,4 @@ clean:
 	rm -f dltest1-ve dltest1-clang dltest1-nclang dltest1-x86
 	rm -f lib*_lucky.so
 realclean: clean
-	dltest1.log
+	rm -f dltest1.log

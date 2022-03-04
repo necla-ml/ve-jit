@@ -137,3 +137,13 @@ cblock-*
 libjit1-cxx.cpp
 html
 tmpfl*
+cjitDemo
+test_ve_fastdiv
+test_ve_fastdiv-ve
+test_ve_fastdiv.S
+*old.h
+fdiv*.log
+foo*
+jload_demo
+*.cpp.ve
+vejit-ncc*gz

@@ -3,9 +3,11 @@
 
 #include <cassert>
 #include <iostream>
-#include <iomanip>
 #include <algorithm>
 #include <vector>
+#include <iomanip>
+using namespace std;
+
 
 /** \group VE asm macros
  * - V   : vector register, 1st arg ~ 'final output'
@@ -338,9 +340,6 @@ ostream& operator<<(ostream&os, Msk512 const& m512){
 #endif
 	return os;
 }
-
-#include <iomanip>
-using namespace std;
 
 void test_msk256_basic(){
 	assert(!Msk256::iok(-2));

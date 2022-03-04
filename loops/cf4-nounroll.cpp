@@ -25,6 +25,7 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
     Cunit pr("cfuse2_no_unroll","C",0/*verbose*/);
     auto& inc = pr.root["includes"];
     inc >>"#include \"veintrin.h\""
+        >>"#include \"velintrin.h\""
         >>"#include <stdint.h>";
 
     // create a somewhat generic tree
@@ -69,7 +70,7 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
 
     auto& cf4_defs = (1? cf4: outer); // not 100% sure where I want them
     cf4_defs .DEF(pfx) .DEF(vl0) .DEF(ii) .DEF(jj) ;
-    fd>>OSSFMT("_ve_lvl(vl0);  // VL="<<vl0<<" jj%vl0="<<jj%vl0<<" iijj%vl0="<<iijj%vl0);
+    fd>>OSSFMT(" /* XXX veSetVLENvl0)) */ ;  // VL="<<vl0<<" jj%vl0="<<jj%vl0<<" iijj%vl0="<<iijj%vl0);
 
     //
     // ------------- helper lambdas ------------
@@ -84,12 +85,12 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
             if(have_sqij())
                 fd["first"]["sq"]>>OSSFMT(left<<setw(40)<<"__vr const sq = sqij;")<<" // sq[i]=i";
             else
-                fd["first"]["sq"]>>OSSFMT(left<<setw(40)<<"__vr const sq = _ve_vseq_v();")<<" // sq[i]=i";
+                fd["first"]["sq"]>>OSSFMT(left<<setw(40)<<"__vr const sq = _vel_vseq_vl(vl0);")<<" // sq[i]=i";
             fd["have_sq"].setType("TAG");
 #else // new
-            fd["first"]["sq"]>>OSSFMT(left<<setw(40)<<"__vr const sq = _ve_vseq_v();")<<" // sq[i]=i";
+            fd["first"]["sq"]>>OSSFMT(left<<setw(40)<<"__vr const sq = _vel_vseq_vl(vl0);")<<" // sq[i]=i";
             fd["have_sq"].setType("TAG");
-            if(have_sqij()){ // just in case it was _ve_vseq_v()...
+            if(have_sqij()){ // just in case it was _vel_vseq_vl(vl0)...
                 fd["last"]["sqij"].set(OSSFMT(left<<setw(40)<<"__vr sqij = sq;"<<" // sqij[i]=i"));
             }
 #endif
@@ -102,7 +103,7 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
                 fd["last"]["sqij"]>>OSSFMT(left<<setw(40)<<"__vr sqij = sq;")
                     <<" // sqij[i]=i";
             else
-                fd["last"]["sqij"]>>OSSFMT(left<<setw(40)<<"__vr sqij = _ve_vseq_v();")
+                fd["last"]["sqij"]>>OSSFMT(left<<setw(40)<<"__vr sqij = _vel_vseq_vl(vl0);")
                     <<" // sqij[i]=i";
             fd["have_sqij"].setType("TAG");
         }
@@ -110,7 +111,7 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
     auto equ_sq = [have_sq,have_sqij](std::string v){
         return v+(have_sq() ? " = sq;          "
                 : have_sqij() ? " = sqij;        " // only OK pre-loop !
-                : " = _ve_vseq_v();"); };
+                : " = _vel_vseq_vl(vl0);"); };
     auto use_iijj = [&fd,&iijj,&ii,&jj,&oss](){
         if(!fd.find("have_iijj")){
             fd["first"]["iijj"]>>OSSFMT(left<<setw(40)
@@ -129,6 +130,7 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
             fd["have_vl"].setType("TAG");
         }
     };
+    auto vlR = [&fd](){ return fd.find("have_vl")? "vl": "vl0"; };
     //
     // --------- END helper lambdas ------------
     //
@@ -141,16 +143,16 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
         std::string vREG=(nloop<=1?"__vr const ":"__vr ");
         if( jj==1 ){
             fp>>equ_sq(vREG+"a")<<"         // a[i] = i";
-            fp>>vREG<<"b = _ve_vbrd_vs_i64(0LL); // b[i] = 0"; // libvednn way
-            //fp>>vREG<<"b; b=_ve_vxor_vvv(b,b);"; // typically "best way"
+            fp>>vREG<<"b = _vel_vbrdl_vsl(0LL, vl0); // b[i] = 0"; // libvednn way
+            //fp>>vREG<<"b; b=_vel_vxor_vvvl(b,b, vl0);"; // typically "best way"
         }else if(jj>=vl0){
-            fp>>vREG<<"a = _ve_vbrd_vs_i64(0LL); // a[i] = 0";
+            fp>>vREG<<"a = _vel_vbrdl_vsl(0LL, vl0); // a[i] = 0";
             fp>>equ_sq(vREG+"b")<<"         // b[i] = i";
         }else{ // note: mk_divmod also optimizes positivePow2(jj) case
             mk_divmod();
             use_sq();
             fp>>"__vr a,b;";
-            auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sq, a, b);");
+            auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sq,"<<vl0<<", a, b);");
             fp>>OSSFMT(left<<setw(40)<<divmod<<" // a[]=sq/"<<jj<<" b[]=sq%"<<jj);
         }
     }else{
@@ -194,12 +196,12 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
                     //<<"// vl = min(vl0,remain)"
                     <<" // iijj="<<iijj/vl0<<"*vl0+"<<iijj%vl0
                     );
-            ff  >>"_ve_lvl(vl);";
+            ff  >>" /* XXX veSetVLENvl)) */ ;";
         }
         if(!fp_sets_ab){
             use_sqij();
             mk_divmod();
-            auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);");
+            auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sqij,"<<vlR()<<", a,b);");
             ff>>OSSFMT(left<<setw(40)<<divmod
                     <<" //  a[]=sq/"<<jj<<" b[]=sq%"<<jj);
         }
@@ -214,11 +216,11 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
         if(vl0%jj==0){                      // avoid div,mod -- 1 vec op
             int64_t vlojj = vl0/jj;
             cf4_defs.DEF(vlojj);
-            fi  >>OSSFMT(left<<setw(40)<<"a =_ve_vadduw_vsv(vlojj, a);"
+            fi  >>OSSFMT(left<<setw(40)<<"a =_vel_vadduw_vsvl(vlojj, a, vl);"
                     <<" // a[i]+="<<vl0/jj<<", b[] same");
         }else if(jj%vl0==0){
             if(nloop<=jj/vl0){ // !have_jjMODvl_reset
-                auto instr = OSSFMT("b = _ve_vadduw_vsv("<<vl0<<",b);");
+                auto instr = OSSFMT("b = _vel_vadduw_vsvl("<<vl0<<",b, vl);");
                 fi>>OSSFMT(left<<setw(40)<<instr<<" // b[] += vl0, a[] const");
             }else{ // various nice ways to do periodic reset... [potentially better with unroll!]
                 if(!fp.find("tmod"))
@@ -252,9 +254,9 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
                 // these are hand-implemented (based on raw a[],b[])
                 //
                 fi  >>"if(tmod){" // using mk_scope or CBLOCK_SCOPE is entirely optional...
-                    >>"    b = _ve_vadduw_vsv(vl0,b);           // b[] += vl0 (easy, a[] unchanged)"
+                    >>"    b = _vel_vadduw_vsvl(vl0,b, vl);           // b[] += vl0 (easy, a[] unchanged)"
                     >>"}else{"
-                    >>"    a = _ve_vadduw_vsv(1,a);             // a[] += 1"
+                    >>"    a = _vel_vadduw_vsvl(1,a, vl);             // a[] += 1"
                     >>"    b = sq;                              // b[] = sq[] (reset case)"
                     >>"}";
             }
@@ -263,16 +265,16 @@ std::string cfuse2_no_unroll(Lpi const vl0, Lpi const ii, Lpi const jj,
             // (mk_divmod now recognizes jj=2^N)
             //
             // induction from prev a,b is longer than full recalc!
-            //  sqij = _ve_vaddul_vsv(vl0,sqij);
-            //  a = _ve_vsrl_vvs(sqij, jj_shift);              // a[i]=sq[i]/jj
-            //  b = _ve_vand_vsv("<<jithex(jj_minus_1)<<",sq); // b[i]=sq[i]%jj
+            //  sqij = _vel_vaddul_vsvl(vl0,sqij, vl);
+            //  a = _vel_vsrl_vvsl(sqij, jj_shift, vl);              // a[i]=sq[i]/jj
+            //  b = _vel_vand_vsvl("<<jithex(jj_minus_1)<<",sq, vl); // b[i]=sq[i]%jj
         }else{
             use_sqij();
             mk_divmod();
-            string instr = "sqij = _ve_vaddul_vsv(vl0,sqij);";
+            string instr = "sqij = _vel_vaddul_vsvl(vl0,sqij, vl);";
             fi>>OSSFMT(left<<setw(40)<<instr<<" // sqij[i] += "<<vl0);
             if(fp_sets_ab){
-                auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sqij,a,b);");
+                auto divmod = OSSFMT("DIVMOD_"<<jj<<"(sqij,"<<vlR()<<", a,b);");
                 cout<<divmod<<endl;
                 fi>>OSSFMT(left<<setw(40)<<divmod
                         <<" //  a[]=sq/"<<jj<<" b[]=sq%"<<jj);

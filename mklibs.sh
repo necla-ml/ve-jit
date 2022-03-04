@@ -4,7 +4,7 @@ mkdir build
 cd build
 rm -f mklib.log
 echo "cmake builds in build/, logging to mklib.log"
-BLD='-DCMAKE_BUILD_TYPE=Debug'
+BLD='-DCMAKE_BUILD_TYPE=Release'
 CLN='' # or make clean?
 HAVE_NCC=0
 if ncc --version >&/dev/null; then HAVE_NCC=1; fi

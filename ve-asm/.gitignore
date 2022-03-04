@@ -5,3 +5,9 @@ jitve0
 jitve_hello
 jitve_math
 syscall_hello
+*.s
+test_vechash-ve
+test_vechash-ve.log
+test_vejitpage_sh-ve.log
+test_vejitpage_sh-ve
+veli_loadreg-ve

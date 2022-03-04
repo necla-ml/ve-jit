@@ -42,7 +42,7 @@ cmd="./${prog} -k${kern} -u${unroll} ${other_args} ${vl_opt}o${code}.c"
 clang_opts="-target linux-ve -O3 -fno-vectorize -fno-unroll-loops -fno-slp-vectorize -fno-crash-diagnostics ${CLANG_FLAGS}"
 err=0
 { (cd .. && make) && make VERBOSE=1 ${prog} \
-	&& echo "Cmd : ${cmd}" \
+	&& echo "Cmd : ${cmd} $vl $ii $jj" \
 	&& $cmd $vl $ii $jj; \
 } >& $log && echo GOOD, was able to run $cmd $vl $ii $jj || { err=$?; echo OHOH; }
 if [ -f "${code}.c" ]; then cp "${code}.c" ./${prog}-vi.c; fi

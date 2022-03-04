@@ -32,7 +32,7 @@ typedef std::vector<Vlpi> VVlpi;
 /** string up-to-n first, dots, up-to-n last of vector \c v[0..vl-1] w/ \c setw(wide) */
 template<typename T>
 std::string vecprt(int const n, int const wide, std::vector<T> v, int const vl){
-    assert( v.size() >= vl );
+    assert( v.size() >= (size_t)vl );
     std::ostringstream oss;
     for(int i=0; i<vl; ++i){
         if( i < n ){ oss <<setw(wide)<< v[i]; }
