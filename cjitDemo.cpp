@@ -1,5 +1,5 @@
 /** \file
- * demo creating JIT jit library of NumberGuesser functions
+ * demo creating JIT jit library of NumberGuesser functions (an x86 test)
  */
 #include "cblock.hpp"
 #include "dllbuild.hpp"

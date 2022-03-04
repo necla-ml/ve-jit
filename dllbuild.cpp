@@ -105,7 +105,7 @@ SubDir::SubDir(std::string subdir)
 }
 std::string DllFile::short_descr() const {
     std::ostringstream oss;
-    oss <<basename<<"."<<suffix
+    oss <<basename<<suffix
         <<" "<<code.size()<<" code bytes, "
         <<syms.size()<<" symbols";
     return oss.str();
@@ -118,7 +118,11 @@ std::vector<std::string> DllFile::obj(std::string fname){
     std::vector<char const*> alts;
     cout<<" Dllfile::obj(\""<<fname<<"\")..."<<endl; cout.flush();
     if((p=fname.rfind('-'))!= std::string::npos){
+        char const* obj_suffix = "-ve.o"; // handles VE common cases
+        //cout<<" (found a '-' in fname)"<<endl;
         if(0){ ;
+        }else if((p=fname.rfind("-x86.c"))==fname.size()-6){ pp=p; obj_suffix="-x86.o";
+        }else if((p=fname.rfind("-x86.cpp"))==fname.size()-8){ pp=p; obj_suffix="-x86.o";
         }else if((p=fname.rfind("-vi.c"))==fname.size()-5){
             pp=p;
             // need a better way to disable unrolled compiles XXX
@@ -132,11 +136,15 @@ std::vector<std::string> DllFile::obj(std::string fname){
         }else if((p=fname.rfind("-clang.cpp"))==fname.size()-10){ pp=p;
         }
         if(pp){ // all make fname[0:pp)+"-ve.o", and perhaps some alts
-            ret.push_back(fname.substr(0,pp).append("-ve.o"));
+            ret.push_back(fname.substr(0,pp).append(obj_suffix)); // usually -ve.o
+            //cout<<" "<<fname<<"-->"<<ret.back()<<endl;
             for(auto const& suffix: alts){
                 ret.push_back(fname.substr(0,pp).append(suffix));
+                //cout<<" "<<fname<<"-->"<<ret.back()<<endl;
             }
-        }
+        }//else{
+        //    cout<<" (unrecognized '-' suffix)"<<endl;
+        //}
     }
     if(ret.empty()){
         auto last_dot = fname.find_last_of('.');
@@ -748,8 +756,8 @@ std::unique_ptr<DllOpen> DllBuild::dllopen(){
     }
 #endif
 
-    // TODO test dlopen machine architecture match
-#if !defined(__ve)
+    // originally targeted VE, but now accept -x86.c and -x86.cpp sources
+#if 0 // !defined(__ve)
     cout<<" DllBuild::dllopen cut short -- not running on VE "<<endl;
     pRet.reset(nullptr);
     return pRet;
@@ -803,6 +811,45 @@ std::unique_ptr<DllOpen> DllBuild::dllopen(){
     if(v){cout<<"*** DllBuild::dllopen() DONE : nerr="<<nerr<<endl; cout.flush();}
     if(nerr) THROW(nerr<<" symbol load errors from "<<libname);
     return pRet;
+}
+
+std::unique_ptr<DllOpen> DllBuild::safe_create(
+        std::string basename,
+        std::string dir /*="."*/ ,
+        std::string env /*=""*/ ){
+    std::unique_ptr<DllOpen> ret;
+    int err = 0;
+    if(this->size()==0) ++err;
+    else try {
+        ret = this->create(basename, dir, env);
+        if (!ret) ++err;
+    }
+    catch(...) {
+        ++err;
+    }
+    if(err){
+        this->dump(cout);
+        throw(runtime_error("Error: DllBuild::safe_create"));
+    }
+    return ret;
+}
+
+void DllBuild::dump(std::ostream& os){
+    os<<"\nDllBuild::dump"<<endl;
+    for(auto const& dllfile: *this){
+        os<<"  "<<dllfile.short_descr()<<endl;
+        for(auto const& sym: dllfile.syms){
+            os<<"    sym "<<sym.symbol<<endl;
+        }
+        for(auto const& obj: dllfile.objects){
+            os<<"    obj "<<obj<<endl;
+        }
+    }
+    os<<"\n  DllBuild::basename ="<<basename;
+    os<<"\n  DllBuild::dir      ="<<dir.subdir; // also avail: dir.abspath
+    os<<"\n  DllBuild::prepped  ="<<prepped;
+    os<<"\n  DllBuild::made     ="<<made;
+    os.flush();
 }
 
 #if 0

@@ -120,14 +120,14 @@ $(ARCHIVE): $(REAL_OBJECTS_FILE) $(OBJECTS)
 		&& echo 'created $@' || echo 'Trouble creating $@ (continuing)'
 	$(NM) $@ | wc
 ifneq (${BIN_MK_VERBOSE},0)
-	-ls -l $@; echo 'nnm wordcount: ' `nnm $@ | wc`
+	-ls -l $@; echo '$(NM) wordcount: ' `$(NM) $@ | wc`
 endif
 ifneq ($(MEGA_ARCHIVE),)
 	#	$(MAKE) $(MEGA_ARCHIVE)
 	$(AR) rcs $(MEGA_ARCHIVE) $(AT_OBJECTS_FILE) $(ARCHIVE_OBJECTS) \
 		&& echo ' updated $(MEGA_ARCHIVE)' || echo 'Trouble updating $(MEGA_ARCHIVE) (continuing)'
 ifneq (${BIN_MK_VERBOSE},0)
-	-ls -l lib* $(MEGA_ARCHIVE); echo 'nnm $(MEGA_ARCHIVE) wordcount: ' `nnm $(MEGA_ARCHIVE) | wc`
+	-ls -l lib* $(MEGA_ARCHIVE); echo '$(NM) $(MEGA_ARCHIVE) wordcount: ' `$(NM) $(MEGA_ARCHIVE) | wc`
 endif
 endif
 
@@ -142,7 +142,7 @@ $(MEGA_ARCHIVE)_first_version: # this created a nested archive, not good
 		cp -av $@ $(MEGA_ARCHIVE); \
 	fi
 ifneq (${BIN_MK_VERBOSE},0)
-	-ls -l lib* $(MEGA_ARCHIVE); echo 'nnm $(MEGA_ARCHIVE) wordcount: ' `nnm $(MEGA_ARCHIVE) | wc`
+	-ls -l lib* $(MEGA_ARCHIVE); echo '$(NM) $(MEGA_ARCHIVE) wordcount: ' `$(NM) $(MEGA_ARCHIVE) | wc`
 endif
 
 # mri scripting via TINY also did not remove duplicate objects.
@@ -162,7 +162,7 @@ $(MEGA_ARCHIVE)_tiny: $(ARCHIVE)
 		cp -av $@ $(MEGA_ARCHIVE); \
 	fi
 ifneq (${BIN_MK_VERBOSE},0)
-	-ls -l lib*; echo 'nnm wordcount: ' `nnm $@ | wc`
+	-ls -l lib*; echo '$(NM) wordcount: ' `$(NM) $@ | wc`
 endif
 
 # ve attempts
@@ -195,7 +195,7 @@ ifneq (${BIN_MK_VERBOSE},0)
 	echo "-------- Linking DONE --------"
 	# This would assume VE library target !!! -nreadelf -hds $@
 	echo "-------- Library $(LIBNAME) created in `pwd`"
-	-ls -l $@; echo 'nnm wordcount: ' `$(NM) $@ | wc`
+	-ls -l $@; echo '$(NM) wordcount: ' `$(NM) $@ | wc`
 endif
 #if [ -s "$(MEGA_ARCHIVE_SO)" ]; then \
 #  ncc -shared -o $(MEGA_ARCHIVE_SO) $(LIBFLAGS)  -Wl,--whole-archive $@  $(MEGA_ARCHIVE_SO); \
@@ -330,7 +330,7 @@ else
 endif
 ifneq (${BIN_MK_VERBOSE},0)
 	@echo 'Here are the alternate .o file symbols in $@'
-	nnm $@
+	$(NM) $@
 endif
 	rm -f $*_unroll-ve.o.tmp
 # Begin by cancelling the default rule -- we REQUIRE a special suffix

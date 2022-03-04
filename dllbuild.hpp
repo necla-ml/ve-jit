@@ -116,7 +116,7 @@ struct DllFile {
     int tag;                        ///< up to user (test number? parameter set?)
     std::string basename;
     std::string suffix;             ///< *.{c|cpp|s|S}
-	std::string code;
+    std::string code;
     std::vector<SymbolDecl> syms;   ///< just the public API symbols
     // optional...
 	std::string comment;
@@ -205,7 +205,7 @@ struct DllBuild : std::vector<DllFile> {
             std::string dir=".",
             std::string env=""){
         if(!prepped){prep(basename,dir); prepped=true;}
-        if(!made){make(); made=true;}
+        if(!made){make(env); made=true;}
         return dllopen();
     }
     //@}
