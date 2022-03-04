@@ -122,7 +122,8 @@ force: # force libs to be recompiled
 	$(MAKE) $(LIBVELI_TARGETS)
 
 # for tarball...
-VEJIT_SHARE:=cblock.cpp ve-msk.cpp ve-asm/veli_loadreg.cpp dllbuild.cpp ve_divmod.cpp COPYING
+VEJIT_SHARE:=cblock.cpp ve-msk.cpp dllbuild.cpp ve_divmod.cpp COPYING
+VEJIT_SHARE+=ve-asm/veli_loadreg.cpp
 VEJIT_LIBS:=libjit1-x86.a libveli-x86.a libjit1-x86.so bin.mk-x86.lo
 VEJIT_LIBS+=libjit1-justc-x86.a libjit1-cxx-x86.lo # possible ld.so workaround
 ifeq ($(CC:ncc%=ncc),ncc)
@@ -363,7 +364,7 @@ asmblock-ve: asmblock.cpp asmblock.hpp asmfmt-ve.o jitpage-ve.o intutil-ve.o
 	$(CXX) ${CXXFLAGS} -DMAIN_ASMBLOCK $(filter %.cpp,$^) $(filter %.o,$^) -o $@ -ldl
 
 #
-# dlopen/dlsym and library-related wierdness is happening on VE
+# dlopen/dlsym and library-related wierdness was happening on VE
 #
 .PHONY: hdrs0.cpp bug0.cpp hdrs1.cpp hdrs2.cpp empty.cpp
 empty.cpp:

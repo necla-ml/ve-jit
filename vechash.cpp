@@ -1,7 +1,7 @@
 /* Copyright (c) 2019 by NEC Corporation
  * This file is part of ve-jit */
 #include "vechash.hpp"
-#include "codegenasm.hpp" // really?
+#include "codegenasm.hpp" // there is an assembler kernel
 #include "stringutil.hpp"
 #include "asmfmt.hpp"
 #include "cblock.hpp"
