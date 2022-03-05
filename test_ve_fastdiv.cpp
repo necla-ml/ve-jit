@@ -53,6 +53,9 @@ int main(int,char**){
     uint64_t bounded_cyc=0ULL;
     uint64_t c0, c1;
 
+    printf("%s %s\n",__FILE__, (SPEED?"(speed)":""));
+    fflush(stdout);
+
     //auto rd1 = [](double const x) {return (int64_t)(x*10.) / 10.;};
 #define rd1(x) (((int64_t)(x*10.))/10.)
 
@@ -105,10 +108,16 @@ int main(int,char**){
         FTRACE_END("vednn_fastdiv_bounded");
         if(d % (divMax/100U) == 0U || d+1U == divMax ){
             cout<<(d * 100 / divMax)<<"% done (d="<<setw(8)<<d<<") ";
-            cout<<" cycles: normal "<<setw(17)<<normal_cyc
-                <<" general "<<setw(17)<<general_cyc
-                <<" bounded "<<setw(17)<<bounded_cyc
+            cout<<" cycles: normal "<<setw(17)<<(double)normal_cyc
+                <<" general "<<setw(17)<<(double)general_cyc
+                <<" bounded "<<setw(17)<<(double)bounded_cyc
                 <<endl;
+            // x86 cycles: normal > general > bounded
+            // ve:         normal > general < ~= bounded
+            // 99% done (d=   65535)  cycles: normal       1.74265e+11 general       3.21873e+10 bounded       3.22145e+10
+            //  Finished unsigned n/d tests for n < 16777216 and d < 65536
+            //   time(s):  normal                198 general              36.5 bounded              36.6
+            //
         }
 #else
         for(uint64_t num=0; num<numMax; ++num){

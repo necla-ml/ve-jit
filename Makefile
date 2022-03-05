@@ -10,6 +10,7 @@ GCXX=clang++
 #   dllbuild
 
 # on Aurora hosts, gcc is extremely old version, with incomplete <regex> impl
+# Feb 2022:  I see it's updated to 8.4.1 (yay)
 GCXX:=g++
 #GCXX:=clang++
 X86FLAGS?=
@@ -40,6 +41,7 @@ $(info Only building a few x86 targets [CC=$(CC)])
 #
 TARGETS:=asmfmt-x86 veliFoo.o
 TARGETS+=veliFoo.o cblock-x86 asmblock-x86
+TARGETS+=cjitDemo
 VE_EXEC:=time
 OBJDUMP:=objdump
 OBJCOPY:=objcopy
@@ -656,6 +658,7 @@ dllbuild-vec: dllbuild.cpp libjit1.so
 cjitDemo: cjitDemo.cpp cblock.hpp dllbuild.hpp jitpipe.hpp libjit1-x86.so
 	@# hello world multiple function dllbuild example (cblock,dllbuild,jitpipe)
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+	./$@ 2>&1 | tee $@.log
 
 VECC:=ncc
 VECXX:=nc++
@@ -671,13 +674,13 @@ ve_fastdiv-x86.lo:
 	g++ ${CXXFLAGS} -fPIC -O2 -c asmfmt.cpp -o $@
 ve_fastdiv-ve.lo: ve_fastdiv.c
 test_ve_fastdiv-x86: test_ve_fastdiv.cpp ve_fastdiv-x86.o ve_fastdiv.h timer.h
-	$(VECXX) -std=gnu++11 -O3 -o $@ test_ve_fastdiv.cpp ve_fastdiv.c
+	g++ -std=gnu++11 -O3 test_ve_fastdiv.cpp ve_fastdiv.c -o $@
 test_ve_fastdiv-ve: test_ve_fastdiv.cpp ve_fastdiv-ve.o ve_fastdiv.h timer.h
 	$(VECXX) -std=gnu++11 -O3 -E test_ve_fastdiv.cpp -o test_ve_fastdiv.i
 	$(VECXX) -std=gnu++11 -O3 -o $@ $(filter-out %.h,$^)
 test_ve_fastdiv-speed-x86: test_ve_fastdiv.cpp ve_fastdiv-x86.o ve_fastdiv.h timer.h
-	$(VECXX) -std=gnu++11 -DSPEED=1 -O3 -S test_ve_fastdiv.cpp -o test_ve_fastdiv-x86.S
-	$(VECXX) -std=gnu++11 -DSPEED=1 -O3 -o $@ test_ve_fastdiv.cpp ve_fastdiv.c
+	$(GCXX) -std=gnu++11 -DSPEED=1 -O3 -S test_ve_fastdiv.cpp -o test_ve_fastdiv-x86.S
+	$(GCXX) -std=gnu++11 -DSPEED=1 -O3 -o $@ test_ve_fastdiv.cpp ve_fastdiv.c
 test_ve_fastdiv-speed-ve: test_ve_fastdiv.cpp ve_fastdiv-ve.o ve_fastdiv.h timer.h
 	$(VECXX) -std=gnu++11 -DSPEED=1 -O3 -S test_ve_fastdiv.cpp -o test_ve_fastdiv.S
 	$(VECXX) -std=gnu++11 -DSPEED=1 -O3 -o $@ $(filter-out %.h,$^)

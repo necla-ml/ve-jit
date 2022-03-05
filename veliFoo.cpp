@@ -54,9 +54,9 @@ std::string prgiFoo(uint64_t start)
     string program;
     AsmFmtCols prog;
     prog.lcom(STR(__FUNCTION__) " (i="+jithex(start)+" = "+jitdec(start));
-    string func("Foo");
     if(1){ // if you need relative addressing ...
 #if 0
+        string func("Foo");
         prog.def("STR0(...)", "#__VA_ARGS__")
             .def("STR(...)",  "STR0(__VA_ARGS__)")
             .def("CAT(X,Y)", "X##Y")

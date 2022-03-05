@@ -118,7 +118,7 @@ std::vector<std::string> DllFile::obj(std::string fname, int const v/*=0,quiet*/
     std::vector<std::string> ret;
     size_t p, pp=0;
     std::vector<char const*> alts;
-    if(v) cout<<" Dllfile::obj(\""<<fname<<"\")..."<<endl; cout.flush();
+    if(v){cout<<" Dllfile::obj(\""<<fname<<"\")..."<<endl; cout.flush();}
     if((p=fname.rfind('-'))!= std::string::npos){
         char const* obj_suffix = "-ve.o"; // handles VE common cases
         //cout<<" (found a '-' in fname)"<<endl;
