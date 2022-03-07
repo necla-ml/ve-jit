@@ -238,8 +238,11 @@ std::string getPath() {
     if(sz<=0) THROW("Invalid max path length?");
     char* const temp=(char*)malloc((size_t)sz);
     if(temp==nullptr) THROW("Out of memory");
-    if ( getcwd(temp, sz) != 0) 
-        return std::string(temp);
+    if ( getcwd(temp, sz) != 0) {
+        std::string ret{temp};
+        free(temp);
+        return ret;
+    }
     int error = errno;
     switch ( error ) {
         // sz>0 alreay checked (no EINVAL)
@@ -586,10 +589,16 @@ static int try_make( std::string mk, std::string mklog, int const v/*verbose*/ )
         }
         return ret;
     }
-#if PSTREAMS
-    // else pstreams to capture stdout, stderr into log files etc.
-    if(!mklog.empty())
+#if !PSTREAMS
+    if(!mklog.empty()){
         mk_cmd.append(" >& ").append(mklog);
+    }
+    // XXX
+    if(system(mk_cmd)!=0){
+        return 1; // error
+    }
+#else
+    // else pstreams to capture stdout, stderr into log files etc.
     if(v) cout<<" Build command: "<<mk_cmd<<endl;
 
     using namespace redi;

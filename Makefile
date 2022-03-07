@@ -659,6 +659,12 @@ cjitDemo: cjitDemo.cpp cblock.hpp dllbuild.hpp jitpipe.hpp libjit1-x86.so
 	@# hello world multiple function dllbuild example (cblock,dllbuild,jitpipe)
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 	./$@ 2>&1 | tee $@.log
+#testjit0: testjit0.cpp cblock.hpp dllbuild.hpp jitpipe.hpp libjit1-x86.so
+#	@# hello world multiple function dllbuild example (cblock,dllbuild,jitpipe)
+#	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} \
+#		-I../vednn/src/wrap \
+#		$(filter-out %.hpp,$^) ${X86LIBS} -o $@
+#	./$@ 2>&1 | tee $@.log
 
 VECC:=ncc
 VECXX:=nc++
