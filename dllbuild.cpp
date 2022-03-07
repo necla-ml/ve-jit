@@ -33,8 +33,11 @@ extern unsigned char _binary_bin_mk_size;
 #else
 // it's always ok to convert to C_string and "compile" bin.mk file into a string
 // see ftostring.cpp
-extern char const bin_mk[];
-extern int bin_mk_size;
+extern "C" {
+    // generated file:  bin_mk.c
+    extern char const bin_mk[];
+    extern int bin_mk_size;
+}//extern "C"
 #endif
 }//extern "C"
 
@@ -76,7 +79,8 @@ enum FileCmp { FILECMP_ABSENT, FILECMP_SAMESIZE, FILECMP_DIFFSIZE };
 /** check if file is absent, samesize, or diffsize */
 static enum FileCmp filecmp(std::string abspath, size_t const match_size){
     enum FileCmp ret = FILECMP_ABSENT;
-    struct stat st;
+    struct stat st = {0}; // XXX initialize ONLY to appease x86 valgrind XXX ?
+    //cout<<" stat('"<<abspath<<"')... "; cout.flush();
     if(stat(abspath.c_str(), &st)){
         if((size_t)st.st_size == match_size){ // file size matches => "same" (hack)
             ret = FILECMP_SAMESIZE;
@@ -87,6 +91,7 @@ static enum FileCmp filecmp(std::string abspath, size_t const match_size){
     return ret;
 }
 
+#if 0
 class FileLocn {
     std::string subdir;
     std::string basename;
@@ -95,6 +100,7 @@ class FileLocn {
     std::string abspath;
     std::string fullpath;
 };
+#endif
 SubDir::SubDir(std::string subdir)
 : subdir(subdir), abspath(subdir)
 {
@@ -181,6 +187,7 @@ std::string DllFile::write(SubDir const& subdir, int const v/*=0,quiet*/){
 
     // nitpick: '/' -> os path separator?
     this->abspath = subdir.abspath + "/" + this->basename + this->suffix;
+    //cout<<" this->abspath="<<this->abspath<<endl; cout.flush();
 
     // check file existence, and whether we can skip the rewrite
     // quick'n'dirty check for file edit via size mismatch
@@ -251,6 +258,7 @@ std::string getPath() {
       case ENOMEM: THROW("Insufficient storage"); // is this possible?
       default: THROW("Unrecognised errno="<<error);
     }
+    return std::string{};
 }
     
 #if 0

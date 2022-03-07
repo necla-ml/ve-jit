@@ -143,7 +143,7 @@ force: # force libs to be recompiled
 	$(MAKE) $(LIBVELI_TARGETS)
 
 # for tarball...
-VEJIT_SHARE:=cblock.cpp ve-msk.cpp dllbuild.cpp ve_divmod.cpp COPYING
+VEJIT_SHARE:=cblock.cpp ve-msk.cpp dllbuild.cpp ve_divmod.cpp COPYING jitpage.c
 VEJIT_SHARE+=ve-asm/veli_loadreg.cpp
 VEJIT_LIBS:=libjit1-x86.a libveli-x86.a libjit1-x86.so bin.mk-x86.lo
 ifeq ($(COMPILE_TYPE),ncc)
@@ -189,7 +189,7 @@ vejit.tar.gz: jitpage.h intutil.h vfor.h timer.h \
 	cp -av Makefile.share vejit/share/vejit/Makefile
 	tar czf $@.tmp vejit
 	tar tvzf $@.tmp vejit
-ifeq ($(COMPILE_TYPE),ncc)
+ifneq ($(COMPILE_TYPE),ncc)
 	mv $@.tmp vejit-x86.tar.gz
 	@echo "created vejit-x86.tar.gz"
 else
