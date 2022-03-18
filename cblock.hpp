@@ -3,6 +3,7 @@
 /* Copyright (c) 2019 by NEC Corporation
  * This file is part of ve-jit */
 #include "throw.hpp"
+#include "stringutil.hpp"   // OSSFMT
 /** \file
  * Arange statements (std::string) into blocks.
  *

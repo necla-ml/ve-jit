@@ -758,20 +758,24 @@ std::unique_ptr<DllOpen> DllBuild::dllopen(){
         if(v>1){cout<<"Good, have read access to fullpath"<<endl; cout.flush();}
 
 #if JIT_DLFUNCS // but means libjit1 has a dependency on libdl
-    if(v>1){
+    if(0 && v>1){
         //
         // Check right away that dlopen *can* succeed [debug]
         //
         if(v>1){cout<<" debug... dlopen_rel + dl_dump..."<<endl;}
         //void * dbg = dlopen_rel( fullpath.c_str(), RTLD_LAZY );
-        void * dbg = dlopen( fullpath.c_str(), RTLD_LAZY );
+        void * dbg = dlopen( fullpath.c_str(), RTLD_LAZY | RTLD_GLOBAL );
         if(!dbg) {
+            cout<<" dlopen(\""<<fullpath.c_str()<<"\", RTLD_LAZY | RTLD_GLOBAL) failed!"<<endl;
 #if !defined(__ve)
-            cout<<" x86 program won't be able to open a VE library"<<endl;
+            cout<<" (note: x86 program won't be able to open a VE library)"<<endl;
 #endif
+            cout.flush();
             THROW(" dlopen failed!");
         }
+        if(v>1){cout<<" debug... dlopen succeeded"<<endl; cout.flush();}
         if(v>2){
+            cout<<" debug... calling dl_dump ..."<<endl; cout.flush();
             dl_dump(dbg);
             cout<<" debug... back from dl_dump..."<<endl;
             dlclose(dbg);
@@ -842,12 +846,15 @@ std::unique_ptr<DllOpen> DllBuild::safe_create(
         std::string env /*=""*/ ){
     std::unique_ptr<DllOpen> ret;
     int err = 0;
-    if(this->size()==0) ++err;
-    else try {
+    if(this->size()==0){
+        cout<<" warning: no files in DllBuild?"<<endl; cout.flush();
+        ++err;
+    } else try {
         ret = this->create(basename, dir, env);
         if (!ret) ++err;
     }
     catch(...) {
+        cout<<" warning: DllBuild::create failed!"<<endl; cout.flush();
         ++err;
     }
     if(err){

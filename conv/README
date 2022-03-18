@@ -1,0 +1,8 @@
+.../conv/src/ has the 'Rcpp' interface.
+
+.../conv/src/api has a lower level library combining some things
+   from the .R files, with existing 'C/C++ code originally from
+   libvednn.  (These have a C api, so:
+   1. might be portable to a python/numpy ML training scenario.
+   2. might provide faster support for some 'R' routines.
+

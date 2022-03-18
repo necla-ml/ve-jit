@@ -1,5 +1,5 @@
 /** \file
- * demo creating JIT jit library of NumberGuesser functions (an x86 test)
+ * demo creating JIT jit library of NumberGuesser functions (can run on x86)
  */
 #include "cblock.hpp"
 #include "dllbuild.hpp"
@@ -53,8 +53,12 @@ DllFile srcCodeNumberGuesser( struct param const* const p )
     df.basename = "numberGuess_"+parmstr;
 
     // we use intrinsics.  suffix matches build recipe in "bin.mk"
-    //df.suffix = "-vi.c";     // C VE source, with VE intrinsics
+#if defined(__ve)
+    //df.suffix = "-vi.cpp";     // C++ VE source, DOES NOT WORK (undefined std::__1::cout)
+    df.suffix = "-vi.c";     // C++ VE source, with VE intrinsics (compiled via clang)
+#else
     df.suffix = "-x86.cpp";  // C++ x86 source
+#endif
 
     std::string fn_declare = "demoError_t "+df.basename+"()";
     df.syms.push_back(SymbolDecl(df.basename,
@@ -65,19 +69,41 @@ DllFile srcCodeNumberGuesser( struct param const* const p )
     Cunit pr("program");
     auto& includes = pr["includes"]<<Endl;
     auto& macros = pr["macros"];
-    includes // oops, x86 target! >>CSTR(#include "veintrin.h")
+    includes
+#if defined(__ve)
+        //
+        // I have not gotten VE intrinsics compilation working with clang++ + nc++ library.
+        // Theres is undefined symbol
+        //    std::__1::cout
+        //
+        //>>CSTR(#include "veintrin.h")           // old intrinsics (no longer exists)
+        >>CSTR(#include "velintrin.h")          // current VE itnrinsics header
+        >>"#include <stdio.h>"
+        >>"#include <assert.h>"
+        >>"#include <stdint.h>"
+#else
+        // g++ compilation is OK with C++
         >>"#include <iostream>"
         >>"#include <cassert>"
         >>"#include <cstdint>"
+#endif
         ;
     macros
         >>"#define VLEN (256)"
+#if !defined(__ve)
         >>"using namespace std;"
+#endif
         >>"typedef int demoError_t;"
         ;
-    //auto & fns = mk_extern_c(pr,"extern_C").after(pr["/macros"])["body"];
-    auto & fns = mk_extern_c(pr,"extern_C")["body"];
-    //auto & fns = mk_extern_c(pr,"extern_C")["body/.."];
+    auto & fns =
+#if defined(__ve)
+        pr["body"] // C, no extern "C" needed.
+#else
+        // mk_extern_c(pr,"extern_C").after(pr["/macros"])["body"];
+        mk_extern_c(pr,"extern_C")["body"];
+    // mk_extern_c(pr,"extern_C")["body/.."];
+#endif
+    ;
 
     auto& fn = mk_func(pr,"fn",fn_declare).after(fns)["body"];
 
@@ -114,7 +140,17 @@ DllFile srcCodeNumberGuesser( struct param const* const p )
         >>OSSFMT(hashvar<<" %= 1000U;")
         ;
     fn["output"]
-        >>OSSFMT("cout<<intro<<"<<hashvar<<"<<\".  That took me \"")
+#if defined(__ve)
+        >>OSSFMT("printf(\"%s %u.  That took me %s thought\\\n\"")
+        >>"    , intro, "<<hashvar
+        >>"    , /*JIT optimized decision here*/ "<<(
+                example_parm<100? CSTR("almost no")
+                :example_parm<200? CSTR("a little")
+                :example_parm<300? CSTR("a lot of")
+                :CSTR("a huge amount")
+                )<<");";
+#else
+        >>OSSMFT("std::cout<<intro<<"<<hashvar<<"<<\".  That took me \"")
         // JIT eliminate of run-time branch (lol)
         >>"    <</*JIT optimized decision here*/ "<<(
                 example_parm<100? CSTR("almost no")
@@ -122,7 +158,8 @@ DllFile srcCodeNumberGuesser( struct param const* const p )
                 :example_parm<300? CSTR("a lot of")
                 :CSTR("a huge amount")
                 )
-        >>"    <<\" thought\"<<endl;"
+        >>"    <<\" thought\"<<std::endl;"
+#endif
         ;
     fn["exit"]>>"return 0/*VEDNN_SUCCESS*/;"
         ;
@@ -204,6 +241,7 @@ int main(int argc,char**argv){
     }
 
     DllBuild dllbuild;
+    dllbuild.verbose=7;
     for(int i=0; i<nParams; ++i){
         struct param const& jitAlgParms = pParams[i];
         //
@@ -223,9 +261,10 @@ int main(int argc,char**argv){
     unique_ptr<DllOpen> plib;
     {
 #if defined(__ve)
+//#warning "VE compilation!"
 #define TMP_CJIT_LIB_DIR "tmp_cjitDemo"
 #else
-#define TMP_CJIT_LIB_DIR "tmp_cjitDemo-x86"
+#define TMP_CJIT_LIB_DIR "tmp_cjitDemo_x86"
 #endif
         std::string mkEnv;
         {
@@ -238,7 +277,14 @@ int main(int argc,char**argv){
             //mkEnv=oss.str();
         }
         // Usually you can just do a single call
-        plib = dllbuild.safe_create( "cjitDemo", TMP_CJIT_LIB_DIR, mkEnv );
+        char const* libname=
+#if defined(__ve)
+            "cjitDemo"
+#else
+            "cjitDemo_x86"
+#endif
+        ;
+        plib = dllbuild.safe_create( libname, TMP_CJIT_LIB_DIR, mkEnv );
         // which either returns a valid pointer, or throws (with debug info)
         // `safe_create` postcondition:
         assert(plib);
@@ -252,7 +298,11 @@ int main(int argc,char**argv){
         for(auto s: symnames) cout<<" "<<s;
         cout<<endl;
         // in this demo, every source file had 1 public symbol, some test function.
-        assert( symnames.size() == 1 );
+#if defined(__ve)
+        assert( symnames.size() == 2 ); // -vi.c --> "symbol" and "unroll_symbol" are produced
+#else
+        assert( symnames.size() == 1 || symnames.size() == 2);
+#endif
         void* symaddr = lib[symnames[0]];
         // coerce to proper test function type
         typedef demoError_t (*JitFn)();

@@ -186,8 +186,13 @@ ifneq (${BIN_MK_VERBOSE},0)
 	echo "MEGA_ARCHIVE    $(MEGA_ARCHIVE)"
 endif
 ifeq (${TARGET},ve)
-	@echo "ncc -shared -o $@ $(LDFLAGS) $(LIBFLAGS) -Wl,--whole-archive $(ARCHIVE) -Wl,--no-whole-archive"
-	ncc -shared -o $@ $(LDFLAGS) $(LIBFLAGS) -Wl,--whole-archive $(ARCHIVE) -Wl,--no-whole-archive
+	@#echo "nc++ -shared -o $@ $(LDFLAGS) $(LIBFLAGS) -Wl,--whole-archive $(ARCHIVE) -Wl,--no-whole-archive"
+	#ncc -shared -o $@ $(LDFLAGS) $(LIBFLAGS) -Wl,--whole-archive $(ARCHIVE) -Wl,--no-whole-archive
+	#nc++ -shared -o $@ $(LDFLAGS) $(LIBFLAGS) -Wl,--whole-archive $(ARCHIVE) -Wl,--no-whole-archive -lnc++.so
+	#$(CXXLANG) $(CXXLANG_FLATS) -shared -o $@ $(LDFLAGS) $(LIBFLAGS) ${AT_OBJECTS_FILE}
+	# Feb 2022 : I notice that at-files are now supported (Yay)
+	@echo "nc++ -std=c++11 -shared -o $@ $(LDFLAGS) $(LIBFLAGS) ${AT_OBJECTS_FILE}"
+	nc++ -std=c++11 -shared -o $@ $(LDFLAGS) $(LIBFLAGS) ${AT_OBJECTS_FILE}
 else # much simple for x86, gcc supports @file
 	gcc -shared -o $@ $(LDFLAGS) $(LIBFLAGS) ${AT_OBJECTS_FILE}
 endif
@@ -342,9 +347,12 @@ endif
 	$(CXXLANG) $(CXXLANG_FLAGS)       -S $< -o $*-clang_cpp.s
 	$(CXXLANG) $(CXXLANG_FLAGS) -fPIC -c $< -o $@
 %-ve.o: %-vi.cpp
-	# this one might not be supported?
-	$(CXXLANG) $(CXXLANG_VFLAGS)       -S $< -o $*-vi_cpp.s
-	$(CXXLANG) $(CXXLANG_VFLAGS) -fPIC -c $< -o $@
+	# this one might not be supported? 'vi' ~ VE intrinsics
+	$(CXXLANG) $(CXXLANG_FLAGS)       -S $< -o $*-vi_cpp.s
+	$(CXXLANG) $(CXXLANG_FLAGS) -fPIC -c $< -o $@
+	# ERROR: missing symbol std::__1::cout  (do we need to link with clang stdc++ somehow?)
+	# try nc++ for compile (can we use an eventual link with libnc++)
+	#$(NCXX) $(CXX_FLAGS) -fPIC -c $*-vi_cpp.s -o $@
 %-x86.o: %-x86.cpp
 	# this one might not be supported?
 	$(GCXX) $(CXX86FLAGS)       -S $< -o $*-x86_cpp.s

@@ -143,7 +143,7 @@ force: # force libs to be recompiled
 	$(MAKE) $(LIBVELI_TARGETS)
 
 # for tarball...
-VEJIT_SHARE:=cblock.cpp ve-msk.cpp dllbuild.cpp ve_divmod.cpp COPYING jitpage.c
+VEJIT_SHARE:=cblock.cpp ve-msk.cpp dllbuild.cpp ve_divmod.cpp COPYING jitpage.c bin.mk
 VEJIT_SHARE+=ve-asm/veli_loadreg.cpp
 VEJIT_LIBS:=libjit1-x86.a libveli-x86.a libjit1-x86.so bin.mk-x86.lo
 ifeq ($(COMPILE_TYPE),ncc)
@@ -651,13 +651,29 @@ dllbuild-veb: dllbuild.cpp
 		-Wl,--trace -Wl,--verbose \
 		-Lvejit/lib -Wl,-rpath,`pwd`/vejit/lib -l$(LIBJIT) -ldl
 	nreadelf -d $@
-# next test show how to dynamically *compile* and load a dll given/ fiail after subdir1/subdir2/ fwrite
+
+VECC:=ncc
+VECXX:=nc++
+# next test show how to dynamically *compile* and load a dll given fail after subdir1/subdir2/ fwrite
 dllbuild-vec: dllbuild.cpp libjit1.so
-	$(CXX) -o $@ $(CXXFLAGS) -fPIC -pthread -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1.so
+	$(VECXX) -o $@ $(CXXFLAGS) -fPIC -pthread -Wall -Werror -DDLLBUILD_MAIN $< -L. ./libjit1.so
 	nreadelf -d $@
 cjitDemo: cjitDemo.cpp cblock.hpp dllbuild.hpp jitpipe.hpp libjit1-x86.so
 	@# hello world multiple function dllbuild example (cblock,dllbuild,jitpipe)
 	$(GCXX) -Wall -Werror -std=c++11 -ggdb -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
+	./$@ 2>&1 | tee $@.log
+cjitDemo-ve: cjitDemo.cpp cblock.hpp dllbuild.hpp jitpipe.hpp libjit1.so
+	@# hello world multiple function dllbuild example (cblock,dllbuild,jitpipe)
+	$(VECXX) -Wall -Werror -std=c++11 -g2 -O3 ${LDFLAGS} $(filter-out %.hpp,$^) -Wl,-rpath,. -lnc++ -o $@
+	./$@ 2>&1 | tee $@.log
+# expand toy jit demo to something convolution-like
+conv/libconvxx-x86.so:
+	$(make) -c conv libconvxx-x86.so
+conv/libconvxx-ve.so:
+	$(make) -c conv libconvxx-ve.so
+cjitDemo2-ve: cjitDemo2.cpp cblock.hpp dllbuild.hpp jitpipe.hpp libjit1.so conv/libconvxx-ve.so
+	@# hello world multiple function dllbuild example (cblock,dllbuild,jitpipe)
+	$(GCXX) -Wall -Werror -std=c++11 -gg -O3 ${X86FLAGS} ${LDFLAGS} $(filter-out %.hpp,$^) ${X86LIBS} -o $@
 	./$@ 2>&1 | tee $@.log
 #testjit0: testjit0.cpp cblock.hpp dllbuild.hpp jitpipe.hpp libjit1-x86.so
 #	@# hello world multiple function dllbuild example (cblock,dllbuild,jitpipe)
@@ -666,8 +682,6 @@ cjitDemo: cjitDemo.cpp cblock.hpp dllbuild.hpp jitpipe.hpp libjit1-x86.so
 #		$(filter-out %.hpp,$^) ${X86LIBS} -o $@
 #	./$@ 2>&1 | tee $@.log
 
-VECC:=ncc
-VECXX:=nc++
 ve_fastdiv-ve.o: ve_fastdiv.c
 	$(VECC) ${CFLAGS} -O2 -E $< -o ve_fastdiv.i
 	$(VECC) ${CFLAGS} -O2 -S $< -o ve_fastdiv.S
